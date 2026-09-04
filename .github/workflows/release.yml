@@ -61,7 +61,7 @@ jobs:
     steps:
       - name: Checkout
         continue-on-error: false
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Create builder
         continue-on-error: false
@@ -70,7 +70,7 @@ jobs:
       # R11.6: authenticate to GHCR with the workflow-provided token.
       - name: Log in to GHCR
         continue-on-error: false
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -81,7 +81,7 @@ jobs:
       - name: Compute image metadata
         id: meta
         continue-on-error: false
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}-${{ matrix.image_suffix }}
           tags: |
@@ -116,7 +116,7 @@ jobs:
       - name: Build and push (multi-arch)
         id: build
         continue-on-error: false
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.effective
