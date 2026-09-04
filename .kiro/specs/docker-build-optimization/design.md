@@ -121,19 +121,19 @@ The `build` and `prod-deps` stages run in parallel (buildkit parallelizes indepe
 
 **Tradeoff:** The `/out` staging tree no longer contains `node_modules/`. The runtime stage needs two `COPY` instructions instead of one. This changes the structural assertion in `dockerfile.test.ts` (which currently expects a single `COPY --from=build /out ./` in the runtime stage).
 
-### D5: Runtime COPY composition — prod-deps node_modules (minus @scaffold), then build output
+### D5: Runtime COPY composition — prod-deps node_modules (minus @microservices), then build output
 
-**Decision:** The runtime stage copies `node_modules/` from prod-deps first, then copies `/out` from the build stage on top. Crucially, the prod-deps stage **removes `node_modules/@scaffold` before it is copied** (`RUN rm -rf node_modules/@scaffold` at the end of that stage), so the two COPYs never collide.
+**Decision:** The runtime stage copies `node_modules/` from prod-deps first, then copies `/out` from the build stage on top. Crucially, the prod-deps stage **removes `node_modules/@microservices` before it is copied** (`RUN rm -rf node_modules/@microservices` at the end of that stage), so the two COPYs never collide.
 
 **Rationale:** The build stage's `/out` contains `node_modules/@microservices/contracts/`, `node_modules/@microservices/<selected>/` (the workspace packages as **real directories**), and `packages/overseer/`. The prod-deps stage's `node_modules/` contains the third-party dependencies — but `npm ci` also materializes the `@microservices/*` workspaces there as **symlinks** into `../../packages/...`, which would dangle in the image (`packages/` is absent from runtime).
 
 The obvious plan — copy prod-deps first, then let `/out` "overlay" the real directories on top of those symlinks — **does not work**: `COPY --from=build /out ./` fails with `cannot copy to non-directory: .../node_modules/@microservices/contracts`, because Docker's `COPY` will not replace an existing symlink with a directory. A real `docker build` surfaces this at the final runtime COPY; the structural tests do not, because they never invoke `docker build`.
 
-The fix is to make the two sources disjoint at the `@scaffold` scope: the prod-deps stage owns the third-party dependencies only, and `/out` is the sole source of `@microservices/*`. Deleting `node_modules/@scaffold` in the prod-deps stage (rather than filtering it out of the COPY, which BuildKit `COPY` cannot express per-entry) is the simplest way to enforce that. The removal targets only the workspace scope; `.bin`, third-party scopes, and unscoped packages are untouched.
+The fix is to make the two sources disjoint at the `@microservices` scope: the prod-deps stage owns the third-party dependencies only, and `/out` is the sole source of `@microservices/*`. Deleting `node_modules/@microservices` in the prod-deps stage (rather than filtering it out of the COPY, which BuildKit `COPY` cannot express per-entry) is the simplest way to enforce that. The removal targets only the workspace scope; `.bin`, third-party scopes, and unscoped packages are untouched.
 
-This also explains why the `copyThirdPartyDependencies` filter (D4) is gone and did **not** need replacing: it used to skip the `@scaffold` scope while copying third-party deps into `/out`; now that responsibility is split cleanly across stages — prod-deps carries third-party deps (with `@scaffold` stripped), `/out` carries the real `@microservices/*` and `packages/overseer/`.
+This also explains why the `copyThirdPartyDependencies` filter (D4) is gone and did **not** need replacing: it used to skip the `@microservices` scope while copying third-party deps into `/out`; now that responsibility is split cleanly across stages — prod-deps carries third-party deps (with `@microservices` stripped), `/out` carries the real `@microservices/*` and `packages/overseer/`.
 
-**Implementation detail:** the prod-deps COPY copies only `node_modules/` (not the whole working directory), and `buildImageTree` places the workspace packages under `/out/node_modules/@microservices/` as real directories. Because the prod-deps `@scaffold` symlinks are gone by the time `/out` is copied, the runtime layout is exactly: third-party deps + real `@microservices/*` directories + `packages/overseer/`.
+**Implementation detail:** the prod-deps COPY copies only `node_modules/` (not the whole working directory), and `buildImageTree` places the workspace packages under `/out/node_modules/@microservices/` as real directories. Because the prod-deps `@microservices` symlinks are gone by the time `/out` is copied, the runtime layout is exactly: third-party deps + real `@microservices/*` directories + `packages/overseer/`.
 
 ### D6: Dockerfile.template is the committed source, Dockerfile is generated
 
@@ -331,7 +331,7 @@ The refactor is complete when both suites pass with no test edits and the genera
 
 | File | Change |
 |---|---|
-| `Dockerfile` → `Dockerfile.template` | Rename. Three stages (build, prod-deps, runtime). Anchor comments for manifest COPY injection. Static `COPY` of the registry template before each `npm ci` so the root `prepare` script succeeds (D6.1). Prod-deps drops `node_modules/@scaffold` symlinks before it is copied (D5). Two runtime COPYs. Remove `npm prune` comment. |
+| `Dockerfile` → `Dockerfile.template` | Rename. Three stages (build, prod-deps, runtime). Anchor comments for manifest COPY injection. Static `COPY` of the registry template before each `npm ci` so the root `prepare` script succeeds (D6.1). Prod-deps drops `node_modules/@microservices` symlinks before it is copied (D5). Two runtime COPYs. Remove `npm prune` comment. |
 | `Dockerfile` (generated, gitignored) | New: generated by `emit-effective-dockerfile.sh` from `Dockerfile.template`. Begins with auto-generated comment. |
 | `scripts/emit-effective-dockerfile.sh` | Read `Dockerfile.template`, write `Dockerfile`. Discover workspace `package.json` files via glob-style listing, generate COPY lines, inject at anchors (twice: build + prod-deps). Add auto-generated header comment. Existing ENV toggle injection unchanged. **(O9)** Refactored to a thin shell + single awk pass: `grep`/`sed`/`tr` removed, selector resolution/formatting/exclusion/block-construction/injection/validation all move into one awk invocation (see Emit_Script Refactor (O9)). Output stays byte-for-byte identical. |
 | `packages/build-tools/src/image-tree.ts` | Remove `run("npm", ["prune", ...])`, remove `copyThirdPartyDependencies` function and its call. `/out` contains only workspace packages. |

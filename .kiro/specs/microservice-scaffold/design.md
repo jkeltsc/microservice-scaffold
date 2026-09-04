@@ -292,7 +292,7 @@ packages/overseer/                  package.json + dist
 - Those are **real directories, not npm's workspace symlinks.** A symlink pointing into an absent `packages/microservices/` would dangle. The assemble step copies with `dereference: true` for the same reason: nothing in the image points outside it.
 - The Overseer stays at `packages/overseer/` because the entrypoint invokes it by path.
 - No root `package.json` is needed (verified against the built image): the Overseer is loaded by absolute file path and resolves its imports through `node_modules/`.
-- The assemble step skips the `@scaffold` scope (materialized separately), `.bin` (build-time shims whose symlinks dangle after pruning), and the empty scope directories `npm prune` leaves behind.
+- The assemble step skips the `@microservices` scope (materialized separately), `.bin` (build-time shims whose symlinks dangle after pruning), and the empty scope directories `npm prune` leaves behind.
 
 **Build-stage sequence** (all of it inside `buildImageTree`, except the bootstrap `tsc`):
 

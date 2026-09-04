@@ -44,7 +44,7 @@ import {
 import { resolveSelected } from "./selector.js";
 
 /** Workspace scope; materialized as real directories, so never copied as-is. */
-const SCAFFOLD_SCOPE = "@scaffold";
+const WORKSPACE_SCOPE = "@microservices";
 
 /** Run a command with inherited stdio; abort the process on any failure. */
 function run(command: string, args: readonly string[]): void {
@@ -96,12 +96,12 @@ export function buildImageTree(outDir = "/out"): void {
 
   copyPackage(
     "packages/contracts",
-    join(outDir, "node_modules", SCAFFOLD_SCOPE, "contracts"),
+    join(outDir, "node_modules", WORKSPACE_SCOPE, "contracts"),
   );
   for (const identifier of selected) {
     copyPackage(
       join("packages", "microservices", identifier),
-      join(outDir, "node_modules", SCAFFOLD_SCOPE, identifier),
+      join(outDir, "node_modules", WORKSPACE_SCOPE, identifier),
     );
   }
 
@@ -115,7 +115,7 @@ export function buildImageTree(outDir = "/out"): void {
   for (const name of allMicroservices) {
     if (
       !selectedSet.has(name) &&
-      existsSync(join(outDir, "node_modules", SCAFFOLD_SCOPE, name))
+      existsSync(join(outDir, "node_modules", WORKSPACE_SCOPE, name))
     ) {
       throw new Error(
         `[image-tree] unselected microservice "${name}" found in ${outDir}/node_modules/@microservices/ — the image tree must contain only selected microservices`,

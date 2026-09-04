@@ -112,7 +112,7 @@ RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --workspaces --includ
 # directories come from the build stage's /out overlay, and Docker cannot COPY a
 # directory over an existing symlink — so drop the workspace-scope symlinks here.
 # Only third-party runtime dependencies remain to be copied from this stage.
-RUN rm -rf node_modules/@scaffold
+RUN rm -rf node_modules/@microservices
 
 # ---------------------------------------------------------------------------
 # Stage: runtime - minimal image that runs the Overseer.
