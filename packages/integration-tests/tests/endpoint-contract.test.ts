@@ -61,13 +61,41 @@ describe("end-to-end microservice endpoint contract (Generic_Container)", () => 
     });
   }
 
-  it("microservice2 GET <path>/config -> 200 application/json object (R2.5, R2.6)", async () => {
+  // The shared Config_Payload block, byte-equivalent to the pre-relocation
+  // inline literal. Hardcoded here (matching this suite's style of asserting
+  // literal expected bodies) rather than imported, so the test pins the exact
+  // on-the-wire contract independently of the shared helper. This mirrors
+  // buildConfigPayload(name, path) = { "microservice-name": name, path, config }.
+  const sharedConfig = {
+    sampleSetting: "example-value",
+    description: "demonstration sub-endpoint",
+  } as const;
+
+  it("microservice2 GET <path>/config -> 200 application/json with the exact Config_Payload (R2.5, R2.6, 12.3, 12.5)", async () => {
     const res = await request(server).get(`${modules.microservice2.path}/config`);
 
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toMatch(/application\/json/);
-    expect(typeof res.body).toBe("object");
-    expect(res.body).not.toBeNull();
-    expect(Array.isArray(res.body)).toBe(false);
+    // Deep-equal the known Config_Payload for microservice2:
+    // buildConfigPayload("microservice2", "/microservice2").
+    expect(res.body).toEqual({
+      "microservice-name": "microservice2",
+      path: modules.microservice2.path,
+      config: sharedConfig,
+    });
+  });
+
+  it("microservice3 GET <path>/config -> 200 application/json with the exact Config_Payload (13.3, 13.4)", async () => {
+    const res = await request(server).get(`${modules.microservice3.path}/config`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/application\/json/);
+    // Deep-equal the known Config_Payload for microservice3:
+    // buildConfigPayload("microservice3", "/microservice3").
+    expect(res.body).toEqual({
+      "microservice-name": "microservice3",
+      path: modules.microservice3.path,
+      config: sharedConfig,
+    });
   });
 });

@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@microservices/config": "*",
     "@microservices/contracts": "*",
     "express": "^5.1.0"
   },

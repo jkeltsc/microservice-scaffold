@@ -26,6 +26,7 @@ import { resolveSelected } from "../src/selector.js";
 import {
   arbSelectorString,
   arbNamespaceDirectories,
+  arbIdentifier,
 } from "@microservices/contracts/testing";
 
 /**
@@ -98,6 +99,133 @@ describe("Property 3: registry selection via resolveSelected", () => {
         );
       }),
       { numRuns: 100 },
+    );
+  });
+});
+
+// Feature: shared-packages, Property 2: The generated registry never contains a
+// shared package.
+//
+// For any namespace layout and selector, the identifier set of the generated
+// Microservice_Registry equals the set of selected packages/microservices/*
+// directory names and is disjoint from the names of any top-level shared
+// package — the registry contains no entry, import, or route for any shared
+// package.
+//
+// The generator (`generateRegistry`, unmodified here) discovers microservices
+// by scanning `packages/microservices/` ONLY; shared packages live one level
+// up under `packages/` and are never seen by that scan. This property makes the
+// exclusion explicit under the presence of shared packages: it models a full
+// top-level layout — microservice-namespace directories alongside top-level
+// shared-package names — feeds only the namespace directories into the
+// selection function the generator composes with, and asserts the resulting
+// identifier set is exactly the selected microservices and disjoint from every
+// shared-package name. It then renders the same import/entry lines the generator
+// emits from those identifiers and asserts no shared-package name appears in
+// them (no entry, no import, no route).
+//
+// Validates: Requirements 5.1, 5.2, 5.3, 11.6
+
+/**
+ * Top-level shared-package names, disjoint by construction from any
+ * Microservice_Identifier: each is an identifier prefixed with `shared-`, which
+ * still matches the identifier grammar but is generated only for the shared set,
+ * so a generated shared name can never collide with a generated microservice
+ * name in the same layout.
+ */
+const arbSharedPackageNames: fc.Arbitrary<string[]> = fc.uniqueArray(
+  arbIdentifier.map((id) => `shared-${id}`),
+  { minLength: 0, maxLength: 5 },
+);
+
+/**
+ * Renders the identifier-derived import and registry-entry lines exactly as
+ * `generateRegistry` emits them, so the property can assert no shared-package
+ * name leaks into an import, an entry, or a route (`sourcePackage`). Kept local
+ * and byte-identical in structure to the production emitter's per-identifier
+ * lines; the surrounding boilerplate is irrelevant to the disjointness check.
+ */
+function renderRegistryReferences(identifiers: readonly string[]): string {
+  const imports = identifiers
+    .map((id, i) => `import * as m${i} from "@microservices/${id}";`)
+    .join("\n");
+  const entries = identifiers
+    .map(
+      (id, i) =>
+        `  { identifier: "${id}", module: m${i}, sourcePackage: "@microservices/${id}" },`,
+    )
+    .join("\n");
+  return `${imports}\n${entries}`;
+}
+
+describe("Property 2: the generated registry excludes shared packages", () => {
+  it("keeps the identifier set to selected microservices, disjoint from shared-package names", () => {
+    fc.assert(
+      fc.property(
+        arbSelectorString,
+        arbNamespaceDirectories,
+        arbSharedPackageNames,
+        (selector, microserviceDirectories, sharedNames) => {
+          // The generator scans packages/microservices/ only, so shared-package
+          // names — which live one level up under packages/ — are never part of
+          // the directory listing handed to the selection function. The layout
+          // models both, but only the namespace directories drive selection.
+          const namespace = new Set(microserviceDirectories);
+          const shared = new Set(sharedNames);
+          const parsed = referenceSelection(selector);
+
+          // Determine the expected registry identifier set from the namespace
+          // directories alone, mirroring resolveSelected's own outcome.
+          let identifiers: string[];
+          if (parsed.kind === "all") {
+            if (microserviceDirectories.length === 0) {
+              // Empty namespace under an all-selector: no registry is produced.
+              expect(() =>
+                resolveSelected(selector, microserviceDirectories),
+              ).toThrow(/\[selector:empty\]/);
+              return;
+            }
+            identifiers = resolveSelected(selector, microserviceDirectories);
+          } else {
+            const requested = parsed.identifiers;
+            const allPresent = requested.every((id) => namespace.has(id));
+            if (!allPresent) {
+              expect(() =>
+                resolveSelected(selector, microserviceDirectories),
+              ).toThrow(/\[selector:unmatched\]/);
+              return;
+            }
+            identifiers = resolveSelected(selector, microserviceDirectories);
+          }
+
+          const identifierSet = new Set(identifiers);
+
+          // The identifier set is exactly the selected microservice directories.
+          if (parsed.kind === "all") {
+            expect(identifierSet).toEqual(namespace);
+          } else {
+            expect(identifierSet).toEqual(new Set(parsed.identifiers));
+          }
+
+          // Every identifier is a genuine namespace directory ...
+          for (const id of identifierSet) {
+            expect(namespace.has(id)).toBe(true);
+          }
+          // ... and disjoint from every top-level shared-package name.
+          for (const name of shared) {
+            expect(identifierSet.has(name)).toBe(false);
+          }
+
+          // No shared-package name appears in any emitted import, entry, or
+          // route line the generator would produce from these identifiers.
+          const rendered = renderRegistryReferences(identifiers);
+          for (const name of shared) {
+            expect(rendered).not.toContain(`@microservices/${name}"`);
+            expect(rendered).not.toContain(`"${name}"`);
+          }
+        },
+      ),
+      { numRuns: 200 },
     );
   });
 });

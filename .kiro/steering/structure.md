@@ -14,7 +14,9 @@
 ├─ .kiro/                    # specs, steering, hooks
 └─ packages/
    ├─ overseer/              # the routing frontend application
-   ├─ contracts/             # shared TS types (request handler contract, exported shape)
+   ├─ contracts/             # shared package: shared TS types (request handler contract, exported shape)
+   ├─ config/                # shared package: config data/shape/helper consumed by microservice2 + microservice3
+   ├─ <future shared packages>/  # any leaf library consumed by name by >1 microservice and/or the Overseer
    ├─ build-tools/           # registry generator and container image-tree assembler
    ├─ integration-tests/     # cross-package integration test suite
    └─ microservices/         # Microservice_Namespace — every subdirectory is a microservice
@@ -34,6 +36,21 @@ Each package under `packages/` (and every subdirectory of `packages/microservice
 - Own `tests/` (or colocated `*.test.ts`) using vitest.
 - Public API is limited to what `index.ts` re-exports. Nothing else is stable.
 - **Exception — bin-only tooling packages.** A package whose entire interface is its CLI entry points may omit the barrel, and with it `main` and `types`; its `bin` block is the interface, and its modules are imported by path. `packages/build-tools/` is one: nothing imports it by package name, so a barrel would advertise an API no consumer has. A test that needs one of its functions deep-imports the compiled module (`@microservices/build-tools/dist/selector.js`).
+
+## Shared packages
+
+A **shared package** is a non-microservice workspace located directly under `packages/` (outside `packages/microservices/`) whose public API is imported *by package name* (`@microservices/<name>`) by one or more microservices and/or the Overseer. `packages/contracts/` is the original reference; `packages/config/` is a second reference (the config data/shape/helper consumed by `microservice2` and `microservice3`). A shared package is a leaf library: it is a normal package under the general "Package conventions" above and has no special manifest of its own.
+
+A shared package MUST:
+
+- Live directly under `packages/` (not under `packages/microservices/`), with a directory name in lowercase kebab-case that mirrors its `@microservices/<name>` package name.
+- Follow the general "Package conventions" (own `package.json` with `"type": "module"`, `"main"`/`"types"` at `dist/`, `tsconfig.json` extending `../../tsconfig.base.json`, the four standard scripts, and a barrel `index.ts` that is the sole stable public API).
+- Be listed in the root `workspaces` array **before every package that depends on it** — every consuming microservice, and the Overseer if it consumes the package. This keeps `npm run <script> --workspaces` topological on a fresh clone (see the workspace-order rule in `tech.md`). A shared package listed after a consumer breaks the fresh-clone build.
+- **Not** import from any microservice package or from the Overseer. A shared package points downward only (third-party deps and other shared packages); it never depends upward. This is the invariant that keeps it a leaf.
+
+A microservice that consumes a shared package MUST declare it in its own `package.json` `dependencies` by the `@microservices/<name>` package name, and import it only by that name — never by a relative path into the shared package's `src/` or `dist/`. This is the only sanctioned way for one microservice to reuse code another microservice also uses; microservices still never import each other.
+
+Discovery is by exclusion, not registration: nothing enumerates shared packages by name. The registry generator scans only `packages/microservices/`, so a shared package is never discovered as a microservice and never appears in the generated Microservice_Registry (no entry, import, or route). The image pipeline treats a shared package as a normal `packages/*` workspace (see "Container image contents" below).
 
 ## Microservice_Namespace
 
@@ -61,6 +78,7 @@ A microservice package MUST:
 - `packages/build-tools/` also owns the image-tree assembler, which stages everything a runtime image contains into a single tree that the Dockerfile's runtime stage copies once. Only the selected microservices are compiled and staged, so image minimality holds by construction.
 - Inside an image, microservices ship as `node_modules/@microservices/<identifier>` (real directories, not workspace symlinks), because the generated registry imports them by package name. `packages/microservices/` is absent from images entirely.
 - The Overseer ships at `packages/overseer/` because the entrypoint invokes it by path.
+- Shared packages ship the same way microservices do: inside an image a required shared package is a real directory at `node_modules/@microservices/<name>` (its `package.json` + compiled `dist/`), not a workspace symlink into `packages/`. The image-tree assembler stages a shared package **only when a selected microservice or the Overseer depends on it** (directly or transitively), so a Specific_Container never ships a shared package none of its selected microservices consume. Minimality holds by construction — only required, compiled shared packages are staged, never staged-then-pruned. `packages/config/`, for example, is staged whenever `microservice2` or `microservice3` is selected and omitted otherwise.
 - Per-microservice default toggles (`MICROSERVICE_<IDENTIFIER>_ENABLED=enabled`) are baked by building the generated `Dockerfile`, produced from the committed `Dockerfile.template` by `scripts/emit-effective-dockerfile.sh` for the current selector. The generated `Dockerfile` is generated output and gitignored; `Dockerfile.template` is the committed source.
 
 ## Runtime toggles
@@ -76,6 +94,7 @@ A microservice package MUST:
 ## Where things go
 
 - New microservice: `packages/microservices/<identifier>/`. No changes to existing microservices are required, and no change to `Dockerfile.template` either; the Build_System will pick it up on the next build if included in the `MICROSERVICES` selector.
+- New shared package (a leaf library consumed by name by more than one microservice and/or the Overseer): `packages/<name>/`, following the "Shared packages" rules above. Add it to the root `workspaces` array in topological position — before every consumer — and add the `@microservices/<name>` dependency to each consuming microservice's `package.json`. No change to existing non-consuming microservices, and no change to `Dockerfile.template`: the emit script's `packages/*/package.json` glob picks up the new manifest automatically, and the image-tree assembler stages it only when a consumer is selected. Do NOT add it to `EXCLUDE_TOPLEVEL` — that list is for test-only packages whose code must never ship in an image; a shared package must ship.
 - Cross-cutting types (request handler contract): `packages/contracts/`.
 - Build tooling that needs the TypeScript workspace (registry generator, image-tree assembler): `packages/build-tools/`.
 - Repo-level scripts that must run before anything is installed, or that wrap npm lifecycle commands: `scripts/`.

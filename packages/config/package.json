@@ -1,5 +1,5 @@
 {
-  "name": "@microservices/microservice3",
+  "name": "@microservices/config",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,16 +7,11 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "vitest --run",
+    "test": "vitest --run --passWithNoTests",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@microservices/config": "*",
-    "@microservices/contracts": "*",
-    "express": "^5.1.0"
-  },
-  "devDependencies": {
-    "@types/express": "^5.0.0"
+    "@microservices/contracts": "*"
   }
 }

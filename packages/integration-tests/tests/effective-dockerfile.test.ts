@@ -393,4 +393,55 @@ describe("emit-effective-dockerfile.sh generates manifest COPY lines", () => {
     ];
     expect(blocks[0]).toEqual(expected);
   });
+
+  // The Sample_Shared_Package (`packages/config/`) must ride the SAME unchanged
+  // `packages/*/package.json` glob every other top-level package rides — no
+  // per-package wiring in the emit script, and NOT in the exclusion list. If it
+  // were excluded (or the glob had to be special-cased for it), the layered
+  // `npm ci` in both the build and prod-deps stages would not resolve
+  // `@microservices/config`.
+  // Validates: Requirements R8.1, R8.2, R8.3, R14.4
+  describe("the config shared package rides the unchanged glob", () => {
+    const configCopyLine =
+      "COPY packages/config/package.json packages/config/";
+
+    it("is discovered by the glob (config is not in the exclusion list)", () => {
+      // The config directory really is a top-level workspace the scan sees, and
+      // it is NOT one of the by-name exclusions the script drops.
+      expect(existsSync(join(packagesDir, "config", "package.json"))).toBe(
+        true,
+      );
+      expect(topLevelPackages).toContain("config");
+      expect(EXCLUDED_TOPLEVEL.has("config")).toBe(false);
+    });
+
+    it("emits the config manifest COPY line in both stages", () => {
+      const { out } = emit("*");
+      const lines = out.split("\n");
+
+      // Recover both manifest blocks exactly as the identical-manifests test
+      // does, then assert the config COPY line is present in each.
+      const blocks: string[][] = [];
+      for (let i = 0; i < lines.length; i += 1) {
+        if (lines[i] === manifestHeader) {
+          const block: string[] = [];
+          let j = i + 1;
+          while (j < lines.length && lines[j].startsWith("COPY ")) {
+            block.push(lines[j]);
+            j += 1;
+          }
+          blocks.push(block);
+        }
+      }
+
+      expect(blocks).toHaveLength(2);
+      expect(blocks[0]).toContain(configCopyLine);
+      expect(blocks[1]).toContain(configCopyLine);
+
+      // And it appears exactly twice overall — once per stage — never dropped
+      // and never duplicated within a stage.
+      const occurrences = out.split(configCopyLine).length - 1;
+      expect(occurrences).toBe(2);
+    });
+  });
 });

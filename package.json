@@ -10,6 +10,7 @@
   },
   "workspaces": [
     "packages/contracts",
+    "packages/config",
     "packages/build-tools",
     "packages/microservices/*",
     "packages/overseer",

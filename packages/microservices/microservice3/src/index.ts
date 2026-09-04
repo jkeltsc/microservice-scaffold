@@ -5,6 +5,7 @@
 // generated registry carries it.
 import express from "express";
 import type { MicroserviceModule, Router } from "@microservices/contracts";
+import { buildConfigPayload } from "@microservices/config";
 
 export const path: string = "/microservice3";
 
@@ -20,6 +21,16 @@ function createRouter(): Router {
       .status(200)
       .type("application/json")
       .json({ "microservice-name": "microservice3", path });
+  });
+
+  // A microservice-owned sub-endpoint under the mount subtree (R13). The
+  // payload is built by the shared @microservices/config helper (imported by
+  // package name only), making microservice3 a second consumer of the shared
+  // config concern. Registered AFTER the root GET and BEFORE the ALL / 405
+  // fallback so route matching order is preserved: the mount-root fallback is
+  // mount-root only and does not shadow /config.
+  router.get("/config", (_req, res) => {
+    res.status(200).type("application/json").json(buildConfigPayload("microservice3", path));
   });
 
   // 405 fallback for non-GET methods at the mount root (R2.4). Registered

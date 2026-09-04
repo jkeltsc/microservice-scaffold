@@ -1,5 +1,6 @@
 import express from "express";
 import type { MicroserviceModule } from "@microservices/contracts";
+import { buildConfigPayload } from "@microservices/config";
 
 // The full HTTP path at which the Overseer mounts this microservice's router.
 // No identifier is exported: the directory name is the authoritative
@@ -32,20 +33,15 @@ function createRouter(): express.Router {
       .json({ "microservice-name": "microservice2", path });
   });
 
-  // R2.6: a microservice-owned sub-endpoint under the mount subtree. The exact
-  // payload shape is illustrative; the contract only requires a JSON object.
+  // R2.6: a microservice-owned sub-endpoint under the mount subtree. The
+  // Config_Payload comes from the shared @microservices/config helper (imported
+  // by package name only); the body is byte-equivalent to the prior inline
+  // literal by construction.
   router.get("/config", (_req, res) => {
     res
       .status(200)
       .type("application/json")
-      .json({
-        "microservice-name": "microservice2",
-        path,
-        config: {
-          sampleSetting: "example-value",
-          description: "demonstration sub-endpoint",
-        },
-      });
+      .json(buildConfigPayload("microservice2", path));
   });
 
   // R2.4: non-GET methods at the mount root get 405 with `Allow: GET`.
