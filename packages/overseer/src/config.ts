@@ -1,4 +1,4 @@
-// @scaffold/overseer — runtime configuration.
+// @microservices/overseer — runtime configuration.
 //
 // Implements design "Overseer Startup Sequence" step 6 and Components and
 // Interfaces (`src/config.ts`): the Overseer binds its single HTTP server to a

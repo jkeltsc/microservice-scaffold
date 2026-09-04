@@ -40,9 +40,9 @@ import { dirname, join, resolve } from "node:path";
 
 // build-tools has no barrel: it is a bin-only tooling package whose interface is
 // its two CLI entry points. This test reaches its compiled modules directly, the
-// same way the suite already reaches the Overseer (`@scaffold/overseer/dist/...`).
-import { resolveSelected } from "@scaffold/build-tools/dist/selector.js";
-import { listMicroserviceDirectories } from "@scaffold/build-tools/dist/generate-registry.js";
+// same way the suite already reaches the Overseer (`@microservices/overseer/dist/...`).
+import { resolveSelected } from "@microservices/build-tools/dist/selector.js";
+import { listMicroserviceDirectories } from "@microservices/build-tools/dist/generate-registry.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // tests/ -> integration-tests -> packages -> repo root

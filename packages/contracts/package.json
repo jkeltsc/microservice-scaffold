@@ -1,5 +1,5 @@
 {
-  "name": "@scaffold/contracts",
+  "name": "@microservices/contracts",
   "version": "0.0.0",
   "private": true,
   "type": "module",

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
-import type { MicroserviceRegistry, RegistryEntry } from '@scaffold/contracts';
-import { buildExpressRouter } from '@scaffold/contracts/testing';
+import type { MicroserviceRegistry, RegistryEntry } from '@microservices/contracts';
+import { buildExpressRouter } from '@microservices/contracts/testing';
 
 import {
   parseToggle,
@@ -19,7 +19,7 @@ function entry(identifier: string): RegistryEntry {
   const path = `/${identifier}`;
   return {
     identifier,
-    sourcePackage: `@scaffold/${identifier}`,
+    sourcePackage: `@microservices/${identifier}`,
     module: { path, router: buildExpressRouter(identifier, path) },
   };
 }

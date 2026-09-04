@@ -65,7 +65,7 @@ As part of this work, the template is renamed to `Dockerfile.template` (committe
 
 1. THE runtime stage SHALL copy production third-party dependencies from the `prod-deps` stage via `COPY --from=prod-deps`.
 2. THE runtime stage SHALL copy the compiled workspace packages (staged at `/out` by the build stage) from the `build` stage, as it does today.
-3. THE final image SHALL contain exactly the same set of files as before the optimization: production `node_modules/`, `node_modules/@scaffold/contracts/`, `node_modules/@scaffold/<selected>/` for each selected microservice, and `packages/overseer/`.
+3. THE final image SHALL contain exactly the same set of files as before the optimization: production `node_modules/`, `node_modules/@microservices/contracts/`, `node_modules/@microservices/<selected>/` for each selected microservice, and `packages/overseer/`.
 4. THE toggle-default ENV injection (R6.6) SHALL continue to work: `emit-effective-dockerfile.sh` SHALL inject the `ENV MICROSERVICE_<X>_ENABLED=enabled` lines before the last `ENTRYPOINT`, exactly as before.
 
 ### Requirement O5: Backward Compatibility

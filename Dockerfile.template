@@ -33,11 +33,11 @@
 # The image ships only what was built, by construction. Its layout is:
 #
 #   node_modules/                       third-party runtime deps (from prod-deps)
-#   node_modules/@scaffold/contracts/   real directory: package.json + dist
-#   node_modules/@scaffold/<selected>/  real directories, selected services only
+#   node_modules/@microservices/contracts/   real directory: package.json + dist
+#   node_modules/@microservices/<selected>/  real directories, selected services only
 #   packages/overseer/                  package.json + dist
 #
-# Microservices live only under node_modules/@scaffold/ because the generated
+# Microservices live only under node_modules/@microservices/ because the generated
 # registry imports them by package name; packages/microservices/ is absent from
 # the image. Adding a microservice therefore requires NO change to this file.
 #
@@ -107,8 +107,8 @@ COPY packages/overseer/src/generated/microservice-registry.template.ts packages/
 
 RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --workspaces --include-workspace-root
 
-# npm materializes the @scaffold/* workspaces as symlinks into packages/ (which
-# is absent from the runtime image, so they would dangle). The real @scaffold/*
+# npm materializes the @microservices/* workspaces as symlinks into packages/ (which
+# is absent from the runtime image, so they would dangle). The real @microservices/*
 # directories come from the build stage's /out overlay, and Docker cannot COPY a
 # directory over an existing symlink — so drop the workspace-scope symlinks here.
 # Only third-party runtime dependencies remain to be copied from this stage.
@@ -118,9 +118,9 @@ RUN rm -rf node_modules/@scaffold
 # Stage: runtime - minimal image that runs the Overseer.
 # Runs on the TARGET platform (the default, no --platform override). The
 # application payload is composed from two COPYs: third-party runtime deps from
-# the prod-deps stage (its @scaffold/* workspace symlinks were already removed),
+# the prod-deps stage (its @microservices/* workspace symlinks were already removed),
 # then the real workspace packages from the build stage's /out on top. With the
-# symlinks gone, the /out @scaffold/* directories and packages/overseer/ land
+# symlinks gone, the /out @microservices/* directories and packages/overseer/ land
 # cleanly (Docker cannot COPY a directory over an existing symlink).
 # ---------------------------------------------------------------------------
 FROM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS runtime

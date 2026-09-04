@@ -1,4 +1,4 @@
-// @scaffold/overseer — boot pipeline composition.
+// @microservices/overseer — boot pipeline composition.
 //
 // Implements the design's "Overseer Startup Sequence". `boot` runs the ordered
 // validation-and-composition steps (module paths → path collisions → toggles →
@@ -13,7 +13,7 @@
 // `./generated/microservice-registry.js`: that file is gitignored and emitted
 // by build-tools, so it may be absent at typecheck time. `index.ts` imports it
 // and passes the `microserviceRegistry` array in through `boot`'s options, so
-// `boot.ts` depends only on types from `@scaffold/contracts`.
+// `boot.ts` depends only on types from `@microservices/contracts`.
 //
 // Ordered composition (design "Overseer Startup Sequence"):
 //   1. load generated registry            — done by the caller (index.ts)
@@ -29,7 +29,7 @@
 
 import type { Express } from "express";
 import type { AppConfig } from "./config.js";
-import type { MicroserviceRegistry } from "@scaffold/contracts";
+import type { MicroserviceRegistry } from "@microservices/contracts";
 
 import { loadConfig } from "./config.js";
 import { validateToggles, toggleVarName } from "./toggles.js";

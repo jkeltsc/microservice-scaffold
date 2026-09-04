@@ -94,7 +94,7 @@ flowchart TD
     - Remove the `run("npm", ["prune", "--omit=dev"])` call
     - Remove the `copyThirdPartyDependencies` function entirely
     - Remove the call to `copyThirdPartyDependencies` in `buildImageTree`
-    - The function now assembles `/out` with only: `node_modules/@scaffold/contracts/` (package.json + dist), `node_modules/@scaffold/<selected>/` per selected microservice (package.json + dist), `packages/overseer/` (package.json + dist)
+    - The function now assembles `/out` with only: `node_modules/@microservices/contracts/` (package.json + dist), `node_modules/@microservices/<selected>/` per selected microservice (package.json + dist), `packages/overseer/` (package.json + dist)
     - Keep the post-assemble integrity check (no unselected microservice in `/out`)
     - Remove the `BIN_DIR` constant (no longer needed without the third-party copy)
     - Keep the `SCAFFOLD_SCOPE` constant, `run` helper, `copyPackage` helper, `generateRegistry` + `resolveSelected` imports

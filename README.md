@@ -29,6 +29,28 @@ docker build -f Dockerfile.effective --build-arg MICROSERVICES=microservice1,mic
 
 `emit-effective-dockerfile.sh` bakes per-microservice runtime toggle defaults into the image so each selected service is enabled out of the box.
 
+## Adopting this scaffold for a product
+
+The workspace packages share an npm scope (`@microservices` by default). That scope
+is a placeholder, not a product name — it shows up in package names, imports, the
+generated registry, and test fixtures, but it does not identify your product. Since
+each product is a fresh clone of this scaffold, rebrand the scope once after cloning:
+
+```sh
+sh scripts/rename-scope.sh @your-product
+npm install
+```
+
+The script rewrites the `@microservices/` token across sources, `package.json`
+names and dependency keys, tests, and comments. It deliberately leaves generated
+output (the registry, the Dockerfile) and `package-lock.json` alone — those
+regenerate — and it only touches the scoped token, so the repo/folder name and
+image tags are untouched. The following `npm install` re-resolves the workspace
+symlinks under the new scope and regenerates the lockfile.
+
+To rename from a scope other than the default, pass it as a second argument:
+`sh scripts/rename-scope.sh @your-product @old-scope`.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and adjust. See `.env.example` for all available variables.
@@ -53,6 +75,7 @@ Copy `.env.example` to `.env` and adjust. See `.env.example` for all available v
 | `npm run build --workspaces` | Build all packages. |
 | `npm run typecheck --workspaces` | Typecheck all packages. |
 | `npm run lint --workspaces` | Lint all packages. |
+| `sh scripts/rename-scope.sh @your-product` | Rebrand the npm scope after cloning (see "Adopting this scaffold"). |
 
 ## Runtime toggles
 

@@ -13,13 +13,13 @@
 //
 // Target layout (relative to `outDir`):
 //
-//   node_modules/@scaffold/contracts/   REAL directory: package.json + dist
-//   node_modules/@scaffold/<selected>/  REAL directories, selected services only
+//   node_modules/@microservices/contracts/   REAL directory: package.json + dist
+//   node_modules/@microservices/<selected>/  REAL directories, selected services only
 //   packages/overseer/                   package.json + dist
 //
 // Two layout decisions matter:
 //
-//   1. Microservices live ONLY under `node_modules/@scaffold/`, because the
+//   1. Microservices live ONLY under `node_modules/@microservices/`, because the
 //      generated registry imports them by package name. `packages/microservices/`
 //      is deliberately absent from the image.
 //   2. They are REAL directories, not npm's workspace symlinks: a symlink into
@@ -74,7 +74,7 @@ function copyPackage(sourceDir: string, targetDir: string): void {
  * needs, and assemble `outDir` with the workspace packages.
  *
  * Build order is explicit rather than left to project references: the Overseer's
- * generated registry imports `@scaffold/<identifier>`, and those microservice
+ * generated registry imports `@microservices/<identifier>`, and those microservice
  * packages are not references of the Overseer project, so their declarations
  * must exist before the Overseer compiles. `packages/contracts` likewise comes
  * first because the microservice projects resolve it through `node_modules`.
@@ -118,7 +118,7 @@ export function buildImageTree(outDir = "/out"): void {
       existsSync(join(outDir, "node_modules", SCAFFOLD_SCOPE, name))
     ) {
       throw new Error(
-        `[image-tree] unselected microservice "${name}" found in ${outDir}/node_modules/@scaffold/ — the image tree must contain only selected microservices`,
+        `[image-tree] unselected microservice "${name}" found in ${outDir}/node_modules/@microservices/ — the image tree must contain only selected microservices`,
       );
     }
   }

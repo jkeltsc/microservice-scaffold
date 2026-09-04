@@ -1,4 +1,4 @@
-// @scaffold/contracts/testing — shared fast-check arbitraries.
+// @microservices/contracts/testing — shared fast-check arbitraries.
 //
 // This module is a TEST-SUPPORT export only. It is never imported by shipped
 // runtime code; it exists so every package's property tests draw from the same

@@ -28,7 +28,7 @@ import { describe, expect, it } from "vitest";
 import * as fc from "fast-check";
 
 import { resolveSelected } from "../src/selector.js";
-import { arbIdentifier } from "@scaffold/contracts/testing";
+import { arbIdentifier } from "@microservices/contracts/testing";
 
 /** The documented message shape: fixed prefix, then the quoted identifiers. */
 const MESSAGE_SHAPE =

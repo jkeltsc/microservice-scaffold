@@ -1,10 +1,10 @@
-// @scaffold/microservice3 — reference microservice.
+// @microservices/microservice3 — reference microservice.
 // Exports the two required MicroserviceModule values (R8.1): `path` and an
 // Express `router` satisfying the R2 contract. The identifier is not exported —
 // the directory name is the authoritative Microservice_Identifier and the
 // generated registry carries it.
 import express from "express";
-import type { MicroserviceModule, Router } from "@scaffold/contracts";
+import type { MicroserviceModule, Router } from "@microservices/contracts";
 
 export const path: string = "/microservice3";
 

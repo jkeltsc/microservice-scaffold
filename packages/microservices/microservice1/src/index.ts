@@ -1,4 +1,4 @@
-// @scaffold/microservice1 — reference microservice module.
+// @microservices/microservice1 — reference microservice module.
 //
 // Exports the two values required by the MicroserviceModule contract (R8.1): a
 // Microservice_Path string and an Express router. The identifier is NOT exported:
@@ -9,7 +9,7 @@
 // `Allow: GET` (R2.4).
 
 import express, { type Router } from "express";
-import type { MicroserviceModule } from "@scaffold/contracts";
+import type { MicroserviceModule } from "@microservices/contracts";
 
 export const path = "/";
 

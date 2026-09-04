@@ -20,7 +20,7 @@ Every leaf task cites the requirement clauses it satisfies (e.g., `R4.3, R7.1`) 
 - [x] 1. Bootstrap the monorepo scaffolding
   - [x] 1.1 Create the root `package.json`
     - Declare `"type": "module"`, `"private": true`, `"engines": { "node": ">=22", "npm": ">=10" }`, and `"workspaces": ["packages/contracts", "packages/build-tools", "packages/microservices/*", "packages/overseer", "packages/integration-tests"]`
-    - The array order **is** the build order: `npm run <script> --workspaces` visits packages in the order listed. The original order put `packages/overseer` ahead of `packages/microservices/*`, which inverted the dependency — the generated registry statically imports `@scaffold/microservice<N>`, so on a fresh clone `npm start` (generate registry → build) failed with `TS2307: Cannot find module '@scaffold/microservice1'`, and CI needed a second targeted Overseer rebuild after generating the registry. Reordered so the Overseer follows the microservices; the extra CI rebuild step was removed with it
+    - The array order **is** the build order: `npm run <script> --workspaces` visits packages in the order listed. The original order put `packages/overseer` ahead of `packages/microservices/*`, which inverted the dependency — the generated registry statically imports `@microservices/microservice<N>`, so on a fresh clone `npm start` (generate registry → build) failed with `TS2307: Cannot find module '@microservices/microservice1'`, and CI needed a second targeted Overseer rebuild after generating the registry. Reordered so the Overseer follows the microservices; the extra CI rebuild step was removed with it
     - Add root scripts: `build`, `test`, `lint`, `typecheck` (each delegating with `--workspaces`), plus `start` pointing to `node scripts/start.js`
     - Add shared devDependencies: `typescript`, `vitest`, `fast-check`, `eslint`, `prettier`, `@types/node`
     - _Requirements: R10.1_
@@ -40,7 +40,7 @@ Every leaf task cites the requirement clauses it satisfies (e.g., `R4.3, R7.1`) 
 
 - [x] 2. Build the `packages/contracts` package
   - [x] 2.1 Create the contracts package skeleton
-    - `packages/contracts/package.json` with `"type": "module"`, name `@scaffold/contracts`, `"main": "./dist/index.js"`, `"types": "./dist/index.d.ts"`, `"exports"` field for `.` and `./testing`, four required scripts
+    - `packages/contracts/package.json` with `"type": "module"`, name `@microservices/contracts`, `"main": "./dist/index.js"`, `"types": "./dist/index.d.ts"`, `"exports"` field for `.` and `./testing`, four required scripts
     - `packages/contracts/tsconfig.json` extending `../../tsconfig.base.json` with `outDir: ./dist`, `rootDir: ./src`
     - Empty `src/index.ts` placeholder
     - _Requirements: R8.1_
@@ -68,7 +68,7 @@ Every leaf task cites the requirement clauses it satisfies (e.g., `R4.3, R7.1`) 
 
 - [x] 3. Build the three reference microservices
   - [x] 3.1 Create `packages/microservices/microservice1/` skeleton
-    - `package.json` with name `@scaffold/microservice1`, `"type": "module"`, `express` runtime dep, `@scaffold/contracts` workspace dep, four scripts
+    - `package.json` with name `@microservices/microservice1`, `"type": "module"`, `express` runtime dep, `@microservices/contracts` workspace dep, four scripts
     - `tsconfig.json` extending `../../../tsconfig.base.json`
     - _Requirements: R1.1, R1.2, R8.3_
   - [x] 3.2 Implement `microservice1`'s router and exports in `src/index.ts`
@@ -83,7 +83,7 @@ Every leaf task cites the requirement clauses it satisfies (e.g., `R4.3, R7.1`) 
     - Property 1 restated over `(name, path)`: a GET at the exported `path` returns `{ "microservice-name": N, path }`, where `N` is pinned here as the literal `"microservice1"` (the module exports no identifier to source it from, so this assertion is the only pin on the sample's reported name)
     - Use `arbHttpMethodNonGet` for the 405 branch; mount the router in a bare Express app and issue requests via `supertest` (or Node's `fetch` against `app.listen(0)`)
   - [x] 3.4 Create `packages/microservices/microservice2/` skeleton
-    - Same shape as 3.1 with name `@scaffold/microservice2`
+    - Same shape as 3.1 with name `@microservices/microservice2`
     - _Requirements: R1.1, R1.2, R8.3_
   - [x] 3.5 Implement `microservice2`'s router with a `/config` sub-endpoint
     - Export exactly two values: `path = "/microservice2"` and `router`. No identifier export
@@ -97,7 +97,7 @@ Every leaf task cites the requirement clauses it satisfies (e.g., `R4.3, R7.1`) 
     - Property 1 restated over `(name, path)`, with the name pinned here as the literal `"microservice2"` (no identifier export to source it from)
     - One `it.prop` block per property; the sub-endpoint test parses the response body and asserts it is a JSON object
   - [x] 3.7 Create `packages/microservices/microservice3/` skeleton
-    - Same shape as 3.1 with name `@scaffold/microservice3`
+    - Same shape as 3.1 with name `@microservices/microservice3`
     - _Requirements: R1.1, R1.2, R8.3_
   - [x] 3.8 Implement `microservice3`'s router and exports
     - Export exactly two values: `path = "/microservice3"` and `router`; no identifier export. Router mirrors microservice1's contract (root GET reporting the literal `"microservice3"` plus the 405 fallback)
@@ -117,8 +117,8 @@ Every leaf task cites the requirement clauses it satisfies (e.g., `R4.3, R7.1`) 
 
 - [x] 5. Build the `packages/build-tools` package
   - [x] 5.1 Create the build-tools package skeleton
-    - `package.json` with name `@scaffold/build-tools`, `"type": "module"`, `"bin"` entries for `generate-registry` and `build-image-tree`
-    - **No barrel and no `main`/`types`.** This is a bin-only tooling package: its interface is the two CLI entry points, nothing imports it by package name (each bin imports its module by path, and the modules import each other by path), so `src/index.ts` plus `main`/`types` advertised a package-level API no consumer had. The one non-bin consumer is `packages/integration-tests/tests/effective-dockerfile.test.ts`, which deep-imports the compiled modules (`@scaffold/build-tools/dist/selector.js`, `dist/generate-registry.js`) the way the suite already reaches the Overseer. The exception is recorded in `.kiro/steering/structure.md`
+    - `package.json` with name `@microservices/build-tools`, `"type": "module"`, `"bin"` entries for `generate-registry` and `build-image-tree`
+    - **No barrel and no `main`/`types`.** This is a bin-only tooling package: its interface is the two CLI entry points, nothing imports it by package name (each bin imports its module by path, and the modules import each other by path), so `src/index.ts` plus `main`/`types` advertised a package-level API no consumer had. The one non-bin consumer is `packages/integration-tests/tests/effective-dockerfile.test.ts`, which deep-imports the compiled modules (`@microservices/build-tools/dist/selector.js`, `dist/generate-registry.js`) the way the suite already reaches the Overseer. The exception is recorded in `.kiro/steering/structure.md`
     - `tsconfig.json` extending `../../tsconfig.base.json`
     - _Requirements: R5, R6, R10_
   - [x] 5.2 Implement selector parsing and application in `src/selector.ts`
@@ -140,7 +140,7 @@ Every leaf task cites the requirement clauses it satisfies (e.g., `R4.3, R7.1`) 
     - _Requirements: R5.1, R5.5_
   - [x] 5.5 Implement the registry generator in `src/generate-registry.ts`
     - Composes the directory listing with `resolveSelected` (which parses the selector internally): resolves requested identifiers against the listed directories, throws `[selector:unmatched]` naming every unmatched identifier, throws `[selector:empty]` on an empty namespace under `*`
-    - Emits `packages/overseer/src/generated/registry.ts` with static `import * as m<N> from "@scaffold/<identifier>"` lines and a typed `MicroserviceRegistry` export exactly as shown in design "Registry Generator". Each emitted row is `{ identifier: "<dir>", module: m<N>, sourcePackage: "@scaffold/<dir>" }` — the generator is where the directory name becomes the recorded identifier, since it is the component that listed the directory
+    - Emits `packages/overseer/src/generated/registry.ts` with static `import * as m<N> from "@microservices/<identifier>"` lines and a typed `MicroserviceRegistry` export exactly as shown in design "Registry Generator". Each emitted row is `{ identifier: "<dir>", module: m<N>, sourcePackage: "@microservices/<dir>" }` — the generator is where the directory name becomes the recorded identifier, since it is the component that listed the directory
     - `generateRegistry(selector = process.env.MICROSERVICES)` writes to the well-known output path relative to cwd; no options object, no injected directory list, no no-write mode. Properties 3 and 4 are exercised through `resolveSelected`, the pure selection function the generator composes with the listing
     - _Requirements: R5.1, R5.2, R5.3, R5.5, R6.1, R6.2, R10.2, Property 3_
   - [x] 5.6* Write property test for registry selection
@@ -175,9 +175,9 @@ Every leaf task cites the requirement clauses it satisfies (e.g., `R4.3, R7.1`) 
     - Deleted along with the helper it exercised (see 5.10); Property 11 is gone from the design, so no property backs R11.4 anymore
   - [x] 5.12 Implement the image-tree assembler in `src/image-tree.ts` and CLI in `src/bin/build-image-tree.ts`
     - Replaced the original docker-invoking container-build helper: the image is built by `docker build` directly (see 10.1/10.2), and build-tools' job is to stage what goes into it
-    - `buildImageTree(outDir = "/out")` generates the registry for `MICROSERVICES`, resolves the selected identifiers, runs `npx tsc --build packages/contracts <selected microservices…> packages/overseer` (explicit order: the generated registry imports `@scaffold/<id>`, those projects are not references of the Overseer, and contracts must precede the microservices that resolve it through `node_modules`), runs `npm prune --omit=dev`, then assembles `outDir`
-    - `outDir` layout: third-party runtime `node_modules/`, `node_modules/@scaffold/contracts/` and `node_modules/@scaffold/<selected>/` as real directories (package.json + dist, symlinks dereferenced), and `packages/overseer/`. No `packages/microservices/`, no root `package.json`. The assemble step skips the `@scaffold` scope, `.bin`, and the empty scope directories `npm prune` leaves behind
-    - Post-assemble integrity check: after assembling, lists all microservice directories, subtracts the selected set, and verifies no unselected microservice leaked into `outDir/node_modules/@scaffold/`. Throws `[image-tree] unselected microservice "<name>" found in …` if any is present. This catches assembler bugs at build time, locally and in CI, identically — replacing the former CI-only image-scope assertion step
+    - `buildImageTree(outDir = "/out")` generates the registry for `MICROSERVICES`, resolves the selected identifiers, runs `npx tsc --build packages/contracts <selected microservices…> packages/overseer` (explicit order: the generated registry imports `@microservices/<id>`, those projects are not references of the Overseer, and contracts must precede the microservices that resolve it through `node_modules`), runs `npm prune --omit=dev`, then assembles `outDir`
+    - `outDir` layout: third-party runtime `node_modules/`, `node_modules/@microservices/contracts/` and `node_modules/@microservices/<selected>/` as real directories (package.json + dist, symlinks dereferenced), and `packages/overseer/`. No `packages/microservices/`, no root `package.json`. The assemble step skips the `@scaffold` scope, `.bin`, and the empty scope directories `npm prune` leaves behind
+    - Post-assemble integrity check: after assembling, lists all microservice directories, subtracts the selected set, and verifies no unselected microservice leaked into `outDir/node_modules/@microservices/`. Throws `[image-tree] unselected microservice "<name>" found in …` if any is present. This catches assembler bugs at build time, locally and in CI, identically — replacing the former CI-only image-scope assertion step
     - Register the bin in `package.json`. (Historical: this task also listed the barrel's exports as the package's public API. The barrel is gone — see 5.1 — and the package's interface is now its two bins; each module exports only what its own callers need: `resolveSelected`, `generateRegistry` + `listMicroserviceDirectories`, `buildImageTree`)
     - _Requirements: R6.1, R6.2, R6.5, R11.3_
 
@@ -186,7 +186,7 @@ Every leaf task cites the requirement clauses it satisfies (e.g., `R4.3, R7.1`) 
 
 - [x] 7. Build the `packages/overseer` package
   - [x] 7.1 Create the overseer package skeleton
-    - `package.json` with name `@scaffold/overseer`, `"type": "module"`, `express` runtime dep, `@scaffold/contracts` workspace dep, four scripts
+    - `package.json` with name `@microservices/overseer`, `"type": "module"`, `express` runtime dep, `@microservices/contracts` workspace dep, four scripts
     - `tsconfig.json` extending `../../tsconfig.base.json` (with reference to contracts)
     - Add `src/generated/` to a package-local `.gitignore` entry
     - _Requirements: R3.1_
@@ -219,7 +219,7 @@ Every leaf task cites the requirement clauses it satisfies (e.g., `R4.3, R7.1`) 
     - Property 6 is covered by example-based tests in `packages/overseer/tests/boot.test.ts` rather than a dedicated property test file. The collision check is an exact-equality comparison inlined in a six-line loop; the interesting cases (duplicate path, distinct paths, root path) are finite and pinned as concrete examples
     - Historical: the file `packages/overseer/tests/collision.property.test.ts` was originally planned here using `arbPathPair` to exercise all three categories. Both the file and the generator have been removed; see Property 6 in the design's Correctness Properties section
   - [x] 7.8 Implement `src/validate-modules.ts` (boot-time Microservice_Path check) — **inlined into `boot.ts` step 2 as `startsWith("/")`**
-    - The loop and `[module]` message formatting now live directly in `boot.ts`. The check is a single `entry.module.path.startsWith("/")` call — empty strings return `false`, so the non-empty guard is already covered. The separate `validateMicroservicePath` function, its `validate-path.ts` source file, and its re-export from `@scaffold/contracts` are deleted
+    - The loop and `[module]` message formatting now live directly in `boot.ts`. The check is a single `entry.module.path.startsWith("/")` call — empty strings return `false`, so the non-empty guard is already covered. The separate `validateMicroservicePath` function, its `validate-path.ts` source file, and its re-export from `@microservices/contracts` are deleted
     - Cross-module aggregation is preserved: every offending module is reported in a single startup attempt (R8.5)
     - Compile-time/runtime rationale unchanged: export shape is proven by `tsc` on the generated registry; only the `path` value is checked at runtime
     - `validate-modules.test.ts` removed; coverage lives in `boot.test.ts` (success on conforming registry, failure naming the offending package, cross-entry aggregation)
@@ -253,7 +253,7 @@ Every leaf task cites the requirement clauses it satisfies (e.g., `R4.3, R7.1`) 
     - Spawns the `generate-registry` bin (which reads the inherited `MICROSERVICES`, unset meaning `*`), then `npm run build --workspaces`, then `node packages/overseer/dist/index.js`
     - Building all workspaces instead of selecting tsconfig projects keeps the selector logic in one place: the script contains no selector parsing of its own
     - The generate-then-build order is what gives `npm start` its parity with a Container build, and it depends on the root `workspaces` array being topological (see 1.1)
-    - Verifying `npm start` against a genuinely clean checkout (tracked files only, `npm ci`, no `dist/`, no `*.tsbuildinfo`, no generated registry) exposed a second, earlier failure the reorder does not address: the generator runs as its **compiled** bin, and nothing builds or links it at install time, so step 1 died with `MODULE_NOT_FOUND` on `packages/build-tools/dist/bin/generate-registry.js` before any TypeScript ran. The script now bootstraps first — `npm run build --workspace @scaffold/contracts --workspace @scaffold/build-tools`, mirroring the Dockerfile build stage's `npx tsc --build packages/contracts packages/build-tools` — then generates, then builds every workspace, then runs the Overseer. Four steps, each aborting the sequence on failure
+    - Verifying `npm start` against a genuinely clean checkout (tracked files only, `npm ci`, no `dist/`, no `*.tsbuildinfo`, no generated registry) exposed a second, earlier failure the reorder does not address: the generator runs as its **compiled** bin, and nothing builds or links it at install time, so step 1 died with `MODULE_NOT_FOUND` on `packages/build-tools/dist/bin/generate-registry.js` before any TypeScript ran. The script now bootstraps first — `npm run build --workspace @microservices/contracts --workspace @microservices/build-tools`, mirroring the Dockerfile build stage's `npx tsc --build packages/contracts packages/build-tools` — then generates, then builds every workspace, then runs the Overseer. Four steps, each aborting the sequence on failure
     - Propagates non-zero exit codes; refuses to start the overseer if generation or build fails
     - The root `prepare` script now copies an empty microservice registry template into the generated-file location after every install, which does NOT make these steps redundant: `npm start` must regenerate because its `MICROSERVICES` may differ from the empty template (regenerating is the whole of R10.2), and the template is a zero-microservice placeholder, so `npm start` cannot assume the generator has run. Here a failure must abort, and does
     - _Requirements: R10.1, R10.2, R10.3, R10.4_
@@ -308,7 +308,7 @@ Every leaf task cites the requirement clauses it satisfies (e.g., `R4.3, R7.1`) 
 
 - [x] 12. Cross-package integration tests
   - [x] 12.1 Create the `packages/integration-tests` package skeleton
-    - `package.json` name `@scaffold/integration-tests`, `"type": "module"`, workspace deps on `@scaffold/overseer`, `@scaffold/contracts`, `@scaffold/build-tools`, and the three microservices; devDep on `supertest`
+    - `package.json` name `@microservices/integration-tests`, `"type": "module"`, workspace deps on `@microservices/overseer`, `@microservices/contracts`, `@microservices/build-tools`, and the three microservices; devDep on `supertest`
     - `tsconfig.json` extending `../../tsconfig.base.json`; standard four scripts
     - _Requirements: R10.1_
   - [x] 12.2* End-to-end request contract for all three reference microservices

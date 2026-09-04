@@ -67,7 +67,7 @@ describe("root Dockerfile structure", () => {
 
   it("never copies packages/microservices into any stage", () => {
     // Regression guard: the microservices reach the image only as
-    // node_modules/@scaffold/<id> entries staged by build-image-tree, so any
+    // node_modules/@microservices/<id> entries staged by build-image-tree, so any
     // COPY naming the namespace would ship services the selector excluded.
     const offenders = instructions.filter(
       (line) =>

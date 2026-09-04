@@ -7,20 +7,20 @@
 // compiled deep path because the overseer package's `main` entry auto-boots a
 // live server on import.
 
-import * as microservice1 from "@scaffold/microservice1";
-import * as microservice2 from "@scaffold/microservice2";
-import * as microservice3 from "@scaffold/microservice3";
+import * as microservice1 from "@microservices/microservice1";
+import * as microservice2 from "@microservices/microservice2";
+import * as microservice3 from "@microservices/microservice3";
 import type {
   MicroserviceModule,
   MicroserviceRegistry,
   RegistryEntry,
   ToggleMap,
-} from "@scaffold/contracts";
+} from "@microservices/contracts";
 
 // The overseer package's `main` (dist/index.js) runs its boot pipeline on
 // import, so we reach into its compiled leaf modules for the pure composition
 // helpers used by the tests.
-export { buildApp } from "@scaffold/overseer/dist/router.js";
+export { buildApp } from "@microservices/overseer/dist/router.js";
 
 /** The three real reference microservice modules, keyed for convenience. */
 export const modules = {
@@ -43,7 +43,7 @@ export function makeRegistry(
     // authoritative identifier the real generator emits on each entry.
     identifier: id,
     module: modules[id],
-    sourcePackage: `@scaffold/${id}`,
+    sourcePackage: `@microservices/${id}`,
   }));
 }
 

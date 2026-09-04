@@ -18,13 +18,13 @@
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 
-import type { MicroserviceRegistry, RegistryEntry } from '@scaffold/contracts';
+import type { MicroserviceRegistry, RegistryEntry } from '@microservices/contracts';
 import {
   arbEnvironment,
   arbIdentifier,
   buildExpressRouter,
   toggleVarName,
-} from '@scaffold/contracts/testing';
+} from '@microservices/contracts/testing';
 
 import { parseToggle, validateToggles } from '../src/toggles.js';
 
@@ -33,7 +33,7 @@ function entry(identifier: string): RegistryEntry {
   const path = `/${identifier}`;
   return {
     identifier,
-    sourcePackage: `@scaffold/${identifier}`,
+    sourcePackage: `@microservices/${identifier}`,
     module: { path, router: buildExpressRouter(identifier, path) },
   };
 }

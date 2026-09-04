@@ -28,9 +28,9 @@
 //      Container build (the Overseer compiles against the fresh registry, never
 //      a stale one), and it is only sound because the root `workspaces` array is
 //      in topological order. The generated registry statically imports
-//      `@scaffold/microservice<N>`, so the microservices must be built before the
+//      `@microservices/microservice<N>`, so the microservices must be built before the
 //      Overseer; with `overseer` listed ahead of them this step failed with
-//      `TS2307: Cannot find module '@scaffold/microservice1'`.
+//      `TS2307: Cannot find module '@microservices/microservice1'`.
 //
 // Paths are relative to cwd, which is the repo root for npm scripts.
 
@@ -60,9 +60,9 @@ runOrExit("npm", [
   "run",
   "build",
   "--workspace",
-  "@scaffold/contracts",
+  "@microservices/contracts",
   "--workspace",
-  "@scaffold/build-tools",
+  "@microservices/build-tools",
 ]);
 
 // The same generator entry point the Dockerfile build stage uses, invoked as the

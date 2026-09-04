@@ -27,7 +27,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fc from "fast-check";
 
-import { arbHttpMethodNonGet } from "@scaffold/contracts/testing";
+import { arbHttpMethodNonGet } from "@microservices/contracts/testing";
 
 import { path, router } from "../src/index.js";
 

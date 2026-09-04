@@ -1,4 +1,4 @@
-// @scaffold/overseer — runtime toggle parsing and validation.
+// @microservices/overseer — runtime toggle parsing and validation.
 //
 // Implements Property 7 (Toggle-token parsing) and Property 8 (Boot toggle
 // validation) from the design's Correctness Properties section, satisfying
@@ -25,7 +25,7 @@
 //     is thrown: the boot pipeline formats the discriminated failure into the
 //     [toggle:missing]/[toggle:invalid]/[toggle:unknown] messages and aborts.
 
-import type { MicroserviceRegistry, ToggleMap } from "@scaffold/contracts";
+import type { MicroserviceRegistry, ToggleMap } from "@microservices/contracts";
 
 /** Accepted tokens (case-insensitive, trimmed) that map to enabled. */
 const ENABLED_TOKENS = new Set(["enabled", "true", "1"]);

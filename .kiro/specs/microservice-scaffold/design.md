@@ -98,7 +98,7 @@ Dependency rules (enforced by TypeScript project references and code review):
 
 - `packages/microservices/*` depend only on `packages/contracts`.
 - `packages/overseer` depends on `packages/contracts` and, via generated code only, on the selected `packages/microservices/*`.
-- `packages/build-tools` depends on `packages/contracts` because the code it *emits* imports `MicroserviceRegistry` from it (and its property tests draw generators from `@scaffold/contracts/testing`); its own sources no longer import a contracts type, since the parsed-selector type moved into `selector.ts` when the parser stopped being exported. It lists the microservice directories; it neither reads their package metadata nor imports their runtime code.
+- `packages/build-tools` depends on `packages/contracts` because the code it *emits* imports `MicroserviceRegistry` from it (and its property tests draw generators from `@microservices/contracts/testing`); its own sources no longer import a contracts type, since the parsed-selector type moved into `selector.ts` when the parser stopped being exported. It lists the microservice directories; it neither reads their package metadata nor imports their runtime code.
 - No microservice imports another microservice. No microservice imports the Overseer.
 
 ### Request-routing sequence — enabled microservice (`GET /microservice2/config`)
@@ -229,7 +229,7 @@ Contains two entry points:
    - Emits `packages/overseer/src/generated/microservice-registry.ts`, a TypeScript module that statically imports each selected microservice module and re-exports them as a typed `MicroserviceRegistry`.
 2. **Image-tree assembler (`image-tree.ts`).** `buildImageTree(outDir = "/out")`, invoked by the Dockerfile's build stage through the four-line `build-image-tree` bin. It generates the registry for the selector, compiles only the projects the image needs, drops devDependencies, and stages the complete runtime payload at `outDir`. It is what makes minimality a property of construction rather than of cleanup; documented in "Container Images" below.
 
-**No barrel, and no `main`/`types`.** This package has no `src/index.ts`: it is a bin-only tooling package whose interface is its two CLI entry points, `generate-registry` and `build-image-tree` (the `bin` block in its `package.json`). Nothing in production imports the package by name — each bin imports its own module by path, and the modules import each other by path — so a barrel plus `main`/`types` would advertise a package-level API that no consumer has. The one non-bin consumer is a test: `packages/integration-tests/tests/effective-dockerfile.test.ts` deep-imports the compiled modules (`@scaffold/build-tools/dist/selector.js`, `@scaffold/build-tools/dist/generate-registry.js`), the same way the suite already reaches the Overseer (`@scaffold/overseer/dist/router.js`). There is no `exports` map, so deep specifiers resolve. See the exception clause in `.kiro/steering/structure.md`.
+**No barrel, and no `main`/`types`.** This package has no `src/index.ts`: it is a bin-only tooling package whose interface is its two CLI entry points, `generate-registry` and `build-image-tree` (the `bin` block in its `package.json`). Nothing in production imports the package by name — each bin imports its own module by path, and the modules import each other by path — so a barrel plus `main`/`types` would advertise a package-level API that no consumer has. The one non-bin consumer is a test: `packages/integration-tests/tests/effective-dockerfile.test.ts` deep-imports the compiled modules (`@microservices/build-tools/dist/selector.js`, `@microservices/build-tools/dist/generate-registry.js`), the same way the suite already reaches the Overseer (`@microservices/overseer/dist/router.js`). There is no `exports` map, so deep specifiers resolve. See the exception clause in `.kiro/steering/structure.md`.
 
 The module surfaces are correspondingly narrow: `selector.ts` exports only `resolveSelected` (the parser, the parsed-selector type and the unmatched-identifier error are internal to it — see "Selector application"), `generate-registry.ts` exports `generateRegistry` and `listMicroserviceDirectories`, and `image-tree.ts` exports `buildImageTree`.
 
@@ -242,7 +242,7 @@ The Overseer's `src/index.ts` composes the boot pipeline (see "Overseer Startup 
 - `src/collision.ts` — **deleted**; path-collision detection is now inlined in `src/boot.ts` step 3 as a simple exact-equality check. Only exact duplicate paths are collisions; parent/child overlaps (e.g. `/api` and `/api/v2`) are a valid Express mount topology because `buildApp` sorts mounts by path length descending.
 - `src/router.ts` — builds the mount table: constructs an Express `app`, then calls `app.use(entry.module.path, entry.module.router)` for every enabled `RegistryEntry` in a deterministic order (sorted by path descending by length for debuggability), and finally registers an app-level 404 catch-all (`app.use((req, res) => res.status(404).end())`).
 - `src/server.ts` — starts the Express app via `app.listen(port)`.
-- `src/boot.ts` — the ordered composition (see "Overseer Startup Sequence"). Step 2 (module-path validation) is inlined here: it loops the registry entries, checks `entry.module.path.startsWith("/")`, and collects `[module] <sourcePackage>: path "<path>" does not start with "/"` messages. Cross-module aggregation is kept (R8.5). The check was previously delegated to `validateMicroservicePath` from `@scaffold/contracts`; that function reduced to a single `startsWith` call once the non-empty guard was recognized as redundant (empty strings return `false` from `startsWith("/")`), so the indirection was removed and the validator file deleted.
+- `src/boot.ts` — the ordered composition (see "Overseer Startup Sequence"). Step 2 (module-path validation) is inlined here: it loops the registry entries, checks `entry.module.path.startsWith("/")`, and collects `[module] <sourcePackage>: path "<path>" does not start with "/"` messages. Cross-module aggregation is kept (R8.5). The check was previously delegated to `validateMicroservicePath` from `@microservices/contracts`; that function reduced to a single `startsWith` call once the non-empty guard was recognized as redundant (empty strings return `false` from `startsWith("/")`), so the indirection was removed and the validator file deleted.
 - `src/generated/microservice-registry.ts` — the emitted microservice registry (gitignored, produced by `build-tools`). `src/index.ts` imports it statically, so the Overseer does not compile without it; the root `prepare` script copies the committed empty template into this location on every install so a fresh clone has one (see "Registry Generator — Invocation").
 
 ### Container images (Dockerfile)
@@ -283,12 +283,12 @@ CMD ["node", "packages/overseer/dist/index.js"]
 
 ```
 node_modules/                       third-party RUNTIME deps only
-node_modules/@scaffold/contracts/   real directory: package.json + dist
-node_modules/@scaffold/<selected>/  real directories, selected services only
+node_modules/@microservices/contracts/   real directory: package.json + dist
+node_modules/@microservices/<selected>/  real directories, selected services only
 packages/overseer/                  package.json + dist
 ```
 
-- Microservices are reachable **only** as `node_modules/@scaffold/<identifier>`, because the generated registry imports them by package name (`import * as m0 from "@scaffold/microservice1"`). `packages/microservices/` is therefore absent from the image entirely, and a structural test asserts no `COPY` mentions it.
+- Microservices are reachable **only** as `node_modules/@microservices/<identifier>`, because the generated registry imports them by package name (`import * as m0 from "@microservices/microservice1"`). `packages/microservices/` is therefore absent from the image entirely, and a structural test asserts no `COPY` mentions it.
 - Those are **real directories, not npm's workspace symlinks.** A symlink pointing into an absent `packages/microservices/` would dangle. The assemble step copies with `dereference: true` for the same reason: nothing in the image points outside it.
 - The Overseer stays at `packages/overseer/` because the entrypoint invokes it by path.
 - No root `package.json` is needed (verified against the built image): the Overseer is loaded by absolute file path and resolves its imports through `node_modules/`.
@@ -298,7 +298,7 @@ packages/overseer/                  package.json + dist
 
 1. `npx tsc --build packages/contracts packages/build-tools` — bootstrap only; build-tools consumes contracts' declarations and contracts is not a project reference of it.
 2. `generateRegistry(process.env.MICROSERVICES)` — emits the registry for this image's selector.
-3. `npx tsc --build packages/contracts <selected microservices…> packages/overseer` — **explicit order, not project references.** The generated registry imports `@scaffold/<identifier>`, and those microservice projects are not references of the Overseer project, so their declarations must exist before the Overseer compiles. `packages/contracts` precedes the microservices because they resolve it through `node_modules`. Compiling only these projects is also what keeps unselected microservices out of the tree.
+3. `npx tsc --build packages/contracts <selected microservices…> packages/overseer` — **explicit order, not project references.** The generated registry imports `@microservices/<identifier>`, and those microservice projects are not references of the Overseer project, so their declarations must exist before the Overseer compiles. `packages/contracts` precedes the microservices because they resolve it through `node_modules`. Compiling only these projects is also what keeps unselected microservices out of the tree.
 4. `npm prune --omit=dev` — run *before* the assemble step reads `node_modules`, so devDependencies never reach `/out` and nothing has to be deleted later.
 5. Assemble `/out` as described above.
 
@@ -315,9 +315,9 @@ Adding `.dockerignore` also fixed a latent correctness bug rather than merely sh
 ### Root scripts (root `package.json`)
 
 - `npm start` runs `dotenvx run -- node scripts/start.js`, which:
-  1. Bootstrap-builds contracts and build-tools (`npm run build --workspace @scaffold/contracts --workspace @scaffold/build-tools`). The registry generator is invoked as its **compiled** bin, and nothing builds or links that bin at install time, so on a fresh clone the next step would otherwise fail with `MODULE_NOT_FOUND` before any TypeScript ran. This mirrors the Dockerfile build stage's `npx tsc --build packages/contracts packages/build-tools`; on a warm tree it is a near no-op.
+  1. Bootstrap-builds contracts and build-tools (`npm run build --workspace @microservices/contracts --workspace @microservices/build-tools`). The registry generator is invoked as its **compiled** bin, and nothing builds or links that bin at install time, so on a fresh clone the next step would otherwise fail with `MODULE_NOT_FOUND` before any TypeScript ran. This mirrors the Dockerfile build stage's `npx tsc --build packages/contracts packages/build-tools`; on a warm tree it is a near no-op.
   2. Invokes the registry generator to write `packages/overseer/src/generated/microservice-registry.ts`. The generator reads `MICROSERVICES` from the environment it inherits (unset means `*`).
-  3. Runs `npm run build --workspaces`. Building every workspace rather than only the selected microservices' tsconfig projects costs a few seconds locally and keeps the script free of a second copy of the selector logic. Generating **before** building is what gives `npm start` its build-parity semantics (the Overseer compiles against the fresh registry rather than a stale one), and it is only sound because the root `workspaces` array is in topological order: the generated registry statically imports `@scaffold/microservice<N>`, so the microservices must compile before the Overseer. With `overseer` listed ahead of them, a fresh clone's `npm start` failed with `TS2307: Cannot find module '@scaffold/microservice1'` and only appeared to work on a machine whose `dist/` was already warm.
+  3. Runs `npm run build --workspaces`. Building every workspace rather than only the selected microservices' tsconfig projects costs a few seconds locally and keeps the script free of a second copy of the selector logic. Generating **before** building is what gives `npm start` its build-parity semantics (the Overseer compiles against the fresh registry rather than a stale one), and it is only sound because the root `workspaces` array is in topological order: the generated registry statically imports `@microservices/microservice<N>`, so the microservices must compile before the Overseer. With `overseer` listed ahead of them, a fresh clone's `npm start` failed with `TS2307: Cannot find module '@microservices/microservice1'` and only appeared to work on a machine whose `dist/` was already warm.
   4. Runs `node packages/overseer/dist/index.js` and mirrors its exit code.
 - The `dotenvx run --` wrapper injects the local `.env` (the `MICROSERVICE_<IDENTIFIER>_ENABLED` toggle vars) into `scripts/start.js` and the Overseer child it spawns, at the invocation boundary — per the local-env conventions. Env-loading stays out of source code (no dotenv/dotenvx import in `scripts/start.js` or any package `src/`), so the code behaves identically whether toggles come from `.env`, a container secret, or CI. The production container entrypoint (`node packages/overseer/dist/index.js`) runs directly without dotenvx; its defaults come from the R6.6 baked `ENV` lines plus deploy-time env.
 - `npm run prepare` is npm's install hook, not a command anyone types: after `npm install`/`npm ci` it copies the committed empty template (`packages/overseer/src/generated/microservice-registry.template.ts`) into the generated-file location so a fresh clone can compile the statically-importing Overseer. It never fails an install — the `cp` is unconditional.rms steps 1 and 2 of the `npm start` sequence above (bootstrap contracts + build-tools, then the generator bin) so a fresh clone can compile the statically-importing Overseer. It never fails an install — see "Registry Generator — Invocation" for the failure policy and why `npm start` and CI still generate for themselves.
@@ -344,7 +344,7 @@ Adding `.dockerignore` also fixed a latent correctness bug rather than merely sh
 2. Keep the direct subdirectories; each one is a candidate, and its identifier IS the directory name (per structure steering). Nothing cross-checks that against the module, here or at Overseer startup: the module declares no identifier, so there is no second value to reconcile. The generator writes the directory name onto each emitted `RegistryEntry`, which is the only place an identifier ever comes from.
 3. Sort the directory names lexicographically for deterministic output.
 
-Discovery deliberately does NOT validate a candidate's contents — no `package.json` read, no module-shape check, no skip-with-warning path. A directory that is not a usable microservice module surfaces at build time instead: the generated registry's static `import * as m<N> from "@scaffold/<dir>"` fails to resolve or typecheck under `tsc`, which is both earlier than runtime and closer to the actual defect than a discovery-time warning. This is the accepted trade-off for keeping discovery to a directory listing.
+Discovery deliberately does NOT validate a candidate's contents — no `package.json` read, no module-shape check, no skip-with-warning path. A directory that is not a usable microservice module surfaces at build time instead: the generated registry's static `import * as m<N> from "@microservices/<dir>"` fails to resolve or typecheck under `tsc`, which is both earlier than runtime and closer to the actual defect than a discovery-time warning. This is the accepted trade-off for keeping discovery to a directory listing.
 
 **Selector application.**
 
@@ -356,15 +356,15 @@ Parsing and application live in `src/selector.ts`, which exports **only** `resol
 **Output.** The generator writes `packages/overseer/src/generated/microservice-registry.ts`:
 
 ```ts
-// AUTO-GENERATED by @scaffold/build-tools. Do not edit.
+// AUTO-GENERATED by @microservices/build-tools. Do not edit.
 // Selector: microservice1,microservice2
-import * as m0 from "@scaffold/microservice1";
-import * as m1 from "@scaffold/microservice2";
-import type { MicroserviceRegistry } from "@scaffold/contracts";
+import * as m0 from "@microservices/microservice1";
+import * as m1 from "@microservices/microservice2";
+import type { MicroserviceRegistry } from "@microservices/contracts";
 
 export const microserviceRegistry: MicroserviceRegistry = [
-  { identifier: "microservice1", module: m0, sourcePackage: "@scaffold/microservice1" },
-  { identifier: "microservice2", module: m1, sourcePackage: "@scaffold/microservice2" },
+  { identifier: "microservice1", module: m0, sourcePackage: "@microservices/microservice1" },
+  { identifier: "microservice2", module: m1, sourcePackage: "@microservices/microservice2" },
 ];
 ```
 
@@ -576,7 +576,7 @@ export interface MicroserviceModule {
 export interface RegistryEntry {
   readonly identifier: string;    // the microservice's directory name, emitted by the generator
   readonly module: MicroserviceModule;
-  readonly sourcePackage: string; // e.g. "@scaffold/microservice1"; used only in diagnostics
+  readonly sourcePackage: string; // e.g. "@microservices/microservice1"; used only in diagnostics
 }
 
 // The generated registry type
@@ -756,8 +756,8 @@ Example lines:
 [toggle:invalid]     MICROSERVICE_MICROSERVICE2_ENABLED has invalid value "yes"; accepted: enabled|disabled|true|false|1|0
 [toggle:unknown]     MICROSERVICE_LEGACY_ENABLED is enabled for identifier legacy which is not in the current Container
 [collision:path]     path "/shared" declared by microservice-a and microservice-b
-[module]             @scaffold/microservice2: export "path" ("hello") does not start with "/"
-[module]             @scaffold/microservice3: export "path" is an empty string
+[module]             @microservices/microservice2: export "path" ("hello") does not start with "/"
+[module]             @microservices/microservice3: export "path" is an empty string
 [selector:unmatched] MICROSERVICES names unknown identifier(s): "microservice4"
 ```
 

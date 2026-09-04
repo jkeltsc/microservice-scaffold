@@ -30,8 +30,8 @@ import type {
   MicroserviceRegistry,
   RegistryEntry,
   ToggleMap,
-} from "@scaffold/contracts";
-import { buildExpressRouter } from "@scaffold/contracts/testing";
+} from "@microservices/contracts";
+import { buildExpressRouter } from "@microservices/contracts/testing";
 
 import { buildApp } from "../src/router.js";
 
@@ -73,7 +73,7 @@ function toRegistry(services: readonly GeneratedService[]): MicroserviceRegistry
   return services.map(
     (s): RegistryEntry => ({
       identifier: s.identifier,
-      sourcePackage: `@scaffold/${s.identifier}`,
+      sourcePackage: `@microservices/${s.identifier}`,
       module: {
         path: s.path,
         router: buildExpressRouter(s.identifier, s.path),
@@ -144,7 +144,7 @@ describe("Property 9: routing decision (exactly one of two branches)", () => {
     const registry: MicroserviceRegistry = [
       {
         identifier: "svc7",
-        sourcePackage: "@scaffold/svc7",
+        sourcePackage: "@microservices/svc7",
         module: {
           path: "/svc7",
           router: buildExpressRouter("svc7", "/svc7", /* withConfigRoute */ true),

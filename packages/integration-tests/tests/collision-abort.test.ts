@@ -26,13 +26,13 @@
 // Validates: Requirements R9.3, R9.4, R9.5
 
 import { describe, it, expect } from "vitest";
-import { buildExpressRouter } from "@scaffold/contracts/testing";
-import type { MicroserviceRegistry } from "@scaffold/contracts";
+import { buildExpressRouter } from "@microservices/contracts/testing";
+import type { MicroserviceRegistry } from "@microservices/contracts";
 
 // boot() is a pure composition helper on the Overseer; reach into its compiled
 // leaf module (the package `main` auto-boots a live server on import, so we
 // import the deep dist path instead, mirroring tests/helpers.ts).
-import { boot } from "@scaffold/overseer/dist/boot.js";
+import { boot } from "@microservices/overseer/dist/boot.js";
 
 const SHARED_PATH = "/collide";
 
@@ -45,7 +45,7 @@ function collidingRegistry(): MicroserviceRegistry {
   return [
     {
       identifier: "servicea",
-      sourcePackage: "@scaffold/servicea",
+      sourcePackage: "@microservices/servicea",
       module: {
         path: SHARED_PATH,
         router: buildExpressRouter("servicea", SHARED_PATH),
@@ -53,7 +53,7 @@ function collidingRegistry(): MicroserviceRegistry {
     },
     {
       identifier: "serviceb",
-      sourcePackage: "@scaffold/serviceb",
+      sourcePackage: "@microservices/serviceb",
       module: {
         path: SHARED_PATH,
         router: buildExpressRouter("serviceb", SHARED_PATH),
@@ -99,7 +99,7 @@ describe("collision-abort integration (two modules share a path)", () => {
     const microserviceRegistry: MicroserviceRegistry = [
       {
         identifier: "servicea",
-        sourcePackage: "@scaffold/servicea",
+        sourcePackage: "@microservices/servicea",
         module: {
           path: "/servicea",
           router: buildExpressRouter("servicea", "/servicea"),
@@ -107,7 +107,7 @@ describe("collision-abort integration (two modules share a path)", () => {
       },
       {
         identifier: "serviceb",
-        sourcePackage: "@scaffold/serviceb",
+        sourcePackage: "@microservices/serviceb",
         module: {
           path: "/serviceb",
           router: buildExpressRouter("serviceb", "/serviceb"),

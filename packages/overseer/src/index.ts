@@ -1,4 +1,4 @@
-// @scaffold/overseer — process entrypoint.
+// @microservices/overseer — process entrypoint.
 //
 // Implements design "Overseer Startup Sequence" step 1 (load the generated
 // microservice registry), step 6 (bind the HTTP server), and the process-effect

@@ -33,7 +33,7 @@ Each package under `packages/` (and every subdirectory of `packages/microservice
 - Own `src/` for TypeScript sources and `dist/` for build output (gitignored).
 - Own `tests/` (or colocated `*.test.ts`) using vitest.
 - Public API is limited to what `index.ts` re-exports. Nothing else is stable.
-- **Exception — bin-only tooling packages.** A package whose entire interface is its CLI entry points may omit the barrel, and with it `main` and `types`; its `bin` block is the interface, and its modules are imported by path. `packages/build-tools/` is one: nothing imports it by package name, so a barrel would advertise an API no consumer has. A test that needs one of its functions deep-imports the compiled module (`@scaffold/build-tools/dist/selector.js`).
+- **Exception — bin-only tooling packages.** A package whose entire interface is its CLI entry points may omit the barrel, and with it `main` and `types`; its `bin` block is the interface, and its modules are imported by path. `packages/build-tools/` is one: nothing imports it by package name, so a barrel would advertise an API no consumer has. A test that needs one of its functions deep-imports the compiled module (`@microservices/build-tools/dist/selector.js`).
 
 ## Microservice_Namespace
 
@@ -59,7 +59,7 @@ A microservice package MUST:
 ## Container image contents
 
 - `packages/build-tools/` also owns the image-tree assembler, which stages everything a runtime image contains into a single tree that the Dockerfile's runtime stage copies once. Only the selected microservices are compiled and staged, so image minimality holds by construction.
-- Inside an image, microservices ship as `node_modules/@scaffold/<identifier>` (real directories, not workspace symlinks), because the generated registry imports them by package name. `packages/microservices/` is absent from images entirely.
+- Inside an image, microservices ship as `node_modules/@microservices/<identifier>` (real directories, not workspace symlinks), because the generated registry imports them by package name. `packages/microservices/` is absent from images entirely.
 - The Overseer ships at `packages/overseer/` because the entrypoint invokes it by path.
 - Per-microservice default toggles (`MICROSERVICE_<IDENTIFIER>_ENABLED=enabled`) are baked by building the generated `Dockerfile`, produced from the committed `Dockerfile.template` by `scripts/emit-effective-dockerfile.sh` for the current selector. The generated `Dockerfile` is generated output and gitignored; `Dockerfile.template` is the committed source.
 

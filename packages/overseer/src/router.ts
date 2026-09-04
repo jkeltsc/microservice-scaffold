@@ -1,4 +1,4 @@
-// @scaffold/overseer — Express mount table construction.
+// @microservices/overseer — Express mount table construction.
 //
 // Implements design "Overseer Startup Sequence" step 5 and "Request Routing",
 // satisfying Requirements R3.1 (single HTTP server / app), R3.2 (forward to the
@@ -25,7 +25,7 @@
 // fallback.
 
 import express from "express";
-import type { MicroserviceRegistry, ToggleMap } from "@scaffold/contracts";
+import type { MicroserviceRegistry, ToggleMap } from "@microservices/contracts";
 
 /**
  * Build the Overseer's Express application from the loaded microservice

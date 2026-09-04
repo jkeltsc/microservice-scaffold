@@ -1,4 +1,4 @@
-// @scaffold/contracts — shared TypeScript types.
+// @microservices/contracts — shared TypeScript types.
 // Public API is limited to what this module re-exports.
 
 import type { Router } from "express";
@@ -22,7 +22,7 @@ export interface MicroserviceModule {
 export interface RegistryEntry {
   readonly identifier: string; // the microservice's directory name, emitted by the generator
   readonly module: MicroserviceModule;
-  readonly sourcePackage: string; // e.g. "@scaffold/microservice1"; used only in diagnostics
+  readonly sourcePackage: string; // e.g. "@microservices/microservice1"; used only in diagnostics
 }
 
 // The generated registry type

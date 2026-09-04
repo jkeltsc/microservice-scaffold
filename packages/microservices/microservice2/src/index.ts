@@ -1,5 +1,5 @@
 import express from "express";
-import type { MicroserviceModule } from "@scaffold/contracts";
+import type { MicroserviceModule } from "@microservices/contracts";
 
 // The full HTTP path at which the Overseer mounts this microservice's router.
 // No identifier is exported: the directory name is the authoritative

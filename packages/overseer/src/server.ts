@@ -1,4 +1,4 @@
-// @scaffold/overseer — HTTP listener startup.
+// @microservices/overseer — HTTP listener startup.
 //
 // Implements design "Overseer Startup Sequence" step 6 / step 7 and Components
 // and Interfaces (`src/server.ts`): the Overseer binds its single HTTP server

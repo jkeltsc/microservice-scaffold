@@ -26,7 +26,7 @@ import { resolveSelected } from "../src/selector.js";
 import {
   arbSelectorString,
   arbNamespaceDirectories,
-} from "@scaffold/contracts/testing";
+} from "@microservices/contracts/testing";
 
 /**
  * Reference classification of a raw selector, per design "Selector parsing".

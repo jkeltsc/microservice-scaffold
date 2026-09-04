@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
-import type { MicroserviceRegistry, RegistryEntry } from '@scaffold/contracts';
-import { buildExpressRouter } from '@scaffold/contracts/testing';
+import type { MicroserviceRegistry, RegistryEntry } from '@microservices/contracts';
+import { buildExpressRouter } from '@microservices/contracts/testing';
 
 import { boot } from '../src/boot.js';
 import { toggleVarName } from '../src/toggles.js';
@@ -28,7 +28,7 @@ function entry(
   const path = overrides.path ?? `/${identifier}`;
   return {
     identifier,
-    sourcePackage: `@scaffold/${identifier}`,
+    sourcePackage: `@microservices/${identifier}`,
     module: { path, router: buildExpressRouter(identifier, path) },
   };
 }
@@ -100,7 +100,7 @@ describe('boot — module path failure (step 2)', () => {
     if (result.ok) throw new Error('expected boot failure');
     expect(result.messages.length).toBeGreaterThan(0);
     expect(result.messages[0]).toContain('[module]');
-    expect(result.messages.join('\n')).toContain('@scaffold/microservice1');
+    expect(result.messages.join('\n')).toContain('@microservices/microservice1');
   });
 
   it('aggregates defects across multiple entries in a single attempt', () => {
@@ -118,9 +118,9 @@ describe('boot — module path failure (step 2)', () => {
     if (result.ok) throw new Error('expected boot failure');
     // Both offending packages are reported; the valid one is not.
     expect(result.messages).toHaveLength(2);
-    expect(result.messages.join('\n')).toContain('@scaffold/microservice1');
-    expect(result.messages.join('\n')).toContain('@scaffold/microservice3');
-    expect(result.messages.join('\n')).not.toContain('@scaffold/microservice2');
+    expect(result.messages.join('\n')).toContain('@microservices/microservice1');
+    expect(result.messages.join('\n')).toContain('@microservices/microservice3');
+    expect(result.messages.join('\n')).not.toContain('@microservices/microservice2');
   });
 });
 
