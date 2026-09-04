@@ -18,8 +18,9 @@ coverage/
 # Generated registry (emitted by build-tools; the template is tracked)
 packages/overseer/src/generated/microservice-registry.ts
 
-# Effective Dockerfile (emitted by scripts/emit-effective-dockerfile.sh)
-Dockerfile.effective
+# Generated Dockerfile (emitted by scripts/emit-effective-dockerfile.sh from
+# Dockerfile.template; the template is tracked)
+Dockerfile
 
 # Editor junk
 .idea/

@@ -6,12 +6,13 @@
 # trigger publishes to GHCR (R11.4/R11.5). Authentication uses the
 # workflow-provided GITHUB_TOKEN with the minimum permissions (R11.6).
 #
-# The build does NOT use the base `Dockerfile` directly. Each matrix leg first
-# runs scripts/emit-effective-dockerfile.sh, which writes `Dockerfile.effective`
-# = the base Dockerfile plus one `ENV MICROSERVICE_<X>_ENABLED=enabled` line per
-# identifier in that leg's selector (R6.6). docker/build-push-action then builds
-# that generated file. The script is dependency-free POSIX sh, so no Node setup
-# and no `npm ci` are needed before the build.
+# The build does NOT use the `Dockerfile.template` source directly. Each matrix
+# leg first runs scripts/emit-effective-dockerfile.sh, which writes `Dockerfile`
+# = the `Dockerfile.template` source plus one `ENV MICROSERVICE_<X>_ENABLED=enabled`
+# line per identifier in that leg's selector (R6.6). docker/build-push-action then
+# builds that generated `Dockerfile` (its default file). The script is
+# dependency-free POSIX sh, so no Node setup and no `npm ci` are needed before the
+# build.
 #
 # The image-tree assembler (`buildImageTree` in packages/build-tools) verifies
 # at build time that no unselected microservice leaked into the staged tree, so
@@ -45,8 +46,8 @@ jobs:
       fail-fast: false
       # R6.5 / R11.3: the two shipped Container configurations.
       #
-      # No toggle flags are carried per leg: the image is built from
-      # `Dockerfile.effective`, which bakes `MICROSERVICE_<X>_ENABLED=enabled`
+      # No toggle flags are carried per leg: the image is built from the
+      # generated `Dockerfile`, which bakes `MICROSERVICE_<X>_ENABLED=enabled`
       # for exactly the identifiers in that leg's selector (R6.6). The Overseer
       # therefore boots with no `-e` flags at all, and a deploy-time `-e` still
       # overrides a baked default when an operator wants a service off.
@@ -90,15 +91,15 @@ jobs:
             type=ref,event=tag
             type=raw,value=latest,enable={{is_default_branch}}
 
-      # R6.6: generate `Dockerfile.effective` for this leg's selector — the base
-      # Dockerfile with one default-toggle ENV line per resolved identifier,
-      # injected before the runtime stage's ENTRYPOINT. The script is
-      # dependency-free POSIX sh + awk, so this runs straight after checkout
-      # with no `actions/setup-node` and no `npm ci`.
+      # R6.6: generate `Dockerfile` for this leg's selector from
+      # `Dockerfile.template` — the template with one default-toggle ENV line per
+      # resolved identifier, injected before the runtime stage's ENTRYPOINT. The
+      # script is dependency-free POSIX sh + awk, so this runs straight after
+      # checkout with no `actions/setup-node` and no `npm ci`.
       #
       # R11.9: also records the exact selector used for this image in the logs
       # (the script echoes it too, and the generated file's header names it).
-      - name: Generate effective Dockerfile
+      - name: Generate Dockerfile
         continue-on-error: false
         env:
           MICROSERVICES: ${{ matrix.selector }}
@@ -106,8 +107,8 @@ jobs:
           set -euo pipefail
           echo "MICROSERVICES=${MICROSERVICES}"
           sh scripts/emit-effective-dockerfile.sh
-          echo "--- Dockerfile.effective toggle defaults ---"
-          grep -E '^ENV MICROSERVICE_[A-Z0-9_]+_ENABLED=' Dockerfile.effective
+          echo "--- Dockerfile toggle defaults ---"
+          grep -E '^ENV MICROSERVICE_[A-Z0-9_]+_ENABLED=' Dockerfile
 
       # R11.3/R11.7: always build the multi-arch image; publish only when not a
       # pull request. The image-tree assembler's own integrity check verifies at
@@ -119,7 +120,6 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: Dockerfile.effective
           platforms: linux/amd64,linux/arm64
           build-args: |
             MICROSERVICES=${{ matrix.selector }}

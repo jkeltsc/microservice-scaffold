@@ -1,0 +1,319 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Rename `Dockerfile` to `Dockerfile.template` and restructure to three stages": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509094112
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509101602
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509169767
+      }
+    ],
+    "1.2 Update `buildImageTree` in `packages/build-tools/src/image-tree.ts`": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509094146
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509173138
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509253314
+      }
+    ],
+    "2.1 Update `scripts/emit-effective-dockerfile.sh` for new file names and manifest COPY generation": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509094209
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509256996
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788510731419
+      }
+    ],
+    "3.1 Update `.gitignore`": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509094260
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788510740845
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788510777065
+      }
+    ],
+    "3.2 Update `.dockerignore`": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509094285
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788510781795
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788510820917
+      }
+    ],
+    "3.3 Update root `package.json` docker:build scripts": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509094317
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788510824319
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788510861776
+      }
+    ],
+    "3.4 Update `.github/workflows/release.yml`": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509094358
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788510864984
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788510937100
+      }
+    ],
+    "4.1 Update `packages/integration-tests/tests/dockerfile.test.ts`": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509094393
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788510940735
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788510998419
+      }
+    ],
+    "4.2 Update `packages/integration-tests/tests/effective-dockerfile.test.ts`": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509094430
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788511001946
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788511173270
+      }
+    ],
+    "5.1 Update structure steering with test-only package exclusion rule and new filenames": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509094468
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788511177067
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788511255890
+      }
+    ],
+    "5.2 Run the full test suite": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509094508
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788511259453
+      },
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788511479495
+      }
+    ],
+    "1. Rename and restructure the Dockerfile template": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788509253345
+      }
+    ],
+    "2. Enhance `emit-effective-dockerfile.sh` for template rename and manifest COPY generation": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788510731458
+      }
+    ],
+    "3. Update config files and workflow for the rename": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788510937133
+      }
+    ],
+    "4. Update integration tests": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788511173334
+      }
+    ],
+    "5. Update steering and verify end-to-end": [
+      {
+        "executionId": "e843b396-46b0-47ee-8ed5-df5d8bf8fe8a",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788511479542
+      }
+    ],
+    "6.1 Capture a byte-for-byte output baseline before refactoring": [
+      {
+        "executionId": "bfb10ee8-9f10-4b15-a1fc-9ec61f7b0de6",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788513466600
+      },
+      {
+        "executionId": "bfb10ee8-9f10-4b15-a1fc-9ec61f7b0de6",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788513501174
+      },
+      {
+        "executionId": "bfb10ee8-9f10-4b15-a1fc-9ec61f7b0de6",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788513894107
+      }
+    ],
+    "6.2 Rewrite the script: thin shell part (discovery only)": [
+      {
+        "executionId": "bfb10ee8-9f10-4b15-a1fc-9ec61f7b0de6",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788513466641
+      },
+      {
+        "executionId": "bfb10ee8-9f10-4b15-a1fc-9ec61f7b0de6",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788513905029
+      },
+      {
+        "executionId": "bfb10ee8-9f10-4b15-a1fc-9ec61f7b0de6",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788514692608
+      }
+    ],
+    "6.3 Write the single awk pass: BEGIN block construction + selector resolution": [
+      {
+        "executionId": "bfb10ee8-9f10-4b15-a1fc-9ec61f7b0de6",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788513466681
+      },
+      {
+        "executionId": "bfb10ee8-9f10-4b15-a1fc-9ec61f7b0de6",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788514714324
+      },
+      {
+        "executionId": "5ef6d207-d1a7-420b-a5ca-9cb0c6f1da26",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788515486807
+      }
+    ],
+    "6.4 Write the single awk pass: buffer, mark anchors, emit-in-END": [
+      {
+        "executionId": "bfb10ee8-9f10-4b15-a1fc-9ec61f7b0de6",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788513466741
+      },
+      {
+        "executionId": "5ef6d207-d1a7-420b-a5ca-9cb0c6f1da26",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788515491907
+      },
+      {
+        "executionId": "5ef6d207-d1a7-420b-a5ca-9cb0c6f1da26",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788515872242
+      }
+    ],
+    "6.5 Verify byte-for-byte parity and run the suite": [
+      {
+        "executionId": "bfb10ee8-9f10-4b15-a1fc-9ec61f7b0de6",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788513466803
+      },
+      {
+        "executionId": "5ef6d207-d1a7-420b-a5ca-9cb0c6f1da26",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788515875827
+      },
+      {
+        "executionId": "5ef6d207-d1a7-420b-a5ca-9cb0c6f1da26",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788516217033
+      }
+    ],
+    "6. Refactor emit-effective-dockerfile.sh to a thin-shell + single-awk-pass shape": [
+      {
+        "executionId": "5ef6d207-d1a7-420b-a5ca-9cb0c6f1da26",
+        "chatSessionId": "sess_fdff06c6-3f12-49b7-aef8-438dc85ae344",
+        "timestamp": 1788516217175
+      }
+    ]
+  }
+}

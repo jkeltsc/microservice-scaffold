@@ -47,10 +47,10 @@ Run from the repo root:
 
 Building a container image is two commands, always in this order:
 
-- `MICROSERVICES=<selector> sh scripts/emit-effective-dockerfile.sh` — writes `Dockerfile.effective`: the base `Dockerfile` plus one `ENV MICROSERVICE_<IDENTIFIER>_ENABLED=enabled` line per identifier in the selector. Dependency-free POSIX sh, so it runs before any install.
-- `docker build -f Dockerfile.effective --build-arg MICROSERVICES=<selector> .` — the selector is passed again as a build arg; inside the image, the registry generator is the authority on its validity and fails the build on an unknown identifier.
+- `MICROSERVICES=<selector> sh scripts/emit-effective-dockerfile.sh` — reads the committed `Dockerfile.template` and writes the generated `Dockerfile`: the template with the manifest-splitting `COPY` lines filled in at their anchors (discovered from the filesystem) plus one `ENV MICROSERVICE_<IDENTIFIER>_ENABLED=enabled` line per identifier in the selector. Dependency-free POSIX sh, so it runs before any install. The generated `Dockerfile` is gitignored and carries an `# AUTO-GENERATED` header.
+- `docker build --build-arg MICROSERVICES=<selector> .` — Docker discovers the generated `Dockerfile` by default (no `-f` needed); the selector is passed again as a build arg, and inside the image the registry generator is the authority on its validity and fails the build on an unknown identifier.
 
-Everything else the image needs (registry generation, the selective `tsc --build`, `npm prune --omit=dev`, staging the runtime tree) happens inside the build stage via `@scaffold/build-tools`' `build-image-tree`.
+Everything else the image needs (registry generation, the selective `tsc --build`, staging the runtime tree) happens inside the build stage via `@scaffold/build-tools`' `build-image-tree`. Production `node_modules/` come from a dedicated `prod-deps` stage (`npm ci --omit=dev`), not from in-place pruning.
 
 ## CI and release
 

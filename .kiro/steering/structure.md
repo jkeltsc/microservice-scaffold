@@ -6,11 +6,11 @@
 /
 ├─ package.json              # root; declares workspaces, shared devDependencies, engines
 ├─ tsconfig.base.json        # shared TS config extended by every package
-├─ Dockerfile                # two-stage, selector-parameterized image build
+├─ Dockerfile.template       # committed source: three-stage, selector-parameterized image build with COPY/ENV anchors
 ├─ .dockerignore             # keeps host node_modules/, dist/ and generated code out of the context
 ├─ scripts/                  # repo-level scripts not owned by any package
 │  ├─ start.js               # npm start: generate microservice registry, build, run the Overseer
-│  └─ emit-effective-dockerfile.sh   # writes Dockerfile.effective with the toggle-default ENV lines
+│  └─ emit-effective-dockerfile.sh   # reads Dockerfile.template, writes the generated Dockerfile with manifest COPY lines + toggle-default ENV lines
 ├─ .kiro/                    # specs, steering, hooks
 └─ packages/
    ├─ overseer/              # the routing frontend application
@@ -61,7 +61,7 @@ A microservice package MUST:
 - `packages/build-tools/` also owns the image-tree assembler, which stages everything a runtime image contains into a single tree that the Dockerfile's runtime stage copies once. Only the selected microservices are compiled and staged, so image minimality holds by construction.
 - Inside an image, microservices ship as `node_modules/@scaffold/<identifier>` (real directories, not workspace symlinks), because the generated registry imports them by package name. `packages/microservices/` is absent from images entirely.
 - The Overseer ships at `packages/overseer/` because the entrypoint invokes it by path.
-- Per-microservice default toggles (`MICROSERVICE_<IDENTIFIER>_ENABLED=enabled`) are baked by building `Dockerfile.effective`, generated from the base `Dockerfile` by `scripts/emit-effective-dockerfile.sh` for the current selector. `Dockerfile.effective` is generated output and gitignored.
+- Per-microservice default toggles (`MICROSERVICE_<IDENTIFIER>_ENABLED=enabled`) are baked by building the generated `Dockerfile`, produced from the committed `Dockerfile.template` by `scripts/emit-effective-dockerfile.sh` for the current selector. The generated `Dockerfile` is generated output and gitignored; `Dockerfile.template` is the committed source.
 
 ## Runtime toggles
 
@@ -75,9 +75,10 @@ A microservice package MUST:
 
 ## Where things go
 
-- New microservice: `packages/microservices/<identifier>/`. No changes to existing microservices are required, and no change to the `Dockerfile` either; the Build_System will pick it up on the next build if included in the `MICROSERVICES` selector.
+- New microservice: `packages/microservices/<identifier>/`. No changes to existing microservices are required, and no change to `Dockerfile.template` either; the Build_System will pick it up on the next build if included in the `MICROSERVICES` selector.
 - Cross-cutting types (request handler contract): `packages/contracts/`.
 - Build tooling that needs the TypeScript workspace (registry generator, image-tree assembler): `packages/build-tools/`.
 - Repo-level scripts that must run before anything is installed, or that wrap npm lifecycle commands: `scripts/`.
 - Spec documents: `.kiro/specs/<feature-name>/`.
 - Project-wide conventions like these: `.kiro/steering/`.
+- **New test-only package** (a package under `packages/` with no production code shipped in the Container image, e.g. a sibling of `integration-tests`): `scripts/emit-effective-dockerfile.sh` discovers workspace manifests by glob-style listing (`packages/*/package.json` and `packages/microservices/*/package.json`) and automatically emits a manifest `COPY` line for every subdirectory it finds. A test-only package would therefore leak into the generated `Dockerfile`'s manifest COPY layer, so you MUST add its directory name to the `EXCLUDE_TOPLEVEL` exclusion list in `scripts/emit-effective-dockerfile.sh` (which already lists `integration-tests` and the `microservices` namespace container). Nothing else auto-detects test-only packages — the exclusion is by name.

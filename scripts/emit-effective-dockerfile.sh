@@ -1,11 +1,32 @@
 #!/bin/sh
-# Emit Dockerfile.effective: the repo-root Dockerfile plus the R6.6 per-service
-# default-toggle ENV lines for the current MICROSERVICES selector.
+# Emit the generated Dockerfile: the committed Dockerfile.template with the
+# manifest-splitting COPY blocks filled in at their anchors, plus the R6.6
+# per-service default-toggle ENV lines for the current MICROSERVICES selector.
 #
 # Dependency-free POSIX sh + awk on purpose: CI (and a fresh clone) can produce
-# the effective Dockerfile without installing Node or running npm ci first.
+# the Dockerfile without installing Node or running npm ci first.
 #
-# Selector handling is deliberately minimal:
+# It fills three things into Dockerfile.template:
+#   * the # --- MANIFEST_COPY_BUILD --- anchor, with per-workspace package.json
+#     COPY lines (build stage);
+#   * the # --- MANIFEST_COPY_PRODDEPS --- anchor, with the SAME COPY lines
+#     (prod-deps stage);
+#   * the per-microservice ENV MICROSERVICE_<X>_ENABLED=enabled toggle defaults,
+#     injected before the last ENTRYPOINT.
+#
+# Shape (O9): a thin shell part that only expands globs and tests file existence,
+# handing raw strings to a SINGLE awk invocation through the environment. All
+# text processing — selector resolution, exclusion filtering, block
+# construction, anchor injection, validation, and header emission — lives in
+# that one awk pass. No grep/sed/tr; exactly one external process (awk).
+#
+# The manifest COPY lines are discovered from the filesystem via glob-style
+# listing (packages/*/package.json and packages/microservices/*/package.json) so
+# adding a top-level package or a microservice requires no change to this file.
+# Test-only workspaces (integration-tests) and the microservices namespace
+# container directory are excluded from the top-level scan by name (in awk).
+#
+# Selector handling is deliberately minimal (resolved in awk):
 #   *, empty, or whitespace-only -> every directory under packages/microservices
 #   otherwise                    -> the comma-separated entries, whitespace trimmed
 #
@@ -21,60 +42,180 @@
 
 set -eu
 
-DOCKERFILE="${DOCKERFILE:-Dockerfile}"
-EFFECTIVE="${EFFECTIVE_DOCKERFILE:-Dockerfile.effective}"
+DOCKERFILE="${DOCKERFILE:-Dockerfile.template}"
+EFFECTIVE="${EFFECTIVE_DOCKERFILE:-Dockerfile}"
 NAMESPACE="${MICROSERVICE_NAMESPACE:-packages/microservices}"
 
-selector="${MICROSERVICES:-*}"
+# The RAW selector, forwarded to awk verbatim. The shell does NOT trim, split,
+# or interpret it — selector resolution lives entirely in awk.
+SELECTOR="${MICROSERVICES:-*}"
 
+# Fail fast: the template must exist (there is nothing for awk to read
+# otherwise).
 if [ ! -f "$DOCKERFILE" ]; then
-  echo "[emit-effective-dockerfile] no such Dockerfile: $DOCKERFILE" >&2
+  echo "[emit-effective-dockerfile] no such Dockerfile template: $DOCKERFILE" >&2
   exit 1
 fi
 
-# The injection anchors on the LAST ENTRYPOINT instruction, which is the runtime
-# stage's. ENV placed just before it still applies to the running container, and
-# a deploy-time `-e` still overrides it.
-anchor=$(awk '/^[[:space:]]*ENTRYPOINT([[:space:]]|\[)/ { line = NR } END { print line + 0 }' "$DOCKERFILE")
-if [ "$anchor" -eq 0 ]; then
-  echo "[emit-effective-dockerfile] $DOCKERFILE has no ENTRYPOINT instruction to anchor the toggle-default ENV injection" >&2
-  exit 1
-fi
-
-# Resolve the selector to a newline-separated identifier list.
-trimmed=$(printf '%s' "$selector" | tr -d '[:space:]')
-if [ -z "$trimmed" ] || [ "$trimmed" = "*" ]; then
+# Fail fast on a missing namespace directory, but ONLY when the selector needs
+# to list it (the *, empty, or whitespace-only case). An explicit identifier
+# list never consults the namespace, so a missing directory is not fatal for it.
+# This decision needs a leading/trailing-whitespace trim of the raw selector;
+# the trim is confined to this check and does not resolve the selector (awk
+# does that).
+sel_probe=$SELECTOR
+while :; do
+  case $sel_probe in
+    [[:space:]]*) sel_probe=${sel_probe#?} ;;
+    *) break ;;
+  esac
+done
+while :; do
+  case $sel_probe in
+    *[[:space:]]) sel_probe=${sel_probe%?} ;;
+    *) break ;;
+  esac
+done
+if [ -z "$sel_probe" ] || [ "$sel_probe" = "*" ]; then
   if [ ! -d "$NAMESPACE" ]; then
     echo "[emit-effective-dockerfile] no such Microservice_Namespace: $NAMESPACE" >&2
     exit 1
   fi
-  identifiers=$(ls -1 "$NAMESPACE" | sort)
-else
-  identifiers=$(printf '%s' "$selector" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' || true)
 fi
 
-if [ -z "$identifiers" ]; then
-  echo "[emit-effective-dockerfile] selector '$selector' resolved to no microservices" >&2
-  exit 1
-fi
-
-# Build the block to inject: a header naming the selector, then one ENV per id.
-# It travels to awk through the environment rather than `-v`, because a `-v`
-# assignment cannot carry embedded newlines.
-INJECT_BLOCK=$(printf '# --- R6.6 toggle defaults (generated by scripts/emit-effective-dockerfile.sh; selector: %s) ---' "$selector")
-for identifier in $identifiers; do
-  upper=$(printf '%s' "$identifier" | tr '[:lower:]' '[:upper:]')
-  INJECT_BLOCK=$(printf '%s\nENV MICROSERVICE_%s_ENABLED=enabled' "$INJECT_BLOCK" "$upper")
+# Discover workspace directories via glob-style listing and per-directory
+# package.json existence tests — the two things POSIX sh does well and POSIX awk
+# cannot do without spawning helpers. Build two COMMA-separated basename lists:
+#   PKG_DIRS - every packages/*/ that has a package.json (UNFILTERED; the
+#              integration-tests / microservices exclusions happen in awk).
+#   MS_DIRS  - every packages/microservices/*/ that has a package.json.
+# A glob that matches nothing stays literal, and the `-f` test then drops it, so
+# an absent directory contributes no entry.
+PKG_DIRS=""
+for dir in packages/*/; do
+  [ -f "$dir/package.json" ] || continue
+  name=$(basename "$dir")
+  PKG_DIRS="${PKG_DIRS:+$PKG_DIRS,}$name"
 done
-export INJECT_BLOCK
 
-{
-  printf '# AUTO-GENERATED from %s by scripts/emit-effective-dockerfile.sh. Do not edit.\n' "$DOCKERFILE"
-  printf '# Selector: %s\n' "$selector"
-  awk -v anchor="$anchor" '
-    NR == anchor { print ENVIRON["INJECT_BLOCK"] }
-    { print }
-  ' "$DOCKERFILE"
-} >"$EFFECTIVE"
+MS_DIRS=""
+for dir in packages/microservices/*/; do
+  [ -f "$dir/package.json" ] || continue
+  id=$(basename "$dir")
+  MS_DIRS="${MS_DIRS:+$MS_DIRS,}$id"
+done
 
-echo "[emit-effective-dockerfile] wrote $EFFECTIVE for selector '$selector'"
+export SELECTOR PKG_DIRS MS_DIRS DOCKERFILE NAMESPACE
+
+# One awk invocation does everything: read the raw selector + directory lists
+# from the environment, resolve the selector, build the manifest and ENV blocks,
+# buffer the template, validate in END, and emit the whole document (headers
+# first, anchors replaced, ENV block before the last ENTRYPOINT). Nothing is
+# printed until validation passes, so a failed run produces no stdout — the
+# shell then leaves the temp file empty and never clobbers $EFFECTIVE.
+tmp_out=$(mktemp "${TMPDIR:-/tmp}/emit-effective-dockerfile.XXXXXX")
+
+if awk -f - "$DOCKERFILE" <<'AWK' >"$tmp_out"
+BEGIN {
+  df  = ENVIRON["DOCKERFILE"]
+  raw = ENVIRON["SELECTOR"]
+
+  n_pkg = split(ENVIRON["PKG_DIRS"], pkg, ",")
+  n_ms  = split(ENVIRON["MS_DIRS"], ms, ",")
+
+  # Resolve the selector, mirroring resolveSelected()/parseSelector() exactly.
+  # Trim leading/trailing whitespace with POSIX ERE; if the trimmed result is
+  # "*", the list is every microservice in listed order. Otherwise split the RAW
+  # selector on ",", trim each entry, and drop empties; if that leaves ZERO
+  # entries (blank, whitespace-only, or a comma-only spelling such as ",,,"),
+  # fall back to all microservices too — matching parseSelector()'s
+  # `identifiers.length === 0 ? {kind:"all"}` branch. Only a non-empty entry
+  # list stays a list.
+  s = raw
+  gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+  id_count = 0
+  if (s != "*") {
+    n_sel = split(raw, sel, ",")
+    for (i = 1; i <= n_sel; i++) {
+      e = sel[i]
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", e)
+      if (e != "") { id_count++; ids[id_count] = e }
+    }
+  }
+  if (id_count == 0) {
+    for (i = 1; i <= n_ms; i++) {
+      if (ms[i] != "") { id_count++; ids[id_count] = ms[i] }
+    }
+  }
+
+  # Manifest COPY block: header, root manifests, one COPY per non-excluded
+  # top-level package (in listed order), one COPY per microservice (in listed
+  # order). integration-tests and the microservices namespace container are
+  # excluded by name here.
+  manifest = "# --- manifest COPY (generated by scripts/emit-effective-dockerfile.sh) ---"
+  manifest = manifest "\n" "COPY package.json package-lock.json ./"
+  for (i = 1; i <= n_pkg; i++) {
+    name = pkg[i]
+    if (name == "" || name == "integration-tests" || name == "microservices") continue
+    manifest = manifest "\n" "COPY packages/" name "/package.json packages/" name "/"
+  }
+  for (i = 1; i <= n_ms; i++) {
+    id = ms[i]
+    if (id == "") continue
+    manifest = manifest "\n" "COPY packages/microservices/" id "/package.json packages/microservices/" id "/"
+  }
+
+  # ENV toggle-default block: header naming the RAW selector, then one ENV line
+  # per resolved identifier, uppercased.
+  env_block = "# --- R6.6 toggle defaults (generated by scripts/emit-effective-dockerfile.sh; selector: " raw ") ---"
+  for (i = 1; i <= id_count; i++) {
+    env_block = env_block "\n" "ENV MICROSERVICE_" toupper(ids[i]) "_ENABLED=enabled"
+  }
+
+  header1 = "# AUTO-GENERATED from Dockerfile.template by scripts/emit-effective-dockerfile.sh. Do not edit."
+  header2 = "# Selector: " raw
+}
+
+{ line[NR] = $0 }
+$0 ~ /^[[:space:]]*# --- MANIFEST_COPY_BUILD ---[[:space:]]*$/    { build_anchor = NR }
+$0 ~ /^[[:space:]]*# --- MANIFEST_COPY_PRODDEPS ---[[:space:]]*$/ { prod_anchor  = NR }
+$0 ~ /^[[:space:]]*ENTRYPOINT([[:space:]]|\[)/                    { last_entry  = NR }
+
+END {
+  # Validate before ANY output (mirrors the current script's order:
+  # ENTRYPOINT, then the two manifest anchors, then selector resolution). Each
+  # failure writes the exact legacy message and exits non-zero with no stdout.
+  if (!last_entry) {
+    print "[emit-effective-dockerfile] " df " has no ENTRYPOINT instruction to anchor the toggle-default ENV injection" > "/dev/stderr"
+    exit 1
+  }
+  if (!build_anchor) {
+    print "[emit-effective-dockerfile] " df " is missing the '# --- MANIFEST_COPY_BUILD ---' anchor" > "/dev/stderr"
+    exit 1
+  }
+  if (!prod_anchor) {
+    print "[emit-effective-dockerfile] " df " is missing the '# --- MANIFEST_COPY_PRODDEPS ---' anchor" > "/dev/stderr"
+    exit 1
+  }
+  if (id_count == 0) {
+    print "[emit-effective-dockerfile] selector '" raw "' resolved to no microservices" > "/dev/stderr"
+    exit 1
+  }
+
+  print header1
+  print header2
+  for (i = 1; i <= NR; i++) {
+    if (i == build_anchor || i == prod_anchor) { print manifest; continue }
+    if (i == last_entry)                        { print env_block }
+    print line[i]
+  }
+}
+AWK
+then
+  mv "$tmp_out" "$EFFECTIVE"
+  echo "[emit-effective-dockerfile] wrote $EFFECTIVE for selector '$SELECTOR'"
+else
+  status=$?
+  rm -f "$tmp_out"
+  exit "$status"
+fi

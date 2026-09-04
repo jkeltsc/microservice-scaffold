@@ -1,14 +1,18 @@
-// Image-tree assembler: builds the single staging tree a runtime image copies.
+// Image-tree assembler: builds the staging tree the runtime image overlays.
 //
-// Design intent: "only what was built exists". The runtime stage does one
-// `COPY --from=build /out ./`, so minimality is established by CONSTRUCTION —
+// Design intent: "only what was built exists". The assembler stages ONLY
+// workspace packages into `/out`; minimality is established by CONSTRUCTION —
 // nothing is ever deleted from the image after the fact. A Specific_Container
 // therefore cannot ship a microservice it did not select (Requirements R6.2,
 // R6.3), because that microservice is never compiled and never copied.
 //
+// Third-party runtime dependencies are NOT staged here. They are produced by a
+// separate `prod-deps` Docker stage (`npm ci --omit=dev`), and the runtime
+// stage composes the two: it copies `node_modules/` from prod-deps first, then
+// overlays `/out` from the build stage.
+//
 // Target layout (relative to `outDir`):
 //
-//   node_modules/                       third-party RUNTIME deps only
 //   node_modules/@scaffold/contracts/   REAL directory: package.json + dist
 //   node_modules/@scaffold/<selected>/  REAL directories, selected services only
 //   packages/overseer/                   package.json + dist
@@ -20,6 +24,8 @@
 //      is deliberately absent from the image.
 //   2. They are REAL directories, not npm's workspace symlinks: a symlink into
 //      `packages/microservices/` would dangle the moment that tree is absent.
+//      Overlaying `/out` after the prod-deps `node_modules/` also replaces any
+//      dangling workspace-scope symlinks the prod-deps install may leave behind.
 //
 // The Overseer stays at `packages/overseer/` because it is invoked by path
 // (`ENTRYPOINT ["node", "packages/overseer/dist/index.js"]`).
@@ -28,7 +34,7 @@
 // `/app` (the repo root). Errors propagate: Node prints them and exits non-zero.
 
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -39,9 +45,6 @@ import { resolveSelected } from "./selector.js";
 
 /** Workspace scope; materialized as real directories, so never copied as-is. */
 const SCAFFOLD_SCOPE = "@scaffold";
-
-/** Executable shims: build-time only, and their symlinks dangle after pruning. */
-const BIN_DIR = ".bin";
 
 /** Run a command with inherited stdio; abort the process on any failure. */
 function run(command: string, args: readonly string[]): void {
@@ -67,36 +70,8 @@ function copyPackage(sourceDir: string, targetDir: string): void {
 }
 
 /**
- * Copy the installed third-party dependency tree, skipping the workspace scope
- * (materialized separately as real directories), the bin shims, and the empty
- * scope directories `npm prune` leaves behind once it has removed the
- * devDependencies inside them.
- *
- * `dereference` turns any remaining symlink into a real file, so nothing in the
- * image can point outside it.
- */
-function copyThirdPartyDependencies(targetNodeModules: string): void {
-  mkdirSync(targetNodeModules, { recursive: true });
-  for (const entry of readdirSync("node_modules", { withFileTypes: true })) {
-    if (entry.name === SCAFFOLD_SCOPE || entry.name === BIN_DIR) {
-      continue;
-    }
-
-    const source = join("node_modules", entry.name);
-    if (entry.isDirectory() && readdirSync(source).length === 0) {
-      continue;
-    }
-
-    cpSync(source, join(targetNodeModules, entry.name), {
-      recursive: true,
-      dereference: true,
-    });
-  }
-}
-
-/**
- * Generate the registry for `MICROSERVICES`, build only the projects that image
- * needs, drop devDependencies, and assemble `outDir`.
+ * Generate the registry for `MICROSERVICES`, build only the projects the image
+ * needs, and assemble `outDir` with the workspace packages.
  *
  * Build order is explicit rather than left to project references: the Overseer's
  * generated registry imports `@scaffold/<identifier>`, and those microservice
@@ -117,14 +92,7 @@ export function buildImageTree(outDir = "/out"): void {
     "packages/overseer",
   ]);
 
-  // Everything is compiled, so the build-only dependency tree (typescript,
-  // vitest, eslint, ...) has served its purpose. Pruning here — before the
-  // assemble step reads `node_modules` — is what keeps devDependencies out of
-  // the image without any post-copy deletion.
-  run("npm", ["prune", "--omit=dev"]);
-
   rmSync(outDir, { recursive: true, force: true });
-  copyThirdPartyDependencies(join(outDir, "node_modules"));
 
   copyPackage(
     "packages/contracts",
