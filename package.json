@@ -23,7 +23,7 @@
     "test:types": "npm run test:types --workspaces --if-present",
     "lint": "npm run lint --workspaces",
     "typecheck": "npm run typecheck --workspaces",
-    "ci": "npm run typecheck --workspaces && npm run lint --workspaces && npm test && npm run test:types",
+    "ci": "npm run build --workspaces && npm run typecheck --workspaces && npm run lint --workspaces && npm test && npm run test:types",
     "start": "dotenvx run -- node scripts/start.js",
     "prepare": "cp packages/overseer/src/generated/microservice-registry.template.ts packages/overseer/src/generated/microservice-registry.ts",
     "docker:build:generic": "MICROSERVICES='*' sh scripts/emit-effective-dockerfile.sh && docker build -f Dockerfile.effective --build-arg MICROSERVICES='*' -t scaffold:generic .",
