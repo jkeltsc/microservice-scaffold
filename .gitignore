@@ -1,0 +1,33 @@
+# Env
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+coverage/
+
+# TypeScript incremental build state. MUST stay untracked: `composite: true`
+# means tsc trusts a tsbuildinfo over the (gitignored, therefore absent) dist/
+# on a fresh clone and skips emitting, which breaks the very first build in CI.
+*.tsbuildinfo
+
+# Generated registry (emitted by build-tools; the template is tracked)
+packages/overseer/src/generated/microservice-registry.ts
+
+# Effective Dockerfile (emitted by scripts/emit-effective-dockerfile.sh)
+Dockerfile.effective
+
+# Editor junk
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS junk
+.DS_Store
+Thumbs.db

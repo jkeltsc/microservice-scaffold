@@ -1,0 +1,21 @@
+{
+  // Typecheck-only program for the test suite.
+  //
+  // `tsconfig.json` deliberately includes only `src/**/*` (it is the emit
+  // config, with `rootDir: ./src`), which means `tests/` is outside every
+  // program in this package. Vitest's `--typecheck` mode derives its program
+  // from a tsconfig, so with the emit config it silently checked NOTHING:
+  // `tests/types.test-d.ts` reported "no errors" even with a blatant type
+  // error in it, making the whole `test:types` script a no-op.
+  //
+  // This config exists so `vitest --typecheck` has a program that actually
+  // contains the test files. It emits nothing, so `composite`/`declaration`
+  // from the base config are switched off.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "noEmit": true
+  },
+  "include": ["src/**/*", "testing/**/*", "tests/**/*"]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@scaffold/build-tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "generate-registry": "./dist/bin/generate-registry.js",
+    "build-image-tree": "./dist/bin/build-image-tree.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest --run",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@scaffold/contracts": "*"
+  }
+}

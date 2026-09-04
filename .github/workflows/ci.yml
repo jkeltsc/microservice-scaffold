@@ -1,0 +1,44 @@
+# Quality gate for the Microservice Scaffold.
+#
+# Two workflows, disjoint jobs:
+#   * ci.yml      (this file) — install → quality gate → actionlint. Publishes
+#                 nothing; token authority is exactly `contents: read`.
+#   * release.yml — builds and publishes the two shipped Container
+#                 configurations to GHCR. Needs `packages: write` and a Docker
+#                 daemon; deliberately does not run the test suite.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# This workflow reads the repo and publishes nothing.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: quality gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Quality gate
+        run: npm run ci
+
+      - name: Lint workflows (actionlint)
+        uses: docker://rhysd/actionlint:1.7.12

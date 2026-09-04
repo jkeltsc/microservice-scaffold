@@ -1,0 +1,26 @@
+{
+  "name": "@scaffold/integration-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest --run",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@scaffold/build-tools": "*",
+    "@scaffold/contracts": "*",
+    "@scaffold/microservice1": "*",
+    "@scaffold/microservice2": "*",
+    "@scaffold/microservice3": "*",
+    "@scaffold/overseer": "*"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/supertest": "^6.0.0",
+    "js-yaml": "^4.1.0",
+    "supertest": "^7.0.0"
+  }
+}

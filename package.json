@@ -1,0 +1,46 @@
+{
+  "name": "microservice-scaffold",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A template repository for building small, HTTP-based Node.js microservices behind a single routing frontend (the Overseer).",
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10"
+  },
+  "workspaces": [
+    "packages/contracts",
+    "packages/build-tools",
+    "packages/microservices/*",
+    "packages/overseer",
+    "packages/integration-tests"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "pretest": "npm run build --workspaces",
+    "test": "vitest --run",
+    "test:workspaces": "npm run test --workspaces",
+    "test:types": "npm run test:types --workspaces --if-present",
+    "lint": "npm run lint --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "ci": "npm run typecheck --workspaces && npm run lint --workspaces && npm test && npm run test:types",
+    "start": "dotenvx run -- node scripts/start.js",
+    "prepare": "cp packages/overseer/src/generated/microservice-registry.template.ts packages/overseer/src/generated/microservice-registry.ts",
+    "docker:build:generic": "MICROSERVICES='*' sh scripts/emit-effective-dockerfile.sh && docker build -f Dockerfile.effective --build-arg MICROSERVICES='*' -t scaffold:generic .",
+    "docker:build:microservice1-microservice2": "MICROSERVICES=microservice1,microservice2 sh scripts/emit-effective-dockerfile.sh && docker build -f Dockerfile.effective --build-arg MICROSERVICES=microservice1,microservice2 -t scaffold:microservice1-microservice2 .",
+    "docker:build": "npm run docker:build:generic && npm run docker:build:microservice1-microservice2"
+  },
+  "devDependencies": {
+    "@dotenvx/dotenvx": "^2.22.0",
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^22.10.0",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^9.1.0",
+    "fast-check": "^3.23.0",
+    "globals": "^14.0.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.0",
+    "vitest": "^2.1.8"
+  }
+}
