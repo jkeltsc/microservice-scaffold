@@ -43,7 +43,8 @@ Run from the repo root:
 - `npm run lint --workspaces` — lint every package
 - `npm run typecheck --workspaces` — typecheck every package
 - `npm run test:types` — run the type-level assertions (`vitest --run --typecheck`). Separate from `npm test`, which does not enable `--typecheck`; without this command every `@ts-expect-error` in a `*.test-d.ts` file is dead weight.
-- `MICROSERVICES=<selector> npm start` — run the Overseer locally with the same registry generation logic as a Container build (selector defaults to `*` when unset). `npm start` is wrapped with `dotenvx run --`, so the local `MICROSERVICE_<IDENTIFIER>_ENABLED` toggle vars are injected from `.env`; `MICROSERVICES` can still be set inline as shown.
+- `MICROSERVICES=<selector> npm start` — run the Overseer locally with the same registry generation logic as a Container build (selector defaults to `*` when unset). `npm start` is wrapped with `dotenvx run --`, so the local `MICROSERVICE_<IDENTIFIER>_ENABLED` toggle vars are injected from `.env`; `MICROSERVICES` can still be set inline as shown. One-shot: it exits with the Overseer process's status and does not watch for changes.
+- `MICROSERVICES=<selector> npm run dev` (`dotenvx run -- node scripts/dev.js`) — run the Overseer locally in watch mode. Shares the same first three startup steps as `npm start` (environment load, bootstrap build, registry generation) and executes the same compiled `dist/` artifacts through `packages/overseer/dist/index.js`, but then keeps a Build_Watcher running that incrementally recompiles on source change and restarts the Overseer against the recompiled output. Runs until the developer terminates it, whereas `npm start` is one-shot. Same `dotenvx run --` env injection and inline `MICROSERVICES` override as `npm start`.
 
 Building a container image is two commands, always in this order:
 

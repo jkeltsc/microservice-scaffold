@@ -7,34 +7,18 @@
 // succeed before the next one runs, so a selector error (R10.4) or a build
 // failure aborts before the Overseer starts and its exit code is propagated.
 //
-// RELATIONSHIP TO THE ROOT `prepare` SCRIPT. `prepare` copies an empty
-// template into the generated-registry location after every install, so a fresh
-// clone's Overseer has a valid (empty) registry to compile against. It does NOT
-// build anything — the template is the source. The two steps below (bootstrap +
-// generate) are still needed: `prepare`'s template is a zero-microservice
-// placeholder, so `npm start` must regenerate the registry for its own
-// `MICROSERVICES` selector before it builds.
-//
-// STEP ORDER — verified against a genuinely clean checkout (no node_modules, no
-// dist/, no *.tsbuildinfo, no generated registry), because two orderings that
-// look fine on a warm tree both fail there:
-//
-//   1. The generator runs as its COMPILED bin, which does not exist on a fresh
-//      clone if `prepare` did not run or bailed out. So the first step is a
-//      bootstrap build of exactly the two packages that bin needs — contracts
-//      and build-tools — mirroring the Dockerfile's
-//      `npx tsc --build packages/contracts packages/build-tools`.
-//   2. Generating BEFORE the full build is what gives `npm start` parity with a
-//      Container build (the Overseer compiles against the fresh registry, never
-//      a stale one), and it is only sound because the root `workspaces` array is
-//      in topological order. The generated registry statically imports
-//      `@microservices/microservice<N>`, so the microservices must be built before the
-//      Overseer; with `overseer` listed ahead of them this step failed with
-//      `TS2307: Cannot find module '@microservices/microservice1'`.
+// The two shared steps — the Bootstrap_Build and registry generation — live in
+// scripts/common-startup.js, which both this Production_Start path and the
+// Dev_Command consume so their startup behavior cannot drift (R11.1). That
+// module is the sole owner of the clean-checkout ordering rationale (R11.2);
+// this file only performs the process effects around it: the full build, the
+// one-shot Overseer run, and exit-status propagation.
 //
 // Paths are relative to cwd, which is the repo root for npm scripts.
 
 import { spawnSync } from "node:child_process";
+
+import { runCommonStartup } from "./common-startup.js";
 
 /** Run a command inheriting stdio; on failure, exit with its code. */
 function runOrExit(command, args) {
@@ -52,25 +36,18 @@ function runOrExit(command, args) {
   }
 }
 
-// Bootstrap: compile the two packages the generator bin is made of, so the next
-// step exists even in a tree where `prepare` never ran or a `dist/` was cleaned.
-// Incremental, so this is a near no-op on a warm tree, and the full build below
-// rebuilds them anyway.
-runOrExit("npm", [
-  "run",
-  "build",
-  "--workspace",
-  "@microservices/contracts",
-  "--workspace",
-  "@microservices/build-tools",
-]);
-
-// The same generator entry point the Dockerfile build stage uses, invoked as the
-// compiled bin so `npm start` works without an npm bin-link pass. The selector
-// comes from the inherited environment.
-runOrExit(process.execPath, [
-  "packages/build-tools/dist/bin/generate-registry.js",
-]);
+// The two Common_Startup steps (Bootstrap_Build, then registry generation) run
+// in order and each must succeed before the next; on failure this path refuses
+// to start the Overseer and propagates the failed step's status. The failure
+// line is composed from the discriminated result so it stays byte-for-byte
+// identical to the previous inline wording (R11.5, R11.6).
+const startup = runCommonStartup({ tag: "start" });
+if (!startup.ok) {
+  process.stderr.write(
+    `[start] ${startup.message}; refusing to start the Overseer\n`,
+  );
+  process.exit(startup.status);
+}
 
 // Build every workspace; the Overseer compiles against the fresh registry.
 runOrExit("npm", ["run", "build", "--workspaces"]);

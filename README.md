@@ -6,10 +6,41 @@ A template for composing HTTP microservices behind a single routing frontend (th
 
 ```sh
 npm install
-npm start
+npm run dev   # recommended for iterative development — watches and restarts on source changes
+# or: npm start   # one-shot build-and-run, exits when the Overseer exits
 # Overseer listens on port 8080 by default
 curl http://localhost:8080/
 ```
+
+`npm run dev` is the entry point for local development: it builds once, then keeps watching your sources and restarts the Overseer whenever you change them. `npm start` runs the same compiled output once and exits. See [Running locally](#running-locally) for the difference.
+
+## Running locally
+
+There are two ways to run the scaffold locally, and both execute the *same* compiled artifacts: the `dist/` output of each package, run through the same `packages/overseer/dist/index.js` entrypoint a container image uses. They differ only in whether a build watcher stays running.
+
+### `npm run dev` — the dev server (recommended)
+
+`npm run dev` is the recommended entry point for iterative development. It performs these startup steps in order:
+
+1. **Environment load** — `.env` is injected via dotenvx, the same way `npm start` loads it.
+2. **Bootstrap build** — `packages/contracts` and `packages/build-tools` are compiled so the registry generator can run.
+3. **Registry generation** — the microservice registry is generated once for the current `MICROSERVICES` selector.
+4. **Build watcher start** — a resident TypeScript build watches the sources of the selected microservices, the Overseer, and their shared-package dependencies, recompiling incrementally into each package's `dist/`.
+5. **Overseer start** — the Overseer launches from `packages/overseer/dist/index.js`.
+
+Once the session is running, it **picks up automatically** any change to a TypeScript source file of a package it is building: the watcher recompiles, and once the compile finishes cleanly, the Overseer restarts against the new output. A failed compile leaves the last good Overseer serving and prints the error with its file, line, and character position, so you can read the error, fix it, and continue without restarting anything.
+
+Some changes are **not** picked up by a running session and require terminating it (Ctrl-C) and re-invoking `npm run dev`:
+
+- Adding, removing, or renaming a directory under `packages/microservices/` — the registered microservice set is fixed for the session.
+- A change to the `MICROSERVICES` selector.
+- A change to a `MICROSERVICE_<IDENTIFIER>_ENABLED` toggle or any other environment variable.
+
+A dev session runs until you terminate it.
+
+### `npm start` — one-shot run
+
+`npm start` runs the same compiled artifacts without a build watcher: it loads the environment, bootstrap-builds, generates the registry, builds every package once, then runs the Overseer. It does not watch for changes, so it will not pick up edits — you restart it yourself. `npm start` terminates when the Overseer process it started exits, propagating that exit status. Use it as a one-shot path, or to isolate whether a problem is in the application rather than in the dev server's watch coordination.
 
 ## Adding a microservice
 
@@ -122,7 +153,8 @@ Copy `.env.example` to `.env` and adjust. See `.env.example` for all available v
 
 | Command | Description |
 |---|---|
-| `npm start` | Run locally (uses dotenvx for `.env` injection). |
+| `npm run dev` | Recommended for local development: build, watch, and restart the Overseer on source changes (see [Running locally](#running-locally)). |
+| `npm start` | Run locally once and exit with the Overseer's status (uses dotenvx for `.env` injection). |
 | `npm test` | Run the root test suite. |
 | `npm run test --workspaces` | Run every package's test suite. |
 | `npm run build --workspaces` | Build all packages. |

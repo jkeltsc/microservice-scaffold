@@ -5,7 +5,8 @@
   "type": "module",
   "bin": {
     "generate-registry": "./dist/bin/generate-registry.js",
-    "build-image-tree": "./dist/bin/build-image-tree.js"
+    "build-image-tree": "./dist/bin/build-image-tree.js",
+    "dev-supervisor": "./dist/bin/dev-supervisor.js"
   },
   "scripts": {
     "build": "tsc",
