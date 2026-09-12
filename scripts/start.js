@@ -1,26 +1,21 @@
 #!/usr/bin/env node
-// Local development entry point wired to `npm start` (Requirement R10).
+// Builds every workspace package and runs the Overseer once.
 //
-// Gives `npm start` the same registry-generation semantics a Container build
-// uses (R10.1, R10.2): generate the registry for `MICROSERVICES` (unset means
-// "*", R10.3), build every workspace, then run the Overseer. Each step must
-// succeed before the next one runs, so a selector error (R10.4) or a build
-// failure aborts before the Overseer starts and its exit code is propagated.
+// This is what `npm start` invokes. Its two shared startup steps — the bootstrap
+// build of the two packages the registry generator is built from, then generating
+// the registry for `MICROSERVICES` (unset means "*") — come from
+// scripts/common-startup.js, which is the sole owner of the reasoning about their
+// order. A selector error or a failed build aborts before the Overseer starts.
 //
-// The two shared steps — the Bootstrap_Build and registry generation — live in
-// scripts/common-startup.js, which both this Production_Start path and the
-// Dev_Command consume so their startup behavior cannot drift (R11.1). That
-// module is the sole owner of the clean-checkout ordering rationale (R11.2);
-// this file only performs the process effects around it: the full build, the
-// one-shot Overseer run, and exit-status propagation.
-//
-// Paths are relative to cwd, which is the repo root for npm scripts.
+// This file owns the process effects around those steps: the full build, the
+// one-shot Overseer run, and exit-status propagation. Paths are relative to cwd,
+// the repo root for npm scripts.
 
 import { spawnSync } from "node:child_process";
 
 import { runCommonStartup } from "./common-startup.js";
 
-/** Run a command inheriting stdio; on failure, exit with its code. */
+/** Runs one command with inherited stdio and exits with its code on failure. */
 function runOrExit(command, args) {
   const { error, status } = spawnSync(command, args, {
     stdio: "inherit",
@@ -36,11 +31,7 @@ function runOrExit(command, args) {
   }
 }
 
-// The two Common_Startup steps (Bootstrap_Build, then registry generation) run
-// in order and each must succeed before the next; on failure this path refuses
-// to start the Overseer and propagates the failed step's status. The failure
-// line is composed from the discriminated result so it stays byte-for-byte
-// identical to the previous inline wording (R11.5, R11.6).
+// A failed startup step propagates its own status, and the Overseer never starts.
 const startup = runCommonStartup({ tag: "start" });
 if (!startup.ok) {
   process.stderr.write(

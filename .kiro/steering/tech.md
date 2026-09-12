@@ -10,8 +10,19 @@
 ## Package management
 
 - npm workspaces. Root `package.json` lists workspaces; individual packages live under `packages/`.
-- **The `workspaces` array order IS the build order and must stay topological.** `npm run <script> --workspaces` visits packages in the order they are listed, so a dependency listed after its consumer breaks the build on any machine without warm output. Current order: `packages/contracts`, `packages/build-tools`, `packages/microservices/*`, `packages/overseer`, `packages/integration-tests` — the Overseer must follow the microservices because the generated registry statically imports them. Every **shared package** (a non-microservice library under `packages/` imported by name, e.g. `packages/contracts`, `packages/config`) must be listed before every package that depends on it — each consuming microservice, and the Overseer if it consumes the package — for the same reason; see the "Shared packages" section in `structure.md`.
+- **The `workspaces` array order IS the build order and must stay topological.** `npm run <script> --workspaces` visits packages in the order they are listed, so a consumer listed before its dependency breaks the build on any machine without warm output (a fresh clone has no prior `dist/` to fall back on). The **Workspace_Build_Order** — the relative order the root manifest declares — is:
+
+  1. `packages/contracts`
+  2. `packages/build-tools`
+  3. `packages/common/*`
+  4. `packages/spa/*`
+  5. `packages/microservices/*`
+  6. `packages/overseer`
+  7. `packages/integration-tests`
+
+  `contracts` (a Framework_Singleton — a scaffold package known by name, not discovered) is first because everything else may depend on its types; it is excluded from every consumer category's discovered set and is always built and always staged for every `MICROSERVICES` selector. `common/*` and `spa/*` sit after `contracts`/`build-tools` and before the microservices and the Overseer, so a Common_Package a microservice or the Overseer imports by name is already built when its consumer is visited. The Overseer follows the microservices because the generated registry statically imports the selected microservices. This order is now enforced automatically by the `check:invariants` check (see Common commands), not only by convention — a consumer listed before its dependency fails the check.
 - Pin Node and npm versions via `engines` in the root `package.json`.
+- Open question (deliberately left open): whether a types-only Framework_Singleton like `contracts` needs to ship into a runtime image at all. This feature keeps `contracts` shipping unchanged; the fuller taxonomy write-up lives in `structure.md`.
 - Lockfile (`package-lock.json`) is committed. `*.tsbuildinfo` must stay **untracked**: with `composite: true`, `tsc` trusts a committed buildinfo over the gitignored (therefore absent) `dist/` on a fresh clone, skips emitting, and the first build produces nothing.
 
 ## Testing
@@ -27,7 +38,8 @@
 
 ## Tooling
 
-- TypeScript builds go through `tsc` (project references) or a single build per package; no bundlers unless a spec design decision adds one.
+- **Build_Kind is a function of package category alone** — it reads no manifest field. Every Framework_Singleton (`contracts`, `overseer`, `build-tools`, `integration-tests`), every Microservice_Package, and every Common_Package is a **Tsc_Project**: built through `tsc`, appearing as a root of the single selective `tsc --build` over the ordered roots. A **Spa_Package** (a package under `packages/spa/`) is a **Bundler_Project**: built through its OWN `npm run build` in its own directory, and is NEVER a root of `tsc --build`. Required Spa builds run first, each in its own directory; the single `tsc --build` pass runs only after every one of them exits zero.
+- The `spa` category is the documented design decision that adds a bundler to the scaffold: a Spa_Package brings its own bundler build (e.g. Vite) via its `npm run build`. Outside that category, TypeScript builds go through `tsc` (project references / the solution builder); no other bundlers unless a further spec design decision adds one.
 - ESLint + Prettier for style; Prettier owns formatting, ESLint owns correctness rules.
 - Every package exposes the same npm scripts: `build`, `test`, `lint`, `typecheck`.
 
@@ -38,7 +50,8 @@ Run from the repo root:
 - `npm install` — install all workspaces. npm then runs the root `prepare` script, which copies the empty microservice registry template (`packages/overseer/src/generated/microservice-registry.template.ts`) into the generated-file location so the Overseer has a valid (empty) registry to compile against. A fresh clone therefore has a microservice registry before anything compiles, which is what lets the Overseer import it statically. `npm start`, CI, and the image build each regenerate the real registry for their own `MICROSERVICES` selector.
 - `npm run build --workspaces` — build every package
 - `npm test` — run the full Vitest suite. The root `pretest` script (`npm run build --workspaces`) runs automatically before tests, so `npm test` works from a fresh clone after `npm ci` with no separate build step. On a warm tree the incremental build is ~2 s.
-- `npm run ci` — the full quality gate: `typecheck --workspaces && lint --workspaces && npm test && test:types`. This is what CI runs in a single step.
+- `npm run ci` — the full quality gate, in order: `npm run build --workspaces && npm run check:invariants && npm run typecheck --workspaces && npm run lint --workspaces && npm test && npm run test:types`. This is what CI runs in a single step.
+- `npm run check:invariants` — runs the compiled `packages/build-tools/dist/bin/check-repo-invariants.js`, which enforces (1) the Workspace_Build_Order, (2) import discipline — no relative import that escapes a package's own directory, and no microservice importing a peer microservice or the Overseer — and (3) Common_Package dependency direction (a Common_Package points downward only and never names a microservice or the Overseer). It runs after the build (it is compiled output) and before the slower gates, so an ordering or discipline mistake fails fast.
 - `npm run test --workspaces` — run every package's test suite
 - `npm run lint --workspaces` — lint every package
 - `npm run typecheck --workspaces` — typecheck every package
@@ -56,7 +69,7 @@ Everything else the image needs (registry generation, the selective `tsc --build
 ## CI and release
 
 - GitHub Actions is the CI/CD system. Workflow files live under `.github/workflows/`.
-- `ci.yml` is the quality gate: `npm ci` → `npm run ci` → actionlint. The `ci` script composes typecheck, lint, test (with `pretest` build), and test:types. It publishes nothing.
+- `ci.yml` is the quality gate: `npm ci` → `npm run ci` → actionlint. The `ci` script composes, in order, the workspace build, `check:invariants` (build-order and import-discipline enforcement), typecheck, lint, test, and test:types. It publishes nothing.
 - `release.yml` builds and publishes Container images to GitHub Container Registry (GHCR) under the repository's owner namespace. It does not run the test suite.
 - Every merge to `main` and every semver tag (`v*.*.*`) publishes both shipped Container configurations (Generic and the `microservice1,microservice2` Specific). Pull requests run the same builds but do not publish.
 - Workflows authenticate to GHCR with the workflow-provided `GITHUB_TOKEN` and use the minimum permissions (`contents: read`, `packages: write`, `id-token: write`).

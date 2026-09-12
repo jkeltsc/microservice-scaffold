@@ -1,30 +1,21 @@
-// Selector parsing and application for the MICROSERVICES build/runtime variable.
+// This module turns the MICROSERVICES value into the list of microservices a
+// build or a run includes.
 //
-// Implements design "Selector parsing" / "Selector application" and Properties 2,
-// 3, and 4 (Requirements R5.1, R5.2, R5.3, R5.4, R5.5, R6.1, R6.2, R6.4, R10.2,
-// R10.3, R10.4). The parser is intentionally total: every possible input,
-// including `undefined`, maps to a well-defined `Selector`.
-//
-// `resolveSelected` is the module's only export: it is what production calls
-// (`generateRegistry`) and the only surface the properties are stated over.
-// `parseSelector` and the unmatched-identifier error are implementation detail
-// of that one function, so neither is exported and neither has a consumer that
-// could depend on its shape. The parse semantics stay fully observable through
-// the selection outcome; the error stays observable through its message, which
-// is the operator-facing contract (see design "Error message shape").
+// Step 4 of the build pipeline. `resolveSelected` is the only export; it is
+// called by `buildPlanFrom` (build-plan.ts) and by `generateRegistry`
+// (generate-registry.ts). The value is `*` for every microservice found, or a
+// list such as `microservice1,microservice2`. Parsing is total: every input,
+// `undefined` included, yields a selection or one of two documented errors.
+// (R5.1–R5.5, R6.1, R6.2, R6.4, R10.2–R10.4)
 
-/**
- * The parsed selector. Local to this module: the only consumer of the parse
- * result is `resolveSelected` below, so this is implementation detail rather
- * than a cross-package contract type.
- */
+/** The parsed form of the MICROSERVICES value. */
 type Selector =
   { kind: "all" } | { kind: "list"; identifiers: readonly string[] };
 
 /**
- * Parse a raw MICROSERVICES value: `{kind:"all"}` when the input is undefined,
- * blank, exactly `*`, or splits into zero non-empty entries; otherwise the
- * comma-separated entries, trimmed, in order.
+ * This function parses the raw MICROSERVICES value for `resolveSelected` below.
+ *
+ * Undefined, blank, `*`, and anything splitting into zero entries mean "all".
  */
 function parseSelector(input: string | undefined): Selector {
   const raw = input ?? "";
@@ -43,11 +34,10 @@ function parseSelector(input: string | undefined): Selector {
 }
 
 /**
- * The unmatched-identifier error (R5.4, R6.4, R10.4). Nothing outside this
- * module can `instanceof` it any more, so it is a plain `Error` carrying the
- * documented message rather than a subclass with an inspectable field: the
- * message names the deduplicated, sorted set difference `L \ D(n)` and is the
- * whole of the contract.
+ * This function builds the error for identifiers naming no microservice.
+ *
+ * The `[selector:unmatched]` message wording is a preserved operator-facing
+ * contract (R5.4, R6.4, R10.4).
  *
  * @param unmatched deduplicated and sorted by the caller.
  */
@@ -59,12 +49,14 @@ function unmatchedIdentifiersError(unmatched: readonly string[]): Error {
 }
 
 /**
- * Apply a selector to the candidate directory names discovered in the
- * Microservice_Namespace: every candidate in discovery order for an
- * all-selector, or the requested identifiers in selector order for a list.
+ * This function picks the microservices a build includes.
  *
- * @throws `[selector:empty]` for an empty namespace under an all-selector
- *   (R5.5); `[selector:unmatched]` naming every unmatched identifier.
+ * `directories` are the candidates discovery found in the
+ * Microservice_Namespace. An all-selection returns them all in discovery order;
+ * a list returns the named identifiers in the order given.
+ *
+ * @throws `[selector:empty]` when an all-selection finds no candidate (R5.5).
+ * @throws `[selector:unmatched]` naming every unmatched identifier.
  */
 export function resolveSelected(
   selector: string | undefined,

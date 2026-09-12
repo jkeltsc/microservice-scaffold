@@ -324,14 +324,19 @@ export type PristineWorktreeResult =
     };
 
 /**
- * Materialize a clean checkout of `HEAD` into an OS temp directory and run
+ * Materialize the current WORKING TREE into an OS temp directory and run
  * `npm ci` there, so a cold-start test can run the Dev_Command against a tree
- * with no `dist/`, no `*.tsbuildinfo`, and no generated registry.
+ * with no `dist/`, no `*.tsbuildinfo`, and no generated registry — but which
+ * DOES reflect uncommitted changes, not just what is committed at `HEAD`.
  *
- * `git archive HEAD` emits only tracked files (respecting `.gitignore`), so the
- * materialized tree is pristine by construction — build output and the generated
- * registry are simply absent. The archive is piped straight into `tar -x` in the
- * temp dir.
+ * `git ls-files --cached --others --exclude-standard` lists tracked files PLUS
+ * untracked-but-not-gitignored files — exactly "everything that would be
+ * committed, minus the gitignored `dist/`, `*.tsbuildinfo`, and generated
+ * registry". `--exclude-standard` applies `.gitignore`, so build artifacts are
+ * excluded and the materialized tree stays pristine by construction, just as
+ * `git archive` did. Because `tar` reads file contents from disk (the working
+ * tree), even modified-but-unstaged files are captured as they currently are.
+ * The file list is piped into `tar` and unpacked in the temp dir.
  *
  * When `git` (or `tar`, or `npm ci`) is unavailable or fails for an
  * environmental reason, this returns `{ available: false, reason }` so a
@@ -353,13 +358,20 @@ export function pristineWorktree(): PristineWorktreeResult {
     rmSync(dir, { recursive: true, force: true });
   };
 
-  // `git archive HEAD | tar -x -C <dir>`: pipe the archive into tar so only
-  // tracked files land in the clean tree. Run through a shell so the pipe is
-  // one atomic step; the command is fixed text with only the temp dir path
-  // interpolated (a mkdtemp path, not user input).
+  // `git ls-files --cached --others --exclude-standard -z | tar --null -T - -cf - | tar -xf - -C <dir>`:
+  // list tracked + untracked-but-not-gitignored files (NUL-delimited so paths
+  // with spaces survive), tar them up reading contents from the working tree,
+  // and unpack them into the clean tree. `--exclude-standard` drops the
+  // gitignored `dist/`, `*.tsbuildinfo`, and generated registry, so the tree
+  // stays pristine while still reflecting uncommitted edits. Run through a
+  // shell so the pipeline is one atomic step; the command is fixed text with
+  // only the temp dir path interpolated (a mkdtemp path, not user input).
   const archive = spawnSync(
     "sh",
-    ["-c", `git archive HEAD | tar -x -C ${JSON.stringify(dir)}`],
+    [
+      "-c",
+      `git ls-files --cached --others --exclude-standard -z | tar --null -T - -cf - | tar -xf - -C ${JSON.stringify(dir)}`,
+    ],
     { cwd: repoRoot, encoding: "utf8" },
   );
   if (archive.error !== undefined || (archive.status ?? 1) !== 0) {
@@ -367,7 +379,7 @@ export function pristineWorktree(): PristineWorktreeResult {
     return {
       available: false,
       reason:
-        "git archive/tar failed; skipping pristine-worktree test " +
+        "git ls-files/tar failed; skipping pristine-worktree test " +
         `(${archive.error?.message ?? archive.stderr ?? "non-zero exit"})`,
     };
   }

@@ -32,10 +32,8 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fc from "fast-check";
 
-import {
-  generateRegistry,
-  listMicroserviceDirectories,
-} from "../src/generate-registry.js";
+import { discoverPackages } from "../src/discovery.js";
+import { generateRegistry } from "../src/generate-registry.js";
 import { resolveSelected } from "../src/selector.js";
 
 /** The well-known output path the generator writes and the Overseer imports. */
@@ -46,8 +44,15 @@ const REGISTRY_PATH = fileURLToPath(
   ),
 );
 
-/** The real discovered microservice directory listing, resolved once. */
-const directories = listMicroserviceDirectories();
+/**
+ * The real discovered microservice directory listing, resolved once. Comes from
+ * the Discovery, the same source `generateRegistry` now reads it from; like the
+ * generator's own output path it is cwd-relative, so this suite runs from the
+ * repo root as it already did.
+ */
+const directories = discoverPackages().byCategory.microservice.map(
+  (pkg) => pkg.dirName,
+);
 
 /**
  * Selectors resolved over the discovered listing itself, so `resolveSelected`

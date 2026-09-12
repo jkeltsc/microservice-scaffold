@@ -6,7 +6,9 @@
   "bin": {
     "generate-registry": "./dist/bin/generate-registry.js",
     "build-image-tree": "./dist/bin/build-image-tree.js",
-    "dev-supervisor": "./dist/bin/dev-supervisor.js"
+    "dev-supervisor": "./dist/bin/dev-supervisor.js",
+    "check-repo-invariants": "./dist/bin/check-repo-invariants.js",
+    "build-workspaces": "./dist/bin/build-workspaces.js"
   },
   "scripts": {
     "build": "tsc",

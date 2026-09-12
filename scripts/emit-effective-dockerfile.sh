@@ -21,10 +21,26 @@
 # that one awk pass. No grep/sed/tr; exactly one external process (awk).
 #
 # The manifest COPY lines are discovered from the filesystem via glob-style
-# listing (packages/*/package.json and packages/microservices/*/package.json) so
-# adding a top-level package or a microservice requires no change to this file.
-# Test-only workspaces (integration-tests) and the microservices namespace
-# container directory are excluded from the top-level scan by name (in awk).
+# listing of exactly four patterns (R11.1) — packages/*/package.json,
+# packages/microservices/*/package.json, packages/common/*/package.json and
+# packages/spa/*/package.json — so adding a top-level package, a microservice, a
+# Common_Package or a Spa_Package requires no change to this file (R11.10).
+# Test-only workspaces (integration-tests) and the three Namespace_Container
+# directories (microservices, common, spa) are excluded from the TOP-LEVEL scan
+# by name (in awk). The exclusion is top-level only: a container member that
+# happens to be named `common` or `integration-tests` still gets its COPY line
+# (R11.3).
+#
+# KNOWN, REQUIREMENT-SANCTIONED DUPLICATION — cross-reference:
+# packages/build-tools/src/framework.ts is the single declaration site for the
+# Namespace_Container directories and the framework package names. This script
+# restates `packages/microservices`, `packages/common`, `packages/spa` and the
+# four top-level exclusion names as shell/awk literals because it cannot import
+# that module: it must run on a freshly cloned repository before anything is
+# installed or compiled (R11.7). R10.5 scopes the single-declaration convention
+# to `packages/build-tools/src/`, deliberately leaving this script outside it.
+# When a Namespace_Container directory or an exclusion name changes in
+# framework.ts, this script must be updated in the same change.
 #
 # Selector handling is deliberately minimal (resolved in awk):
 #   *, empty, or whitespace-only -> every directory under packages/microservices
@@ -41,6 +57,14 @@
 # Usage: MICROSERVICES=microservice1,microservice2 sh scripts/emit-effective-dockerfile.sh
 
 set -eu
+
+# Byte-value collation (R11.6): pathname expansion sorts its matches according to
+# the current collating sequence, so the ambient locale would otherwise decide
+# the order of the discovered directory names. LC_ALL=C pins it to ascending byte
+# order, which is what the generated block's ordering rule requires and what
+# makes two runs on an unchanged tree byte-identical on any machine.
+LC_ALL=C
+export LC_ALL
 
 DOCKERFILE="${DOCKERFILE:-Dockerfile.template}"
 EFFECTIVE="${EFFECTIVE_DOCKERFILE:-Dockerfile}"
@@ -85,27 +109,53 @@ fi
 
 # Discover workspace directories via glob-style listing and per-directory
 # package.json existence tests — the two things POSIX sh does well and POSIX awk
-# cannot do without spawning helpers. Build two COMMA-separated basename lists:
-#   PKG_DIRS - every packages/*/ that has a package.json (UNFILTERED; the
-#              integration-tests / microservices exclusions happen in awk).
-#   MS_DIRS  - every packages/microservices/*/ that has a package.json.
+# cannot do without spawning helpers. Build four COMMA-separated basename lists,
+# one per discovery pattern (R11.1):
+#   PKG_DIRS    - every packages/*/ that has a package.json (UNFILTERED; the
+#                 four top-level exclusions happen in awk).
+#   MS_DIRS     - every packages/microservices/*/ that has a package.json.
+#   COMMON_DIRS - every packages/common/*/ that has a package.json.
+#   SPA_DIRS    - every packages/spa/*/ that has a package.json.
 # A glob that matches nothing stays literal, and the `-f` test then drops it, so
-# an absent directory contributes no entry.
+# an absent or empty Namespace_Container contributes no entry and the run still
+# succeeds (R11.5).
+#
+# The basename is taken with pure parameter expansion rather than `basename`:
+# `${dir%/}` drops the glob's trailing slash, `${name##*/}` the leading path.
+# No subshell, no external process per directory (R11.7).
 PKG_DIRS=""
 for dir in packages/*/; do
   [ -f "$dir/package.json" ] || continue
-  name=$(basename "$dir")
+  name=${dir%/}
+  name=${name##*/}
   PKG_DIRS="${PKG_DIRS:+$PKG_DIRS,}$name"
 done
 
 MS_DIRS=""
 for dir in packages/microservices/*/; do
   [ -f "$dir/package.json" ] || continue
-  id=$(basename "$dir")
-  MS_DIRS="${MS_DIRS:+$MS_DIRS,}$id"
+  name=${dir%/}
+  name=${name##*/}
+  MS_DIRS="${MS_DIRS:+$MS_DIRS,}$name"
 done
 
-export SELECTOR PKG_DIRS MS_DIRS DOCKERFILE NAMESPACE
+COMMON_DIRS=""
+for dir in packages/common/*/; do
+  [ -f "$dir/package.json" ] || continue
+  name=${dir%/}
+  name=${name##*/}
+  COMMON_DIRS="${COMMON_DIRS:+$COMMON_DIRS,}$name"
+done
+
+SPA_DIRS=""
+for dir in packages/spa/*/; do
+  [ -f "$dir/package.json" ] || continue
+  name=${dir%/}
+  name=${name##*/}
+  SPA_DIRS="${SPA_DIRS:+$SPA_DIRS,}$name"
+done
+
+export SELECTOR PKG_DIRS MS_DIRS COMMON_DIRS SPA_DIRS DOCKERFILE NAMESPACE
 
 # One awk invocation does everything: read the raw selector + directory lists
 # from the environment, resolve the selector, build the manifest and ENV blocks,
@@ -120,8 +170,10 @@ BEGIN {
   df  = ENVIRON["DOCKERFILE"]
   raw = ENVIRON["SELECTOR"]
 
-  n_pkg = split(ENVIRON["PKG_DIRS"], pkg, ",")
-  n_ms  = split(ENVIRON["MS_DIRS"], ms, ",")
+  n_pkg    = split(ENVIRON["PKG_DIRS"], pkg, ",")
+  n_ms     = split(ENVIRON["MS_DIRS"], ms, ",")
+  n_common = split(ENVIRON["COMMON_DIRS"], common, ",")
+  n_spa    = split(ENVIRON["SPA_DIRS"], spa, ",")
 
   # Resolve the selector, mirroring resolveSelected()/parseSelector() exactly.
   # Trim leading/trailing whitespace with POSIX ERE; if the trimmed result is
@@ -148,21 +200,37 @@ BEGIN {
     }
   }
 
-  # Manifest COPY block: header, root manifests, one COPY per non-excluded
-  # top-level package (in listed order), one COPY per microservice (in listed
-  # order). integration-tests and the microservices namespace container are
-  # excluded by name here.
+  # Manifest COPY block (R11.2, R11.6): header, root manifests, one COPY per
+  # non-excluded top-level package, then one group per Namespace_Container in the
+  # fixed order microservices, common, spa. Every group keeps the listed order,
+  # which is the byte order LC_ALL=C glob expansion produced.
+  #
+  # The four-entry exclusion list — integration-tests (test-only) plus the three
+  # Namespace_Container directories — is applied ONLY to the top-level pkg[] loop
+  # (R11.3), so a container member named `common` or `integration-tests` still
+  # gets its COPY line.
   manifest = "# --- manifest COPY (generated by scripts/emit-effective-dockerfile.sh) ---"
   manifest = manifest "\n" "COPY package.json package-lock.json ./"
   for (i = 1; i <= n_pkg; i++) {
     name = pkg[i]
-    if (name == "" || name == "integration-tests" || name == "microservices") continue
+    if (name == "" || name == "integration-tests" || name == "microservices" \
+        || name == "common" || name == "spa") continue
     manifest = manifest "\n" "COPY packages/" name "/package.json packages/" name "/"
   }
   for (i = 1; i <= n_ms; i++) {
-    id = ms[i]
-    if (id == "") continue
-    manifest = manifest "\n" "COPY packages/microservices/" id "/package.json packages/microservices/" id "/"
+    name = ms[i]
+    if (name == "") continue
+    manifest = manifest "\n" "COPY packages/microservices/" name "/package.json packages/microservices/" name "/"
+  }
+  for (i = 1; i <= n_common; i++) {
+    name = common[i]
+    if (name == "") continue
+    manifest = manifest "\n" "COPY packages/common/" name "/package.json packages/common/" name "/"
+  }
+  for (i = 1; i <= n_spa; i++) {
+    name = spa[i]
+    if (name == "") continue
+    manifest = manifest "\n" "COPY packages/spa/" name "/package.json packages/spa/" name "/"
   }
 
   # ENV toggle-default block: header naming the RAW selector, then one ENV line

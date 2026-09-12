@@ -26,7 +26,7 @@
 //
 // The Project_List for `MICROSERVICES=*` on the current tree is fixed by the
 // design's "Data Models > Project_List for a selector" section:
-//   packages/contracts, packages/config,
+//   packages/contracts, packages/common/config,
 //   packages/microservices/microservice{1,2,3}, packages/overseer.
 // build-tools and integration-tests are never members.
 //
@@ -64,7 +64,7 @@ const TEST_TIMEOUT_MS = 600_000;
 // and integration-tests are intentionally absent — they are never members.
 const PROJECT_LIST_PACKAGES = [
   "packages/contracts",
-  "packages/config",
+  "packages/common/config",
   "packages/microservices/microservice1",
   "packages/microservices/microservice2",
   "packages/microservices/microservice3",

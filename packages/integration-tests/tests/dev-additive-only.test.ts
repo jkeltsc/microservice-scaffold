@@ -308,8 +308,13 @@ describe("the ci quality gate is unchanged and adds no dev typecheck script (R9.
   const scripts = root.scripts ?? {};
 
   it("keeps the exact ci script composition", () => {
+    // The package-categories feature inserts `check:invariants` after the build
+    // and before typecheck. Step 8 (R12.21) also replaced the leading
+    // `npm run build --workspaces` with `npm run build` — the root `build` is
+    // now the derived ordered pass (`node scripts/build.js`), not a per-workspace
+    // fan-out. Everything else in the gate is unchanged.
     expect(scripts.ci).toBe(
-      "npm run build --workspaces && npm run typecheck --workspaces && npm run lint --workspaces && npm test && npm run test:types",
+      "npm run build && npm run check:invariants && npm run typecheck --workspaces && npm run lint --workspaces && npm test && npm run test:types",
     );
   });
 

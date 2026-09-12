@@ -1,16 +1,23 @@
-// Task 7.2 — Image_Tree staging of Required_Shared_Packages.
+// Task 7.2 — Image_Tree staging of the Selector-justified scoped packages.
 //
 // Assembles the real image tree with `buildImageTree` for two selectors and
-// asserts the staged shared-package layout matches the Required_Shared_Packages
-// closure:
+// asserts the staged scoped-package layout matches what the Selector justifies:
 //
 //   - A selector that includes `microservice2` (which consumes
-//     `@microservices/config`) stages BOTH `@microservices/config` and
-//     `@microservices/contracts` (contracts re-enters the closure because the
-//     Overseer and config depend on it) as REAL directories under
-//     `node_modules/@microservices/`, each carrying `package.json` + `dist/`.
-//   - A `microservice1`-only selector stages NO config (no selected consumer),
-//     but still stages `contracts` (the Overseer depends on it).
+//     `@microservices/config`, the Common_Package now living at
+//     `packages/common/config`) stages `@microservices/config` — it is a
+//     Required_Dependencies member — AND `@microservices/contracts` — which is
+//     staged unconditionally as a Framework_Singleton (known by name, always
+//     staged first), not because any consumer requires it. Both land as REAL
+//     directories under `node_modules/@microservices/`, each carrying
+//     `package.json` + `dist/`.
+//   - A `microservice1`-only selector stages NO config (no selected consumer
+//     makes the `packages/common/config` package a required dependency), but still
+//     stages `contracts` — the Framework_Singleton is staged regardless of
+//     selector.
+//
+// The staged scoped entry name (`node_modules/@microservices/config`) is
+// unchanged; only the source package moved to `packages/common/config`.
 //
 // `buildImageTree` reads `process.env.MICROSERVICES`, generates the registry,
 // runs `tsc --build`, and stages relative to cwd (the repo root). The test
@@ -18,7 +25,7 @@
 // cwd + the selector env afterward. Because each case runs a real
 // `tsc --build`, the timeouts are generous.
 //
-// Validates: Requirements R6.1, R6.2, R7.1, R7.3, R14.2, R14.3
+// Validates: Requirements R5.6, R5.10, R8.8, R8.11, R8.12
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { lstatSync, mkdtempSync, rmSync } from "node:fs";
@@ -76,7 +83,7 @@ function expectStagedRealPackage(outDir: string, name: string): void {
   expect(lstatSync(join(pkgDir, "dist")).isDirectory()).toBe(true);
 }
 
-describe("Image_Tree staging of Required_Shared_Packages", () => {
+describe("Image_Tree staging of Selector-justified scoped packages", () => {
   const outDirs: string[] = [];
 
   afterAll(() => {
@@ -93,11 +100,11 @@ describe("Image_Tree staging of Required_Shared_Packages", () => {
       outDirs.push(outDir);
     }, ASSEMBLE_TIMEOUT_MS);
 
-    it("stages @microservices/config as a real directory with package.json + dist (R6.1, R7.1, R14.2)", () => {
+    it("stages @microservices/config (packages/common/config) as a real directory with package.json + dist (R5.6, R8.8, R8.11)", () => {
       expectStagedRealPackage(outDir, "config");
     });
 
-    it("stages @microservices/contracts as a real directory with package.json + dist (R7.3, R14.3)", () => {
+    it("stages @microservices/contracts as a real directory — justified as a Framework_Singleton, always staged (R5.10, R8.11)", () => {
       expectStagedRealPackage(outDir, "contracts");
     });
   });
@@ -110,11 +117,11 @@ describe("Image_Tree staging of Required_Shared_Packages", () => {
       outDirs.push(outDir);
     }, ASSEMBLE_TIMEOUT_MS);
 
-    it("omits @microservices/config — no selected microservice consumes it (R6.2, R7.1)", () => {
+    it("omits @microservices/config — no selected microservice requires packages/common/config (R5.6, R8.12)", () => {
       expect(() => lstatSync(scopedPackageDir(outDir, "config"))).toThrow();
     });
 
-    it("still stages @microservices/contracts — the Overseer depends on it (R7.3, R14.3)", () => {
+    it("still stages @microservices/contracts — justified as a Framework_Singleton, staged regardless of selector (R5.10, R8.11)", () => {
       expectStagedRealPackage(outDir, "contracts");
     });
   });

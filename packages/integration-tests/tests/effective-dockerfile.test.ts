@@ -10,7 +10,7 @@
 //      drift and a container gets the wrong baked toggles. For a table of
 //      selectors we run the script and compare the identifiers it derives (read
 //      back out of the emitted `ENV MICROSERVICE_<X>_ENABLED` lines) against
-//      `resolveSelected(selector, listMicroserviceDirectories())`.
+//      `resolveSelected(selector, microserviceDirectories())`.
 //
 //   2. Manifest COPY generation. The script fills the two
 //      `# --- MANIFEST_COPY_* ---` anchors in the template with per-workspace
@@ -22,7 +22,8 @@
 // Input is `Dockerfile.template`; every run redirects EFFECTIVE_DOCKERFILE to a
 // temp file, so the test never touches the real generated `Dockerfile`.
 //
-// Validates: Requirements R5.1, R5.2, R5.3, R6.1, R6.2, R6.6, O6.2, O6.3, O8.3, O8.7
+// Validates: Requirements R5.1, R5.2, R5.3, R6.1, R6.2, R6.6, R11.3, R11.5,
+// R11.9, O6.2, O6.3, O8.3, O8.7
 
 import { describe, it, expect, afterAll } from "vitest";
 import { spawnSync } from "node:child_process";
@@ -42,7 +43,6 @@ import { dirname, join, resolve } from "node:path";
 // its two CLI entry points. This test reaches its compiled modules directly, the
 // same way the suite already reaches the Overseer (`@microservices/overseer/dist/...`).
 import { resolveSelected } from "@microservices/build-tools/dist/selector.js";
-import { listMicroserviceDirectories } from "@microservices/build-tools/dist/generate-registry.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // tests/ -> integration-tests -> packages -> repo root
@@ -55,6 +55,26 @@ const baseTemplate = readFileSync(resolve(repoRoot, "Dockerfile.template"), "utf
 
 const workDir = mkdtempSync(join(tmpdir(), "effective-dockerfile-"));
 let tempCounter = 0;
+
+/**
+ * The microservice directory names under `repoRoot`, sorted — the same list the
+ * Discovery reports for the `microservice` category, and the same list the emit
+ * script derives from its own glob.
+ *
+ * Derived here rather than through `discoverPackages()` because that reads the
+ * Namespace_Container relative to cwd, whereas this suite is deliberately
+ * cwd-independent: it locates the repo root from `import.meta.url` and spawns
+ * the script with `cwd: repoRoot`, so it passes when the file is run from this
+ * package's directory as well as from the root.
+ */
+function microserviceDirectories(): string[] {
+  return readdirSync(resolve(repoRoot, "packages", "microservices"), {
+    withFileTypes: true,
+  })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+}
 
 /** A fresh path inside the per-run temp directory (never written by default). */
 function tempPath(label: string): string {
@@ -125,10 +145,7 @@ function bakedIdentifiers(emitted: string): string[] {
 
 /** What the TypeScript selector logic resolves the same selector to. */
 function expectedIdentifiers(selector: string | undefined): string[] {
-  return resolveSelected(
-    selector,
-    listMicroserviceDirectories(resolve(repoRoot, "packages", "microservices")),
-  )
+  return resolveSelected(selector, microserviceDirectories())
     .map((id) => id.toLowerCase())
     .sort();
 }
@@ -167,9 +184,7 @@ describe("emit-effective-dockerfile.sh is pinned to resolveSelected()", () => {
     // Anchors the table above against reality: if the shell and the TS logic
     // ever agreed on the WRONG answer (e.g. both resolving `*` to nothing),
     // set equality alone would not catch it.
-    const discovered = listMicroserviceDirectories(
-      resolve(repoRoot, "packages", "microservices"),
-    ).sort();
+    const discovered = microserviceDirectories();
     expect(discovered.length).toBeGreaterThanOrEqual(3);
     expect(bakedIdentifiers(emit("*").out)).toEqual(discovered);
   });
@@ -294,13 +309,23 @@ describe("emit-effective-dockerfile.sh generates manifest COPY lines", () => {
   const packagesDir = resolve(repoRoot, "packages");
   const microservicesDir = resolve(packagesDir, "microservices");
 
-  // The set of top-level packages/ entries the script scans, minus the two it
-  // excludes by name: integration-tests (test-only, no production code) and
-  // microservices (the namespace container, scanned separately).
-  const EXCLUDED_TOPLEVEL = new Set(["integration-tests", "microservices"]);
+  // The set of top-level packages/ entries the script scans, minus the four it
+  // excludes by name (R11.3): integration-tests (test-only, no production code)
+  // plus the three Namespace_Container directories microservices, common and
+  // spa, each of which is scanned separately as a container. The exclusion is
+  // matched against TOP-LEVEL `packages/<name>` names only.
+  const EXCLUDED_TOPLEVEL = new Set([
+    "integration-tests",
+    "microservices",
+    "common",
+    "spa",
+  ]);
 
   /** Direct subdirectories of a directory that contain a package.json. */
   function workspaceDirs(dir: string): string[] {
+    if (!existsSync(dir)) {
+      return [];
+    }
     return readdirSync(dir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
@@ -312,6 +337,10 @@ describe("emit-effective-dockerfile.sh generates manifest COPY lines", () => {
     (name) => !EXCLUDED_TOPLEVEL.has(name),
   );
   const microserviceIds = workspaceDirs(microservicesDir);
+  // Members of the `common` Namespace_Container (e.g. `config`). The container
+  // name is an excluded top-level entry, but its members are COPYed, emitted as
+  // their own group after the microservices group.
+  const commonMemberIds = workspaceDirs(resolve(packagesDir, "common"));
 
   const manifestHeader =
     "# --- manifest COPY (generated by scripts/emit-effective-dockerfile.sh) ---";
@@ -343,6 +372,113 @@ describe("emit-effective-dockerfile.sh generates manifest COPY lines", () => {
   it("does NOT COPY the test-only integration-tests workspace", () => {
     const { out } = emit("*");
     expect(out).not.toContain("packages/integration-tests/package.json");
+  });
+
+  // The Exclusion_List is exactly four top-level names: the test-only
+  // `integration-tests` plus the three Namespace_Container directories
+  // `microservices`, `common` and `spa`. Nothing else is dropped.
+  //
+  // Note how the "no more than four" half of that claim is enforced: the
+  // "COPYs a package.json for every discovered non-excluded workspace" case
+  // above fails the moment a FIFTH name is excluded, because that name would
+  // still show up in `topLevelPackages`. This block covers the other half — no
+  // COPY line for any of the four — and the top-level-only matching rule.
+  // Validates: Requirements R11.3, R11.5
+  describe("the four-entry Exclusion_List", () => {
+    const exclusions = [
+      "integration-tests",
+      "microservices",
+      "common",
+      "spa",
+    ] as const;
+
+    it("matches the set this suite derives its expectations from", () => {
+      expect([...EXCLUDED_TOPLEVEL].sort()).toEqual([...exclusions].sort());
+    });
+
+    it.each(exclusions)(
+      "emits no top-level COPY line for '%s'",
+      (name) => {
+        const result = emit("*");
+        expect(result.status, `stderr: ${result.stderr}`).toBe(0);
+
+        // Neither the manifest-block form nor the bare manifest path: an
+        // excluded top-level entry contributes nothing at all.
+        expect(result.out).not.toContain(
+          `COPY packages/${name}/package.json packages/${name}/`,
+        );
+        expect(result.out).not.toContain(`packages/${name}/package.json`);
+      },
+    );
+
+    it("excludes only the top-level name, not the container's members", () => {
+      // `microservices` is an excluded top-level entry, yet every package
+      // INSIDE it still gets a COPY line. That is the whole point of matching
+      // the Exclusion_List against top-level `packages/<name>` names only: the
+      // container itself never ships a manifest, its members always do. (The
+      // sharper case — a container member literally named after an excluded
+      // entry, e.g. `packages/common/integration-tests` — is covered by the
+      // Emit_Script property test against generated repository skeletons.)
+      const { out } = emit("*");
+
+      expect(EXCLUDED_TOPLEVEL.has("microservices")).toBe(true);
+      expect(microserviceIds.length).toBeGreaterThanOrEqual(3);
+      for (const id of microserviceIds) {
+        expect(
+          out,
+          `member '${id}' of an excluded container must still be COPYed`,
+        ).toContain(
+          `COPY packages/microservices/${id}/package.json packages/microservices/${id}/`,
+        );
+      }
+    });
+  });
+
+  // An empty Namespace_Container is a normal, successful state — not an error.
+  // `packages/spa/` exists in the tree holding nothing but a `.gitkeep`, so the
+  // script's `packages/spa/*/` glob matches nothing (or stays literal and is
+  // dropped by the `-f` test). Either way: no COPY line, and a zero exit.
+  // Validates: Requirements R11.5
+  describe("an empty Namespace_Container", () => {
+    const spaDir = join(packagesDir, "spa");
+
+    it("packages/spa/ really is present and empty of workspaces", () => {
+      expect(existsSync(spaDir)).toBe(true);
+      // Not a workspace itself, and holding zero qualifying members.
+      expect(existsSync(join(spaDir, "package.json"))).toBe(false);
+      expect(workspaceDirs(spaDir)).toEqual([]);
+    });
+
+    it("contributes no COPY line and the script still exits zero", () => {
+      const result = emit("*");
+
+      expect(result.status, `stderr: ${result.stderr}`).toBe(0);
+      // The generated Dockerfile was written (a failed run writes nothing).
+      expect(result.out).not.toBe("");
+      expect(result.stdout).toContain("wrote ");
+
+      // No spa COPY line, and no stray literal from an unexpanded glob.
+      expect(result.out).not.toContain("packages/spa");
+
+      // The manifest blocks are still well-formed and identical: an empty
+      // container drops out of the block without disturbing the rest.
+      const lines = result.out.split("\n");
+      const blocks: string[][] = [];
+      for (let i = 0; i < lines.length; i += 1) {
+        if (lines[i] === manifestHeader) {
+          const block: string[] = [];
+          let j = i + 1;
+          while (j < lines.length && lines[j].startsWith("COPY ")) {
+            block.push(lines[j]);
+            j += 1;
+          }
+          blocks.push(block);
+        }
+      }
+      expect(blocks).toHaveLength(2);
+      expect(blocks[0]).toEqual(blocks[1]);
+      expect(blocks[0][0]).toBe("COPY package.json package-lock.json ./");
+    });
   });
 
   it("emits the manifest COPY block in both the build and prod-deps stages", () => {
@@ -380,7 +516,8 @@ describe("emit-effective-dockerfile.sh generates manifest COPY lines", () => {
     expect(blocks[0]).toEqual(blocks[1]);
 
     // The block content is exactly: root manifests, then one COPY per
-    // top-level package, then one COPY per microservice, in that order.
+    // top-level package, then one COPY per microservice, then one COPY per
+    // common-container member, in that group order.
     const expected = [
       "COPY package.json package-lock.json ./",
       ...topLevelPackages.map(
@@ -390,29 +527,34 @@ describe("emit-effective-dockerfile.sh generates manifest COPY lines", () => {
         (id) =>
           `COPY packages/microservices/${id}/package.json packages/microservices/${id}/`,
       ),
+      ...commonMemberIds.map(
+        (id) =>
+          `COPY packages/common/${id}/package.json packages/common/${id}/`,
+      ),
     ];
     expect(blocks[0]).toEqual(expected);
   });
 
-  // The Sample_Shared_Package (`packages/config/`) must ride the SAME unchanged
-  // `packages/*/package.json` glob every other top-level package rides — no
+  // The Common_Package (`packages/common/config/`) must ride the SAME unchanged
+  // `packages/common/*/package.json` glob every other Common_Package rides — no
   // per-package wiring in the emit script, and NOT in the exclusion list. If it
   // were excluded (or the glob had to be special-cased for it), the layered
   // `npm ci` in both the build and prod-deps stages would not resolve
-  // `@microservices/config`.
-  // Validates: Requirements R8.1, R8.2, R8.3, R14.4
+  // `@microservices/config`. After the package-categories relocation, `config`
+  // lives under the `common` Namespace_Container, so its COPY line targets
+  // `packages/common/config/`, emitted at both anchors.
+  // Validates: Requirements R8.8, R11.8
   describe("the config shared package rides the unchanged glob", () => {
     const configCopyLine =
-      "COPY packages/config/package.json packages/config/";
+      "COPY packages/common/config/package.json packages/common/config/";
 
-    it("is discovered by the glob (config is not in the exclusion list)", () => {
-      // The config directory really is a top-level workspace the scan sees, and
-      // it is NOT one of the by-name exclusions the script drops.
-      expect(existsSync(join(packagesDir, "config", "package.json"))).toBe(
-        true,
-      );
-      expect(topLevelPackages).toContain("config");
-      expect(EXCLUDED_TOPLEVEL.has("config")).toBe(false);
+    it("is discovered by the glob (config is a common-container member)", () => {
+      // The config directory really is a workspace the scan sees, discovered as
+      // a member of the `common` Namespace_Container. The `common` container
+      // name is an excluded top-level entry, but its MEMBERS are always COPYed.
+      expect(
+        existsSync(join(packagesDir, "common", "config", "package.json")),
+      ).toBe(true);
     });
 
     it("emits the config manifest COPY line in both stages", () => {

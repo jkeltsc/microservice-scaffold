@@ -1,34 +1,38 @@
-// The Dev_Server supervisor (design "4. packages/build-tools/src/dev-supervisor.ts").
+// This module runs the Overseer locally and restarts it whenever the TypeScript
+// sources recompile cleanly. It is the code behind `npm run dev`: scripts/dev.js
+// performs the shared startup steps and then spawns the compiled dev-supervisor
+// bin, which calls runDevSupervisorCli() at the bottom of this file.
 //
-// The supervisor is factored into a pure decision core and a process-effect
-// shell, mirroring the Overseer's own boot() / index.ts split. This module
-// currently declares only the decision core's types and the initial state; the
-// decision function, the event fold, the Project_List derivation, and the shell
-// are added by later tasks in this same file.
+// The file has two halves. First a pure decision core: the event, state and action
+// types plus `decide`, which maps one state and one event to the next state and the
+// effects to perform. Then an effectful shell, runDevSupervisor, which compiles in
+// watch mode, owns the Overseer child, and carries out those effects. Keeping the
+// decision pure is what lets the restart behaviour be property-tested over
+// generated event interleavings without spawning anything.
 //
-// The factoring is not stylistic: Requirement 5 (the two-watcher race) is
-// verified by a model-based property test over generated event interleavings,
-// and that is only possible without spawning processes if the decision is a
-// pure function over these types.
+// The dev path runs steps 1-6 of the "Pipeline walkthrough" in the
+// package-categories design and consumes the plan's `tsc` roots, nothing else.
+// There is no bundler phase — a Spa_Package under development runs its own dev
+// server — and nothing is staged: the watcher recompiles each project in place
+// and the Overseer runs from its own compiled output.
 
-/** Everything the supervisor learns about the world, as a typed event. */
+/**
+ * Everything the supervisor can learn about the world. The shell raises these
+ * events; `decide` consumes them and nothing else.
+ */
 export type DevEvent =
-  /** TS 6032: a watched source changed. */
   | { readonly kind: "file-change" }
-  /** The builder began a Compile_Pass. */
   | { readonly kind: "compile-start" }
   /**
-   * TS 6193 / TS 6194: the Compile_Pass settled.
-   * `errorCount` comes from WatchStatusReporter's typed parameter.
-   * `emitted` is true when the pass wrote at least one file into the
-   * Compiled_Tree, recorded by the host's writeFile hook (see 4c).
+   * A compile pass settled. `emitted` is true when it wrote at least one output
+   * file, which the shell records as it writes them.
    */
   | {
       readonly kind: "compile-complete";
       readonly errorCount: number;
       readonly emitted: boolean;
     }
-  /** The child wrote its existing "[boot] Overseer listening on port N" line. */
+  /** The child logged its "[boot] Overseer listening on port N" line. */
   | { readonly kind: "overseer-ready" }
   /** The child process exited, for any reason. */
   | { readonly kind: "overseer-exited"; readonly status: number | null }
@@ -38,28 +42,28 @@ export type DevEvent =
 /** The lifecycle of the single Overseer child the supervisor may own. */
 export type OverseerPhase = "none" | "starting" | "running" | "stopping";
 
+/**
+ * Everything the supervisor remembers between events. `decide` returns its
+ * successor; the shell keeps the latest value and writes no field directly.
+ */
 export interface DevState {
-  /** The child's lifecycle phase. At most one child exists in any phase. */
+  /** The child's phase. At most one child exists at a time. */
   readonly overseer: OverseerPhase;
-  /** True between compile-start and its compile-complete. */
+  /** True between a compile-start and its compile-complete. */
   readonly compiling: boolean;
   /**
-   * Monotonic counter advanced by a zero-error Compile_Pass that either emitted
-   * output or is the first clean pass of the session (the warm-tree case, where
-   * a complete Compiled_Tree is already on disk — R4.8). It identifies a
-   * Last_Good_Output generation without inspecting the filesystem.
+   * Identifies the compiled output a child was launched from, without inspecting
+   * the filesystem. A zero-error pass advances it when it emitted, or when it is
+   * the session's first clean pass over an already up-to-date tree (R4.8).
    */
   readonly generation: number;
   /** The generation the live (or starting) child was launched from; null when none. */
   readonly runningGeneration: number | null;
   /** A restart owed once the current child finishes exiting. */
   readonly restartPending: boolean;
-  /**
-   * Set when the child died on its own or failed to bind. Blocks any new child
-   * until the next clean Compile_Pass (R4.7, R6.5).
-   */
+  /** Blocks a new child until the next clean pass, after a child died (R4.7, R6.5). */
   readonly awaitingCleanPass: boolean;
-  /** True once any clean Compile_Pass has completed in this session. */
+  /** True once any clean pass has completed in this session. */
   readonly hasLastGood: boolean;
   /** Set by a signal; the shell stops driving after this. */
   readonly terminating: boolean;
@@ -77,10 +81,8 @@ export type DevAction =
     };
 
 /**
- * The session's starting state: no child, not compiling, no Last_Good_Output
- * yet. `generation` starts at 0 and a zero-error Compile_Pass advances it when
- * it either emitted or is the session's first clean pass (the warm-tree case),
- * so the first started child carries generation 1.
+ * The state a session starts in: no child, not compiling, no good output yet.
+ * `generation` starts at 0, so the first child ever started carries generation 1.
  */
 export const initialDevState: DevState = {
   overseer: "none",
@@ -93,47 +95,40 @@ export const initialDevState: DevState = {
   terminating: false,
 };
 
-/** A log action to stdout. */
 function logOut(message: string): DevAction {
   return { kind: "log", stream: "stdout", message };
 }
 
-/** A log action to stderr. */
 function logErr(message: string): DevAction {
   return { kind: "log", stream: "stderr", message };
 }
 
 /**
- * The restart decision (design "4b. The pure decision core"). A total, pure
- * function: no I/O, no timers, no clock, no filesystem, and no observation of
- * the Compiled_Tree. Every Requirement 5 and Requirement 6 gating obligation is
- * a statement about this function's output, which is what makes them testable
- * over generated event interleavings without spawning a process.
+ * This function decides what happens next. Given the current state and one event, it
+ * returns the next state and the effects the shell must perform.
  *
- * Two invariants fall out of the phase machine rather than being checked
- * separately: `start-overseer` is emitted only from phase `none`, so two
- * children can never be alive at once (R5.7); and `start-overseer` always
- * carries the current `generation`, which a zero-error pass advances — either
- * because it emitted, or because it is the session's first clean pass over an
- * already complete tree — so the executed output is always a Last_Good_Output
- * (R6.6, R4.8).
+ * It is the entire restart policy: every rule about when the Overseer may start,
+ * restart, or stay put is a statement about its output. `dispatch`, inside
+ * runDevSupervisor below, calls it once per observed event. Pure and total.
+ *
+ * Two guarantees fall out of the phase machine rather than being checked anywhere:
+ * `start-overseer` is emitted only from phase `none`, so two children are never
+ * alive at once (R5.7), and it always carries the current `generation`, so a child
+ * only runs output that compiled cleanly (R4.8, R6.6).
  */
 export function decide(
   state: DevState,
   event: DevEvent,
 ): { readonly state: DevState; readonly actions: readonly DevAction[] } {
-  // Once a signal has set `terminating`, the shell stops driving: no event
-  // produces any further action or state change.
+  // After a signal, no event produces any further action or state change.
   if (state.terminating) {
     return { state, actions: [] };
   }
 
   switch (event.kind) {
-    // A watched source changed, or the builder began a Compile_Pass. Mark the
-    // session compiling and emit no start/stop action, so a running child keeps
-    // serving the Last_Good_Output (R5.2, R5.3). A burst of edits during a pass
-    // coalesces here without a debounce timer: these events emit nothing, and
-    // only the burst's final `compile-complete` can produce a restart (R5.4).
+    // No action either way, so a running child keeps serving the last good output
+    // (R5.2, R5.3) — and a burst of edits coalesces with no debounce timer, since
+    // only the burst's final `compile-complete` can restart anything (R5.4).
     case "file-change":
     case "compile-start":
       return { state: { ...state, compiling: true }, actions: [] };
@@ -141,8 +136,7 @@ export function decide(
     case "compile-complete":
       return decideCompileComplete(state, event);
 
-    // The child bound its HTTP server: starting → running, and record the
-    // restart (R4.6).
+    // The child bound its HTTP server: starting → running (R4.6).
     case "overseer-ready":
       if (state.overseer === "starting") {
         return {
@@ -155,8 +149,7 @@ export function decide(
     case "overseer-exited":
       return decideOverseerExited(state, event);
 
-    // SIGINT / SIGTERM: set `terminating`, stop the child (if any) then the
-    // watcher (R1.6).
+    // Stop the child (if any), then the watcher, and stop driving (R1.6).
     case "signal": {
       const actions: DevAction[] = [
         logOut(
@@ -175,17 +168,16 @@ export function decide(
   }
 }
 
-/** The `compile-complete` transitions (design "4b" rules table). */
+/** This helper decides what a settled compile pass means. Called from `decide`. */
 function decideCompileComplete(
   state: DevState,
   event: Extract<DevEvent, { kind: "compile-complete" }>,
 ): { readonly state: DevState; readonly actions: readonly DevAction[] } {
   const settled = { ...state, compiling: false };
 
-  // An erroring pass: log the completion and error count, emit no start/stop,
-  // leave `generation` unadvanced so the live child keeps serving the last good
-  // output (R5.8, R6.2, R6.3, R6.6). When no Last_Good_Output exists yet, also
-  // log that no Overseer will start (R6.7).
+  // An erroring pass changes nothing but the log; the live child keeps serving the
+  // last good output. With no good output yet, say so, so nobody waits for a
+  // server that is not coming (R5.8, R6.2, R6.3, R6.6, R6.7).
   if (event.errorCount > 0) {
     const actions: DevAction[] = [
       logOut(
@@ -204,24 +196,17 @@ function decideCompileComplete(
 
   const completionLog0 = logOut("[dev:compile] cycle complete: 0 error(s)");
 
-  // A clean pass that emitted nothing. Its handling splits three ways
-  // (design 4b), because whether a pass emitted governs restart decisions
-  // only, never whether the session starts a server at all (R4.8, R5.1).
+  // A clean pass that emitted nothing, handled three ways. Whether a pass emitted
+  // governs restarts only, never whether a session starts at all (R4.8, R5.1).
   if (!event.emitted) {
-    // Gate in force: the output on disk is the same output that just crashed
-    // or failed to bind, so relaunching it would only produce a crash loop.
-    // The gate stays; no start, `generation` unadvanced (R4.7, R6.5).
+    // The output on disk is the output that just crashed, so relaunching it would
+    // only loop. The gate stays (R4.7, R6.5).
     if (state.awaitingCleanPass) {
       return { state: settled, actions: [completionLog0] };
     }
 
-    // No gate, and no Last_Good_Output yet: the warm-tree initial start. A
-    // zero-error pass that emitted nothing means every output was already up
-    // to date, so the Compiled_Tree is complete and consistent. Advance
-    // `generation` (to 1) — the session's first clean pass counts even without
-    // an emit — set `hasLastGood`, and start the Overseer at that generation.
-    // Phase is `none` here, because no clean pass has yet started a child
-    // (R4.8, R5.1, R6.4).
+    // The warm-tree start: nothing to emit means every output was already up to
+    // date, so the tree is complete and the first child can start (R4.8, R6.4).
     if (!state.hasLastGood) {
       const generation = state.generation + 1;
       return {
@@ -237,15 +222,12 @@ function decideCompileComplete(
       };
     }
 
-    // No gate, and a Last_Good_Output already exists: a no-op pass. Log the
-    // completion, emit no start/stop, leave `generation` unadvanced — a
-    // settled session converges to the same running child (R4.5, R5.4, R5.6).
+    // A no-op pass: a settled session converges to the same child (R4.5, R5.4).
     return { state: settled, actions: [completionLog0] };
   }
 
-  // A clean, emitting pass: a new Last_Good_Output. Advance `generation`, set
-  // `hasLastGood`, clear `awaitingCleanPass` (R4.7, R6.5 gate lifts on the next
-  // clean pass). Then restart according to the child's phase.
+  // A clean pass that emitted is new good output: advance the generation, lift the
+  // crash gate (R4.7, R6.5), then restart according to the child's phase.
   const generation = state.generation + 1;
   const advanced: DevState = {
     ...settled,
@@ -255,7 +237,7 @@ function decideCompileComplete(
   };
 
   switch (state.overseer) {
-    // No child: start one against this generation (R4.2, R5.1, R6.4).
+    // Nothing running: start a child on this generation (R4.2, R5.1).
     case "none":
       return {
         state: {
@@ -267,17 +249,15 @@ function decideCompileComplete(
         actions: [completionLog0, { kind: "start-overseer", generation }],
       };
 
-    // A live child: stop it and owe a restart. The `overseer-exited` handler
-    // starts the replacement once it has exited, so the restart is strictly
-    // sequential and two children never overlap (R5.7).
+    // A live child: stop it and owe a restart, which the exit handler below then
+    // performs, so two children never overlap (R5.7).
     case "running":
       return {
         state: { ...advanced, overseer: "stopping", restartPending: true },
         actions: [completionLog0, { kind: "stop-overseer" }],
       };
 
-    // A child mid-start or mid-stop: record that a restart is owed. The pending
-    // flag is consumed when the current child settles (R5.4, R5.7).
+    // Mid-start or mid-stop: owe the restart until the child settles (R5.4, R5.7).
     case "starting":
     case "stopping":
       return {
@@ -287,7 +267,7 @@ function decideCompileComplete(
   }
 }
 
-/** The `overseer-exited` transitions (design "4b" rules table). */
+/** This helper decides what a child's exit means. Called from `decide`. */
 function decideOverseerExited(
   state: DevState,
   event: Extract<DevEvent, { kind: "overseer-exited" }>,
@@ -295,8 +275,7 @@ function decideOverseerExited(
   const status = event.status;
 
   switch (state.overseer) {
-    // A requested stop completed. Honour a pending restart by starting the
-    // replacement at the current `generation` (R5.7); otherwise settle to none.
+    // A stop we asked for: honour an owed restart, else settle to no child (R5.7).
     case "stopping": {
       if (state.restartPending) {
         return {
@@ -315,8 +294,7 @@ function decideOverseerExited(
       };
     }
 
-    // The child died before binding: log to stderr, block any new child until
-    // the next clean pass, start no replacement (R4.7).
+    // Died before binding: no replacement until the next clean pass (R4.7).
     case "starting":
       return {
         state: {
@@ -333,8 +311,7 @@ function decideOverseerExited(
         ],
       };
 
-    // A spontaneous exit: same handling as a failed bind — log to stderr, block
-    // until the next clean pass, start no replacement (R6.5).
+    // A spontaneous exit, handled the same way as a failed bind (R6.5).
     case "running":
       return {
         state: {
@@ -351,20 +328,16 @@ function decideOverseerExited(
         ],
       };
 
-    // No child was expected to exit; nothing to do.
     case "none":
       return { state, actions: [] };
   }
 }
 
 /**
- * Fold an event sequence through `decide`, returning the final state and the
- * concatenated action trace (design "4b"). This is the single folding
- * implementation shared by the model-based property test and the shell, so
- * both derive their state and actions from exactly the same reduction.
- *
- * When `state` is omitted the fold starts from `initialDevState`. Pure and
- * total, inheriting those properties from `decide`.
+ * This function folds a whole event sequence through `decide` and returns the final
+ * state with every action in order. It is what the restart property tests replay
+ * generated interleavings through (dev-restart-decision.property.test.ts), and the
+ * fold starts from {@link initialDevState} unless a state is given.
  */
 export function reduceDevEvents(
   events: Iterable<DevEvent>,
@@ -381,174 +354,100 @@ export function reduceDevEvents(
 }
 
 // ---------------------------------------------------------------------------
-// 4a. Project_List derivation (design "4a. Project_List derivation").
+// Which projects the watcher compiles.
 //
-// The solution builder is handed root projects rather than a single project,
-// and that root list IS the Project_List (R3.6): the required shared packages
-// (topological), then the selected microservices, then the Overseer. It reuses
-// existing build-tools code — `resolveSelected` for the Selector and
-// `requiredSharedPackages` for the closure — rather than reimplementing
-// selection or closure logic (R2.1), so the dev path selects microservices by
-// exactly the semantics a Container build uses (R2.2) and a cold tree builds in
-// an order that works (R3.7). An unmatched identifier surfaces as the existing
-// `[selector:unmatched]` error (R2.4).
-//
-// This is the same root order `image-tree.ts` hands to `tsc --build`, computed
-// by the same two functions, so dev and Container builds agree by construction.
-// `packages/build-tools` and `packages/integration-tests` are excluded from the
-// list by construction: neither is a selected microservice, the Overseer, or a
-// discovered shared package (build-tools is bin-only with no `main`/`types`
-// barrel; integration-tests is not `@microservices`-scoped), so neither can
-// enter the closure.
+// The list is not derived here: it IS `buildPlanFrom(...).tscRoots`, the very array
+// image-tree.ts hands to the TypeScript build. One derivation, not two that happen
+// to agree, so membership, order, determinism and every selector or dependency
+// error message are an image build's (R3.6, R3.7, R13.1-R13.11).
 
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
-import { listMicroserviceDirectories } from "./generate-registry.js";
-import { resolveSelected } from "./selector.js";
+import { buildPlanFrom } from "./build-plan.js";
+import type { ReadDependencies } from "./required-dependencies.js";
 import {
-  discoverSharedPackages,
-  requiredSharedPackages,
-  type ReadDependencies,
-  type SharedPackage,
-} from "./shared-packages.js";
-
-/** The Overseer's package directory; the last root project in build order. */
-const OVERSEER_PACKAGE_DIR = "packages/overseer";
-
-/** Workspace scope; used to filter a manifest's `@microservices` dependencies. */
-const WORKSPACE_SCOPE = "@microservices";
+  discoverPackages,
+  readDependencySpecifiers,
+  type Discovery,
+} from "./discovery.js";
 
 /**
- * The Project_List: the root projects handed to the solution builder, in build
- * order — the required shared packages (topological), then the selected
- * microservices (`packages/microservices/<identifier>`), then the Overseer
- * (`packages/overseer`) (R3.6). Each returned entry is a repo-relative package
- * directory, exactly the form `image-tree.ts` passes to `tsc --build` and the
- * form the TypeScript solution builder expects as a root name.
+ * This function returns the projects to compile, in build order. Each entry is a
+ * repo-relative package directory, the form the solution builder wants as a root.
  *
- * Pure over its injected inputs so it is property-testable against in-memory
- * layouts; {@link devProjectList} supplies the real-filesystem defaults. It
- * composes `resolveSelected` and `requiredSharedPackages` and reimplements
- * neither selection nor closure logic, so an unmatched identifier surfaces as
- * the existing `[selector:unmatched]` error and an unresolved shared dependency
- * as the existing `[shared:unresolved]` error (R2.4).
+ * Called from {@link devProjectList}, which supplies the real filesystem. Taking
+ * the inputs as arguments keeps it pure and testable over in-memory layouts, and
+ * taking the whole `Discovery` rather than a directory list means the dev path
+ * cannot be handed a different view of the repository than an image build.
  *
  * @param selector the raw `MICROSERVICES` value, passed through unmodified.
- * @param directories the candidate microservice directory names.
- * @param shared the discovered shared packages keyed by `@microservices/<name>`.
- * @param readDependencies reads the `@microservices`-scoped `dependencies` keys
- *   of a workspace given its package dir (the microservice and Overseer roots).
- * @throws `[selector:unmatched]` / `[selector:empty]` from `resolveSelected`;
- *   `[shared:unresolved]` from `requiredSharedPackages`.
+ * @param discovery one discovery run's result.
+ * @param readDependencies reads a package's `@microservices` dependency names.
+ * @throws `[selector:empty]`, `[selector:unmatched]`, `[shared:unresolved]`,
+ *   `[deps:peer]`, `[deps:cycle]` — all from the plan, unmodified.
  */
 export function projectListFrom(
   selector: string | undefined,
-  directories: readonly string[],
-  shared: ReadonlyMap<string, SharedPackage>,
+  discovery: Discovery,
   readDependencies: ReadDependencies,
 ): readonly string[] {
-  const selected = resolveSelected(selector, directories);
-  const required = requiredSharedPackages(selected, shared, readDependencies);
-
-  return [
-    ...required.map((pkg) => pkg.packageDir),
-    ...selected.map((identifier) => `packages/microservices/${identifier}`),
-    OVERSEER_PACKAGE_DIR,
-  ];
+  return buildPlanFrom(selector, discovery, readDependencies).tscRoots;
 }
 
 /**
- * Read the `@microservices`-scoped `dependencies` keys of a workspace manifest
- * at `packageDir` (e.g. "packages/overseer"). This is the {@link ReadDependencies}
- * reader `requiredSharedPackages` uses for its microservice and Overseer roots;
- * shared-package edges come from discovery instead. An absent or unparsable
- * manifest, or one with no `dependencies`, yields an empty list. Mirrors the
- * `readSharedDeps` reader `image-tree.ts` uses, so both build paths read
- * dependencies identically.
- */
-function readSharedDependencies(packageDir: string): readonly string[] {
-  let manifest: { dependencies?: Record<string, string> };
-  try {
-    manifest = JSON.parse(
-      readFileSync(join(packageDir, "package.json"), "utf8"),
-    ) as { dependencies?: Record<string, string> };
-  } catch {
-    return [];
-  }
-  return Object.keys(manifest.dependencies ?? {}).filter((dep) =>
-    dep.startsWith(`${WORKSPACE_SCOPE}/`),
-  );
-}
-
-/**
- * The real-filesystem Project_List for the current `MICROSERVICES` value. Lists
- * `packages/microservices/` exactly once, here at startup — nothing in the
- * steady state re-lists it (R7.1, R7.3) — and discovers shared packages once,
- * then delegates to the pure {@link projectListFrom}. Reads the `MICROSERVICES`
- * environment value the same way `generateRegistry` does, so the dev path's
- * microservice set matches the registry it was generated against by
- * construction.
+ * This function builds the project list for the real repository and the current
+ * `MICROSERVICES` value. Called from {@link runDevSupervisorCli} at startup.
+ *
+ * Discovery runs once, here; nothing in the steady state lists the microservice
+ * directory again (R7.1, R7.3). It reads the environment the way generate-registry.ts
+ * does and dependencies through discovery.ts's single reader, so the dev path sees
+ * the same microservices as the generated registry.
  */
 export function devProjectList(
   selector = process.env.MICROSERVICES,
 ): readonly string[] {
   return projectListFrom(
     selector,
-    listMicroserviceDirectories(),
-    discoverSharedPackages(),
-    readSharedDependencies,
+    discoverPackages(),
+    readDependencySpecifiers,
   );
 }
 
 // ---------------------------------------------------------------------------
-// 4c. The process-effect shell (design "4c. The process-effect shell").
+// The effectful shell.
 //
-// The shell owns everything impure and holds NO branching policy of its own. It
-// translates the TypeScript solution builder's callbacks and the Overseer
-// child's lifecycle into DevEvents, feeds each event to `decide`, and performs
-// the returned DevActions in order. Every restart decision therefore lives in
-// the pure core above; the shell only wires callbacks to events and events to
-// effects.
+// Everything below performs effects and holds no branching policy. It turns the
+// solution builder's callbacks and the Overseer child's lifecycle into DevEvents,
+// hands each to `decide`, and performs the returned DevActions.
 //
-// The two-watcher race (Requirement 5) is absent by construction: the shell
-// never watches `dist/` and runs no debounce timer. The authority on "a compile
-// cycle finished with N errors" is a callback in this same event loop
-// (`reportWatchStatus`), and "did this cycle emit" is bookkeeping about the
-// builder's own writeFile calls (the `writeFile` wrapper) — never an
-// observation of the filesystem (R5.6).
+// Two things it never does, which is why there is no race to tune around: it never
+// observes the compiled output to learn whether a pass wrote anything — that is
+// bookkeeping about its own writes — and it runs no debounce timer. The authority on
+// "a cycle finished with N errors" is `reportWatchStatus` below, a callback in this
+// same event loop (R5.6).
 
 import { spawn, type ChildProcess } from "node:child_process";
 
 import ts from "typescript";
 
-/** The Overseer process entrypoint the child is spawned from (R4.1, R9.1). */
-const OVERSEER_ENTRYPOINT = "packages/overseer/dist/index.js";
+// The compiled Overseer entrypoint the child is spawned from (R4.1, R9.1).
+// framework.ts composes it, so that path is declared once (R10.3, R10.5).
+import { OVERSEER_ENTRYPOINT } from "./framework.js";
 
 /**
- * The existing Overseer boot line the shell scans the child's stdout for; its
- * appearance is the only non-invasive bind signal available, since R9.4 forbids
- * a dev-specific branch in `packages/overseer/src/`. Matched as a substring of a
- * forwarded stdout chunk and raised as `overseer-ready`.
+ * The Overseer's own boot line, scanned for in the child's stdout. It is the only
+ * bind signal available, because the Overseer carries no dev-specific branch
+ * (R9.4). Seeing it raises `overseer-ready`.
  */
 const OVERSEER_READY_MARKER = "[boot] Overseer listening on port";
 
 /**
- * TypeScript watch-status diagnostic codes, verified against typescript@5.9.3
- * (design "One process owns both sides"):
- *   6032 — "File change detected. Starting incremental compilation..." (cycle start)
- *   6193 — "Found 1 error. Watching for file changes."                 (cycle settled)
- *   6194 — "Found {0} errors. Watching for file changes."              (cycle settled)
+ * The TypeScript watch-status codes the shell reacts to, verified against
+ * typescript@5.9.3. 6032 opens a compile cycle; 6193 and 6194 settle one.
  */
 const TS_COMPILE_START = 6032;
 const TS_COMPILE_COMPLETE_ONE = 6193;
 const TS_COMPILE_COMPLETE_MANY = 6194;
 
-/**
- * Wrap a `FileWatcher` so that closing it (whether by the builder or by
- * `stop-watcher`) also drops it from the tracking set, keeping the set free of
- * already-closed watchers.
- */
+/** This function wraps a watcher so closing it also drops it from the set. */
 function trackedWatcher(
   watcher: ts.FileWatcher,
   openWatchers: Set<ts.FileWatcher>,
@@ -562,67 +461,47 @@ function trackedWatcher(
 }
 
 /**
- * Start the Dev_Server process-effect shell: drive the TypeScript solution
- * builder over `projectList` in watch mode and own the Overseer child, feeding
- * every observed transition through {@link decide} and performing the returned
- * {@link DevAction}s in order. This is the shell task 5.2's bin wrapper calls;
- * it is the obvious, documented entry point for starting a Dev_Session.
+ * This function runs a dev session: it compiles `projectList` in watch mode, owns
+ * the Overseer child, and drives what it observes through {@link decide}. Called
+ * from {@link runDevSupervisorCli} below, its only caller.
  *
- * The function does not return under normal operation — it installs the watcher
- * and the signal handlers and lets the event loop drive the session until a
- * `SIGINT`/`SIGTERM` closes the watchers and the child exits, at which point the
- * process exits with status 0. A failure to launch the Build_Watcher throws so
- * the bin can report `[dev] failed to start the build watcher: <reason>` and
- * exit non-zero (design "Common_Startup step failure"); no Overseer child is
- * spawned in that case because the spawn is downstream of the watcher build.
+ * It does not return. It installs the watchers and the signal handlers and lets the
+ * event loop run the session until SIGINT or SIGTERM closes the watchers and the
+ * child exits, whereupon the process exits 0. If the watcher cannot start it throws
+ * unframed, for the caller to report.
  *
- * @param projectList the root projects handed to the solution builder, in build
- *   order (see {@link projectListFrom} / {@link devProjectList}).
- * @param env the environment resolved at Dev_Session start, passed to every
- *   Overseer child with no mutation (R8.1, R8.2).
+ * @param projectList the projects to compile, in build order.
+ * @param env the session-start environment, passed to every child unmodified
+ *   (R8.1, R8.2).
  */
 export function runDevSupervisor(
   projectList: readonly string[],
   env: NodeJS.ProcessEnv,
 ): void {
-  // The single source of truth for the session, folded forward by `decide`. The
-  // shell never inspects or mutates it except through `dispatch`.
+  // The session state, advanced only through `dispatch`.
   let state = initialDevState;
 
-  // The one Overseer child the supervisor may own, and the buffer that
-  // accumulates a partial stdout line so the readiness marker is matched even
-  // when it is split across chunks.
+  // The one Overseer child, and a retained stdout tail so the readiness marker is
+  // still matched when it arrives split across two chunks.
   let child: ChildProcess | null = null;
   let childStdoutTail = "";
 
-  // Emit-detection bookkeeping (design 4c "Emit detection"): the wrapped
-  // writeFile flips this true; the settled-cycle handler reads and resets it to
-  // supply `compile-complete`'s `emitted`. This records the supervisor's OWN
-  // writes — it is not a watcher on `dist/`.
+  // Did the current cycle write any output? The wrapped writeFile below sets it and
+  // the settled-cycle handler resets it, so it records the shell's own writes as
+  // they happen rather than the state of the compiled output.
   let emittedThisCycle = false;
 
-  // Error-count bookkeeping for the current cycle. The `errorCount` parameter
-  // that `createSolutionBuilderWithWatch` passes to the watch-status reporter is
-  // NOT reliably populated for the settle diagnostics (TS 6193 / TS 6194): under
-  // the solution builder it arrives as 0 even when a project failed, so trusting
-  // it alone would classify an erroring pass as clean and start the Overseer
-  // against a tree that did not compile (violating R5.1, R6.2, R6.7). So the
-  // shell counts the error-category diagnostics TypeScript reports through
-  // `reportDiagnostic` during the cycle and uses the larger of that tally and
-  // the reporter's typed count. Reset at each `compile-start`.
+  // Errors seen in the current cycle, tallied from the diagnostics TypeScript
+  // reports. Needed because the count the solution builder passes to the watch-status
+  // reporter arrives as 0 even when a project failed, and trusting it would start the
+  // Overseer against a tree that did not compile (R5.1, R6.2).
   let errorsThisCycle = 0;
 
-  // The file watchers the builder's host opened. `createSolutionBuilderWithWatch`
-  // returns a `SolutionBuilder` with no `close()`, so the watchers are owned by
-  // the host's `WatchHost.watchFile`/`watchDirectory`. The shell wraps those two
-  // to collect every `FileWatcher` the builder opens, then closes them all in
-  // `stopWatcher` — that IS closing the builder's watchers (design 4c "Signals").
+  // Every file watcher the builder's host opened. The builder exposes no close(),
+  // so the shell wraps the host's two watch entry points to collect them.
   const openWatchers = new Set<ts.FileWatcher>();
 
-  /**
-   * Perform a single DevAction. The shell holds no policy here: it just carries
-   * out the effect the pure core named.
-   */
+  /** Perform one action. No policy here — the core already decided. */
   function perform(action: DevAction): void {
     switch (action.kind) {
       case "log": {
@@ -643,11 +522,7 @@ export function runDevSupervisor(
     }
   }
 
-  /**
-   * Feed one event through the pure core, commit the next state, and perform
-   * every returned action in order. The single point where the shell advances
-   * the decision core.
-   */
+  /** Feed one event through the core, commit the state, perform the actions. */
   function dispatch(event: DevEvent): void {
     const result = decide(state, event);
     state = result.state;
@@ -657,12 +532,11 @@ export function runDevSupervisor(
   }
 
   /**
-   * Spawn the Overseer from its compiled entrypoint with the session-start
-   * environment passed through unmodified (R4.1, R8.1, R8.2). stdout is piped so
-   * the readiness marker can be scanned and forwarded verbatim; stderr is
-   * inherited so the child's own diagnostics reach the terminal directly. The
-   * child's `exit` handler is the ONLY source of `overseer-exited`, which keeps
-   * a restart strictly sequential (design 4c "stop-overseer").
+   * Spawn the Overseer from its compiled entrypoint, with the session-start
+   * environment passed through unmodified (R4.1, R8.1, R8.2). stdout is piped so the
+   * readiness marker can be scanned and forwarded verbatim; stderr is inherited. The
+   * `exit` handler here is the only source of `overseer-exited`, which is what keeps
+   * a restart strictly sequential.
    */
   function startOverseer(): void {
     childStdoutTail = "";
@@ -673,8 +547,6 @@ export function runDevSupervisor(
     child = spawned;
 
     spawned.stdout?.on("data", (chunk: Buffer) => {
-      // Forward verbatim, then scan for the readiness marker across chunk
-      // boundaries using a small retained tail.
       const text = chunk.toString("utf8");
       process.stdout.write(text);
       childStdoutTail += text;
@@ -698,11 +570,7 @@ export function runDevSupervisor(
     });
   }
 
-  /**
-   * Request a stop of the running child. Sends `SIGTERM` and returns; the
-   * child's own `exit` handler raises `overseer-exited`, so the decision core
-   * (not this function) decides what happens next.
-   */
+  /** Ask the child to stop. Its `exit` handler raises the deciding event. */
   function stopOverseer(): void {
     child?.kill("SIGTERM");
   }
@@ -715,13 +583,12 @@ export function runDevSupervisor(
     openWatchers.clear();
   }
 
-  // -- Builder wiring (design 4c "Builder wiring") --------------------------
+  // -- Builder wiring -------------------------------------------------------
   //
-  // Diagnostics are reported through TypeScript's own
-  // `formatDiagnosticsWithColorAndContext`, so each names the source file with
-  // its line and character position (R6.1) with no formatting done here. The
-  // formatter needs a host describing the current directory, canonical file
-  // names and the newline; `ts.sys` supplies all three.
+  // Diagnostics go through TypeScript's own formatter, so each names its source file
+  // with the line and character position and nothing is formatted here (R6.1). The
+  // formatter wants a host for the current directory, canonical file names and the
+  // newline; `ts.sys` has all three.
   const formatHost: ts.FormatDiagnosticsHost = {
     getCurrentDirectory: () => ts.sys.getCurrentDirectory(),
     getCanonicalFileName: (fileName) =>
@@ -729,10 +596,8 @@ export function runDevSupervisor(
     getNewLine: () => ts.sys.newLine,
   };
 
-  /** Report a single compile diagnostic, file/line/character named by TS. */
+  /** Print one compile diagnostic, and count it if it is an error. */
   function reportDiagnostic(diagnostic: ts.Diagnostic): void {
-    // Tally errors so the settle handler has a reliable count even when the
-    // solution builder passes `errorCount === 0` on the summary diagnostic.
     if (diagnostic.category === ts.DiagnosticCategory.Error) {
       errorsThisCycle += 1;
     }
@@ -741,10 +606,7 @@ export function runDevSupervisor(
     );
   }
 
-  /**
-   * The solution builder's own status lines (e.g. "Projects in this build").
-   * Forwarded verbatim through the same formatter so build progress is visible.
-   */
+  /** Print the builder's own status lines, so build progress stays visible. */
   function reportBuilderStatus(diagnostic: ts.Diagnostic): void {
     process.stdout.write(
       ts.formatDiagnosticsWithColorAndContext([diagnostic], formatHost),
@@ -752,11 +614,10 @@ export function runDevSupervisor(
   }
 
   /**
-   * The watch-status reporter — the authority on cycle boundaries. Its typed
-   * `errorCount` parameter is the error count fed straight into
-   * `compile-complete`; nothing is recovered from message text. TS 6032 opens a
-   * cycle; TS 6193 / TS 6194 settle it. The settled event carries `emitted`,
-   * read and reset from the writeFile bookkeeping flag.
+   * Turn a watch-status line into a compile-cycle event. This is the shell's
+   * authority on where a cycle begins and ends: 6032 opens one and resets the
+   * per-cycle bookkeeping, 6193 and 6194 settle it and raise `compile-complete`.
+   * Nothing is read out of message text.
    */
   function reportWatchStatus(
     diagnostic: ts.Diagnostic,
@@ -764,7 +625,6 @@ export function runDevSupervisor(
     _options: ts.CompilerOptions,
     errorCount?: number,
   ): void {
-    // Surface the status line itself so cycle boundaries are visible.
     process.stdout.write(
       ts.formatDiagnosticsWithColorAndContext([diagnostic], formatHost),
     );
@@ -779,10 +639,8 @@ export function runDevSupervisor(
       case TS_COMPILE_COMPLETE_MANY: {
         const emitted = emittedThisCycle;
         emittedThisCycle = false;
-        // The reporter's typed `errorCount` is unreliable under the solution
-        // builder (0 even on failure), so take the larger of it and the errors
-        // this shell tallied from `reportDiagnostic`. TS 6193 ("Found 1 error")
-        // itself implies at least one error, so floor the count at 1 for it.
+        // The largest of the reporter's count and the shell's own tally. 6193 means
+        // "found 1 error", so floor it at 1.
         const reported = errorCount ?? 0;
         const floor = diagnostic.code === TS_COMPILE_COMPLETE_ONE ? 1 : 0;
         const errors = Math.max(reported, errorsThisCycle, floor);
@@ -808,10 +666,9 @@ export function runDevSupervisor(
       reportWatchStatus,
     );
 
-    // Wrap the host's writeFile so the settled-cycle handler can supply
-    // `emitted`. This is bookkeeping about the supervisor's own writes into the
-    // Compiled_Tree, recorded as the writes happen — not a `dist/` watcher, and
-    // not a debounce timer (R4.5, R5.5).
+    // Wrap writeFile so the settled-cycle handler knows whether the cycle emitted.
+    // This records the shell's own writes as they happen; it does not observe the
+    // compiled output and involves no timer (R4.5, R5.5).
     const innerWriteFile = host.writeFile?.bind(host);
     host.writeFile = (
       path: string,
@@ -822,10 +679,8 @@ export function runDevSupervisor(
       innerWriteFile?.(path, data, writeByteOrderMark);
     };
 
-    // Wrap the host's watch entry points to collect every FileWatcher the
-    // builder opens, so `stop-watcher` can close them all on a signal. The
-    // wrappers only register the returned watcher; they change no watch
-    // behavior.
+    // Wrap the host's two watch entry points to collect every watcher the builder
+    // opens, so a signal can close them all. Watch behaviour is unchanged.
     const innerWatchFile = host.watchFile.bind(host);
     host.watchFile = (
       path,
@@ -857,29 +712,24 @@ export function runDevSupervisor(
     );
     builder.build();
   } catch (error) {
-    // A failure to launch the Build_Watcher: rethrow so the bin reports
-    // `[dev] failed to start the build watcher: <reason>` and exits non-zero. No
-    // Overseer child was spawned — the spawn is downstream of a clean compile.
+    // The watcher never started. Rethrow unframed for the caller to frame; no
+    // Overseer child exists to clean up.
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(reason);
   }
 
-  // -- Signal handling (design 4c "Signals") --------------------------------
+  // -- Signal handling ------------------------------------------------------
   //
-  // SIGINT / SIGTERM raise a `signal` event; the decision core turns that into
-  // `stop-overseer` (if a child exists) then `stop-watcher`, and stops driving.
-  // After the child has exited and the watchers are closed, the process exits 0.
+  // SIGINT / SIGTERM raise a `signal` event; the core turns it into a stop of the
+  // child then of the watchers, and stops driving. The process exits 0 once the
+  // child has gone and the watchers are closed (R1.6).
   function onSignal(signal: "SIGINT" | "SIGTERM"): void {
     const hadChild = state.overseer !== "none";
     dispatch({ kind: "signal", signal });
-    // If no child was alive, nothing will fire `exit`, so exit now that the
-    // watchers are closed. Otherwise the child's `exit` handler above runs the
-    // (now no-op) decision and the process is free to exit once it settles.
+    // With no child alive nothing will fire `exit`, so exit here instead.
     if (!hadChild) {
       process.exit(0);
     } else {
-      // Exit once the child has gone; poll cheaply on the next tick since the
-      // exit handler clears `child`.
       const waitForExit = (): void => {
         if (child === null) {
           process.exit(0);
@@ -900,47 +750,26 @@ export function runDevSupervisor(
 }
 
 // ---------------------------------------------------------------------------
-// 4d. The CLI entry (design "4d. The bin and its CLI entry function").
-//
-// The layer between the `dev-supervisor` bin and the shell above. It exists so
-// the bin can be a one-liner — a single import and a single call — exactly like
-// its two siblings (`generate-registry`, `build-image-tree`), whose functions
-// likewise own their environment defaulting and their exit behavior. All CLI
-// policy lives here; the bin layer holds none.
+// The CLI entry. This layer exists so the dev-supervisor bin can be one import and
+// one call, like its siblings generate-registry and build-image-tree. All CLI policy
+// lives here: environment defaulting, error framing, exit statuses.
 
 /**
- * The `dev-supervisor` bin's entry point: derive the Project_List for the
- * current `MICROSERVICES` Selector and start the Dev_Server shell, owning the
- * process-level failure reporting and exit statuses for both (R1.4, R1.5, R2.4).
+ * This function starts a dev session for the current `MICROSERVICES` value: it
+ * derives the project list, then hands it to the shell. Called from
+ * src/bin/dev-supervisor.ts; it owns both steps' failure reporting and exit statuses
+ * (R1.4, R1.5, R2.4).
  *
- * Ordering is a guarantee, not an accident: the Project_List is derived
- * **before**, and separately from, starting the shell, so a bad Selector exits 1
- * without a Build_Watcher or an Overseer ever existing.
- *
- * The two failure paths report differently, and both are observable contracts
- * preserved exactly:
- *
- * - A **Selector failure** reaches stderr **verbatim**, with no prefix added
- *   here. {@link devProjectList} / {@link projectListFrom} already produce
- *   prefixed messages — `[selector:unmatched]`, `[selector:empty]`,
- *   `[shared:unresolved]` — and re-wrapping one as a watcher-launch failure
- *   would corrupt the contract R2.4 states. The dev path therefore fails on a
- *   bad Selector with exactly the message an image build fails with.
- * - A **Build_Watcher launch failure** is framed as
- *   `[dev] failed to start the build watcher: <reason>` (design "Common_Startup
- *   step failure"). {@link runDevSupervisor} throws unframed for this case, so
- *   this function is the single author of the `[dev]` framing. No Overseer child
- *   exists to clean up: the spawn is downstream of a clean compile, so a watcher
- *   that never launched leaves nothing behind.
- *
- * Both exit non-zero with status 1. On success the function does not return —
- * {@link runDevSupervisor} lets the event loop drive the session until a signal
- * ends it.
+ * The list is derived before, and separately from, starting the shell, so a bad
+ * `MICROSERVICES` value exits 1 with no watcher and no Overseer ever existing. Its
+ * message reaches stderr verbatim, because {@link projectListFrom}'s messages carry
+ * their own prefixes and the dev path fails with exactly the text an image build
+ * fails with (R2.4). A watcher that fails to start is framed here instead. Both
+ * exit 1, and on success this function does not return.
  */
 export function runDevSupervisorCli(): void {
-  // Deriving the Project_List lists `packages/microservices/` once and resolves
-  // the Selector. `devProjectList()` defaults its selector to
-  // `process.env.MICROSERVICES`, so no environment reading happens in the bin.
+  // Deriving the list resolves the selector and lists the microservice directory
+  // once. It defaults to `process.env.MICROSERVICES`, so the bin reads nothing.
   let projectList: readonly string[];
   try {
     projectList = devProjectList();
@@ -950,7 +779,6 @@ export function runDevSupervisorCli(): void {
     process.exit(1);
   }
 
-  // Start the Build_Watcher and own the Overseer child.
   try {
     runDevSupervisor(projectList, process.env);
   } catch (error) {

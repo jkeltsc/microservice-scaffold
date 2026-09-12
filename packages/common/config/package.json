@@ -8,6 +8,7 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest --run --passWithNoTests",
+    "test:types": "vitest --run --typecheck --typecheck.tsconfig=tsconfig.test.json",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
