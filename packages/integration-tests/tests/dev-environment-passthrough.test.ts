@@ -113,20 +113,23 @@ describe("Dev_Server environment pass-through (Property 6)", () => {
         );
       }
 
-      // The enabled microservice answers at its mount root (R8.1: its Toggle
-      // reached the Overseer as "true").
+      // The enabled microservice is dispatched to at its Mount_Root (R8.1: its
+      // Toggle reached the Overseer as "true"). Liveness probe (R13.12): assert
+      // `status !== 404` at the Mount_Root and nothing else — no body, no content
+      // type, no per-method status.
       const enabled = await fetch(`${HAPPY_BASE_URL}${ENABLED_PATH}`);
-      expect(enabled.status).toBe(200);
-      expect(enabled.headers.get("content-type")).toMatch(/application\/json/);
-      const enabledBody = (await enabled.json()) as Record<string, unknown>;
-      expect(enabledBody).toEqual({
-        "microservice-name": "microservice1",
-        path: ENABLED_PATH,
-      });
+      expect(enabled.status).not.toBe(404);
+      await enabled.text();
 
-      // The disabled microservice's path 404s: it is registered but not mounted,
-      // so its subtree falls through to the Overseer's 404 (R8.1: its Toggle
-      // reached the Overseer as "false", unaltered — R8.2).
+      // The disabled microservice's path answers 404 (R8.1: its Toggle reached
+      // the Overseer as "false", unaltered — R8.2).
+      //
+      // Recorded note (R13.13): microservice1 is enabled at its Mount_Root "/",
+      // so it owns the whole origin. This 404 at /microservice2 is therefore
+      // Microservice1's OWN — returned under R7.14 because Microservice1 owns
+      // that path when microservice2 is not mounted — and NOT the Overseer's
+      // catch-all, which Microservice1's "/" mount makes unreachable. The
+      // observed status is unchanged; only its source is.
       const disabled = await fetch(`${HAPPY_BASE_URL}${DISABLED_PATH}`);
       expect(disabled.status).toBe(404);
       await disabled.text();

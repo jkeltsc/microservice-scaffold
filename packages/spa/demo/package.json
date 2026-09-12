@@ -1,0 +1,19 @@
+{
+  "name": "@microservices/demo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "//exports": "The `exports` map is this sample's half of the chosen Spa_Resolution_Pair (pair A). It makes import.meta.resolve('@microservices/demo') succeed and point inside dist/ whether or not the bundle has been built, because `exports` resolution does not stat its target. It also hardens the no-static-import rule: a tsc project that imported the package would resolve to an .html file and fail to parse. No `main` and no `types` are declared on purpose: a Spa_Package's category contract is a non-empty scripts.build alone, and a barrel would advertise an API the import-discipline check forbids anyone from importing. No @microservices-scoped dependency is declared at all, which keeps the Demo_Spa a true sink.",
+  "exports": {
+    ".": "./dist/index.html"
+  },
+  "scripts": {
+    "build": "vite build",
+    "test": "vitest --run",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "vite": "8.3.0"
+  }
+}

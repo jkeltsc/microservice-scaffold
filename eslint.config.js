@@ -66,6 +66,23 @@ export default tseslint.config(
     },
   },
 
+  // Browser globals for the Demo_Spa's source, scoped to the `spa` category.
+  // The Demo_Spa is the only package whose code runs in a browser, so it is the
+  // only place `document`, `window`, and `fetch` are legitimate globals. This
+  // block is scoped by `packages/spa/*/…` rather than `packages/spa/demo/…` so a
+  // second SPA under `packages/spa/` needs no further edit here. Every package
+  // outside `packages/spa/` keeps the global set it has today — no browser
+  // globals are granted anywhere else. Placed before the trailing `prettier`
+  // entry so Prettier still wins on formatting.
+  {
+    files: ["packages/spa/*/src/**/*.ts", "packages/spa/*/*.config.ts"],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+      },
+    },
+  },
+
   // Disable stylistic rules that conflict with Prettier. Must come last.
   prettier,
 );

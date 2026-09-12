@@ -245,3 +245,35 @@ export const arbHttpMethodNonGet: fc.Arbitrary<string> = fc.constantFrom(
   "PATCH",
   "OPTIONS",
 );
+
+/**
+ * An HTTP method drawn from the FULL set, GET and HEAD included.
+ *
+ * Both generators exist because the properties that draw from them ask
+ * different questions:
+ *
+ * - The 405 method-policy property quantifies over the non-GET subset
+ *   (`arbHttpMethodNonGet`), because the `Allow`-header contract only governs
+ *   methods a served path does *not* answer. That generator already documents
+ *   why HEAD is excluded from the subset: Express routes HEAD through the
+ *   registered GET handler, so HEAD returns the 200 GET response (headers only)
+ *   rather than 405 and is not subject to the 405/Allow contract.
+ * - A method-agnostic 404 property and a router-totality property must instead
+ *   cover the methods a router *does* serve as well — GET and HEAD included —
+ *   because "answers 404 at every unserved path, for any method" and "the
+ *   router is total over its Owned_Subtree, for any method" are only true if
+ *   the served methods are in scope too. Those properties draw from
+ *   `arbHttpMethod`.
+ *
+ * Keeping both as named generators means each property states, by its choice of
+ * generator, exactly which method space it ranges over.
+ */
+export const arbHttpMethod: fc.Arbitrary<string> = fc.constantFrom(
+  "GET",
+  "HEAD",
+  "POST",
+  "PUT",
+  "DELETE",
+  "PATCH",
+  "OPTIONS",
+);

@@ -36,8 +36,10 @@ Only these seven entries — the four Framework_Singleton directories and the th
    ├─ build-tools/           # Framework_Singleton: registry generator, dependency resolver, image-tree assembler
    ├─ integration-tests/     # Framework_Singleton: cross-package integration test suite
    ├─ common/                # Namespace_Container for the common Consumer_Category (consumer-written shared libraries)
-   │  └─ config/             # Common_Package: config data/shape/helper consumed by microservice2 + microservice3
-   ├─ spa/                   # Namespace_Container for the spa Consumer_Category (bundler-built frontends); ships empty
+   │  ├─ config/             # Common_Package: config data/shape/helper consumed by microservice2 and by extended-config
+   │  └─ extended-config/    # Common_Package: widens config's settings block; depends on @microservices/config, consumed by microservice3
+   ├─ spa/                   # Namespace_Container for the spa Consumer_Category (bundler-built frontends)
+   │  └─ demo/               # Spa_Package: the Demo_Spa, first member of the spa category; served by microservice1 at its Mount_Root `/`
    └─ microservices/         # Namespace_Container for the microservice Consumer_Category
       ├─ microservice1/      # reference microservice module
       ├─ microservice2/
@@ -100,7 +102,8 @@ A Common_Package is imported by consumers **by package name only** (`@microservi
 - **Barrel:** not required. Instead, the `package.json` **must declare a non-empty `scripts.build`** — that is the Spa_Package's category contract, and a missing build script fails the build.
 - **Dependency direction:** same leaf discipline as common (third-party, other consumer libraries, Framework_Singletons; never a peer or the Overseer).
 - **Ships into an image:** yes, **iff** it is in the Required_Dependencies.
-- **Build_Kind:** **Bundler_Project** — built by invoking its own `npm run build`, **never** as a root of `tsc --build`. `packages/spa/` currently ships empty; the category and its tooling exist so that adding the first SPA needs no Build_System change.
+- **Build_Kind:** **Bundler_Project** — built by invoking its own `npm run build`, **never** as a root of `tsc --build`. `packages/spa/demo/` is the category's first member (the Demo_Spa); the category and its tooling were built so that adding a SPA needs no Build_System change.
+- **Locating the Spa_Root:** a microservice serving a Spa_Package locates the Spa_Root (the Spa_Package's built `dist/`) through a **run-time module-resolution call**, not through a static import. Two Spa_Resolution_Pairs are permitted, and they are mutually exclusive: an `exports` map in the Spa_Package's manifest paired with resolving the package by its bare `@microservices/<name>` name, or no `main`/`exports` paired with resolving the Spa_Package's `package.json`. The manifest half and the resolution half of the **chosen** pair must match — mixing halves fails to resolve — and the choice belongs to the microservice and the Spa_Package that form the pair, not to the framework. The Build_System constrains neither half: a Spa_Package's category contract is a non-empty `scripts.build` alone, and the Repo_Invariant_Checker does not inspect a specifier passed to a run-time module-resolution call. A user adding a second Spa_Package finds this convention here in steering rather than by reading the Demo_Spa's source.
 
 ## Common_Package guidance (replaces the former "Shared packages" section)
 
@@ -131,6 +134,17 @@ A microservice package MUST:
 - Export an Express router (`express.Router()`) whose route table is defined by the microservice; the Overseer mounts this router at the microservice's declared Microservice_Path so the microservice owns the entire subtree rooted at that path.
 - Not import from any peer microservice package.
 - Not import from the Overseer package.
+
+### Subtree ownership
+
+A microservice owns the subtree rooted at its exported Microservice_Path and answers **every** request in that subtree from its own router — including the status it chooses for a path it does not serve and for a method it does not serve — leaving no such request unhandled for the Overseer to answer. The Overseer's responsibilities are exactly two: mount the enabled Selected_Microservices at their exported Microservice_Paths, and respond 404 where no mounted microservice matches the path. It is not a fallback handler for a path a microservice owns but chose not to answer.
+
+The obligation fixes only *whether* a microservice answers; the status, the headers, and the body it answers with stay that microservice's own choice. The three reference microservices are worked examples that choose deliberately differently:
+
+- **Microservice1** (mounted at `/`) answers a method it does not serve with `405 Allow: GET, HEAD`, and otherwise serves the Demo_Spa (200), a `503` at its Mount_Root while the Spa_Root is absent, and a `404` for a GET or HEAD naming no file inside the Spa_Root.
+- **Microservice2** and **Microservice3** answer a method they do not serve with `405 Allow: GET`, serve their config payloads at `/config`, and answer `404` from their own routers for any other path in their subtrees.
+
+As a consequence, a microservice mounted at `/` owns the whole origin, so the Overseer's catch-all is unreachable in a Container containing one. That is the principle's intended outcome, not a defect.
 
 ## Build-time registry
 

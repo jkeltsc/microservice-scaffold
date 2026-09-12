@@ -37,6 +37,13 @@ describe("Specific_Container 404 behavior (microservice1 + microservice2, micros
     );
   });
 
+  // Recorded note (R13.13): microservice1 is mounted at "/", so it owns the
+  // whole origin. In this Container, which holds no microservice3, the 404 these
+  // two probes observe for microservice3's path (and a path under it) is
+  // Microservice1's OWN — returned under R7.14 because Microservice1 owns that
+  // path in a Container holding no microservice3 — and NOT the Overseer's
+  // catch-all, which Microservice1's "/" mount makes unreachable. The observed
+  // status is unchanged; only its source is. The probes assert the status alone.
   it("GET /microservice3/anything -> 404 (absent from the Container) (R3.3, R6.2)", async () => {
     const res = await request(server).get("/microservice3/anything");
     expect(res.status).toBe(404);
@@ -47,12 +54,11 @@ describe("Specific_Container 404 behavior (microservice1 + microservice2, micros
     expect(res.status).toBe(404);
   });
 
-  it("GET / -> 200 (microservice1 enabled) (R3.2)", async () => {
+  // Liveness probe: microservice1 is mounted at its Mount_Root "/", so a request
+  // there is dispatched to its router. Assert `status !== 404` and nothing else
+  // — no body, no content type, no per-method status (R13.12).
+  it("GET / -> dispatched to microservice1 (status !== 404) (R3.2)", async () => {
     const res = await request(server).get(modules.microservice1.path);
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      "microservice-name": "microservice1",
-      path: modules.microservice1.path,
-    });
+    expect(res.status).not.toBe(404);
   });
 });

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@microservices/contracts": "*",
+    "@microservices/demo": "*",
     "express": "^5.1.0"
   },
   "devDependencies": {

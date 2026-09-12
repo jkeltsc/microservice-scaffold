@@ -70,4 +70,35 @@ export default defineWorkspace([
       ],
     },
   },
+  {
+    test: {
+      ...sharedTest,
+      name: 'common',
+      root: './packages/common',
+      // Every Common_Package subdirectory (e.g. config, extended-config) owns
+      // its own tests. Globbed the same way the microservices project globs its
+      // members, so a new package under packages/common/ is picked up with no
+      // further edit.
+      include: [
+        '*/tests/**/*.{test,property.test}.ts',
+        '*/src/**/*.{test,property.test}.ts',
+      ],
+    },
+  },
+  {
+    test: {
+      ...sharedTest,
+      name: 'spa',
+      root: './packages/spa',
+      // Every Spa_Package subdirectory (e.g. demo) owns its own tests, run in
+      // the shared Node environment. A Spa_Package declares no vitest `test`
+      // block in its bundler config, so the default node environment applies
+      // (R11.3). Globbed like the other container projects so a new package
+      // under packages/spa/ is picked up with no further edit.
+      include: [
+        '*/tests/**/*.{test,property.test}.ts',
+        '*/src/**/*.{test,property.test}.ts',
+      ],
+    },
+  },
 ]);

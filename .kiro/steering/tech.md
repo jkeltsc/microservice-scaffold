@@ -31,6 +31,27 @@
 - Property-based tests use `fast-check` where correctness properties are defined.
 - Every package owns its own test suite. Cross-package integration tests live in a dedicated `packages/integration-tests` (or similar) package.
 
+### A test MUST NOT mutate the checked-out tree
+
+**No test writes to the working tree, and no test uses git to undo what it wrote.** This is a hard prohibition, not a preference, and `packages/integration-tests/tests/worktree-safety-guard.test.ts` enforces it mechanically.
+
+Specifically forbidden in any test:
+
+- **Any destructive git command** — `git checkout -- <path>`, `git reset`, `git clean`, `git stash`. `git checkout -- <path>` does **not** "undo the test's edit": it restores the file to its **committed** content, discarding every uncommitted change in that file, the developer's work included. In this repository a `restoreWorktreeFile()` teardown helper doing exactly this destroyed in-progress work **twice**, and silently — the suite passed each time, and the loss surfaced later as an unrelated-looking failure. That helper is deleted and must not return under any name.
+- **Editing a tracked source file** under `packages/` — a microservice's `src/index.ts`, a manifest, a config.
+- **Creating a package, directory, or `node_modules` symlink** in the checked-out tree. An untracked package pollutes `git status`, workspace discovery, and every `--workspaces` script; a symlink outlives a crashed run as a dangling link.
+
+**The sanctioned pattern instead: `pristineWorktree()`** from `packages/integration-tests/tests/helpers.ts`. It lists `git ls-files --cached --others --exclude-standard` — tracked plus untracked-but-not-gitignored files, so the copy **captures uncommitted edits exactly as they are on disk**, which is precisely what a git-based restore throws away — tars them into an OS temp directory, and runs `npm ci` there. A test then:
+
+1. materialises one copy in `beforeAll` (the `npm ci` is the slow step, so reuse it across examples) and skips with the returned `reason` when `available === false`;
+2. re-roots every path it writes at the returned `dir`, and passes `cwd: dir` to `startDevSession` (or whatever it spawns);
+3. captures original file contents by reading them **from that copy**, and restores them mid-run — when an example needs the original back — by writing those captured bytes with `writeFileSync`, never through git;
+4. tears down with `cleanup()`, which removes the temp tree. There is nothing in the real tree to undo.
+
+`packages/integration-tests/tests/dev-error-recovery.test.ts` and `dev-session-scope.test.ts` are the worked examples: both mutate microservice sources, and one synthesises a whole microservice package plus its workspace symlink, entirely inside their own copy.
+
+Two narrow things a test **may** write in place, because both are gitignored generated output the repository already treats as churn: a package's `dist/` and `*.tsbuildinfo`, and the generated registry at `packages/overseer/src/generated/microservice-registry.ts` (snapshot and rewrite it if a later suite depends on its contents). Everything else goes in the copy.
+
 ## HTTP
 
 - Express (v5) is the HTTP framework. Each microservice exports an Express router; the Overseer mounts each enabled router at its declared microservice path.
@@ -38,7 +59,7 @@
 
 ## Tooling
 
-- **Build_Kind is a function of package category alone** — it reads no manifest field. Every Framework_Singleton (`contracts`, `overseer`, `build-tools`, `integration-tests`), every Microservice_Package, and every Common_Package is a **Tsc_Project**: built through `tsc`, appearing as a root of the single selective `tsc --build` over the ordered roots. A **Spa_Package** (a package under `packages/spa/`) is a **Bundler_Project**: built through its OWN `npm run build` in its own directory, and is NEVER a root of `tsc --build`. Required Spa builds run first, each in its own directory; the single `tsc --build` pass runs only after every one of them exits zero.
+- **Build_Kind is a function of package category alone** — it reads no manifest field. Every Framework_Singleton (`contracts`, `overseer`, `build-tools`, `integration-tests`), every Microservice_Package, and every Common_Package is a **Tsc_Project**: built through `tsc`, appearing as a root of the single selective `tsc --build` over the ordered roots. A **Spa_Package** (a package under `packages/spa/`) is a **Bundler_Project**: built through its OWN `npm run build` in its own directory, and is NEVER a root of `tsc --build`. The single `tsc --build` pass over the ordered Tsc_Project roots is the FIRST phase, and the required Spa_Package bundler builds are the SECOND, each still in its own directory, entered only after that pass exits with status 0 — because a Spa_Package's bundler may read a Tsc_Project's compiled output while no Tsc_Project ever reads a Spa_Package's output.
 - The `spa` category is the documented design decision that adds a bundler to the scaffold: a Spa_Package brings its own bundler build (e.g. Vite) via its `npm run build`. Outside that category, TypeScript builds go through `tsc` (project references / the solution builder); no other bundlers unless a further spec design decision adds one.
 - ESLint + Prettier for style; Prettier owns formatting, ESLint owns correctness rules.
 - Every package exposes the same npm scripts: `build`, `test`, `lint`, `typecheck`.

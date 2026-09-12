@@ -404,26 +404,19 @@ export function pristineWorktree(): PristineWorktreeResult {
   return { available: true, dir, cleanup };
 }
 
-/**
- * Restore a working-tree source file a session test mutated, back to its
- * committed content, via `git checkout -- <path>`. Call this in a test's
- * teardown for any tracked source file the test edited.
- *
- * `dist/` and the generated registry
- * (`packages/overseer/src/generated/microservice-registry.ts`) are gitignored
- * and expected to churn during a session, so they are intentionally NOT
- * restored — only tracked source files a test deliberately edits need this.
- *
- * `filePath` may be absolute or relative to {@link repoRoot}. Best-effort: a
- * failure (e.g. `git` absent) is swallowed so it never masks a test's real
- * assertion, mirroring the restore step in the existing start-parity suite.
- */
-export function restoreWorktreeFile(filePath: string): void {
-  const relative = filePath.startsWith(repoRoot)
-    ? filePath.slice(repoRoot.length).replace(/^[/\\]+/, "")
-    : filePath;
-  spawnSync("git", ["checkout", "--", relative], {
-    cwd: repoRoot,
-    stdio: "ignore",
-  });
-}
+// DELIBERATELY ABSENT: a `restoreWorktreeFile()` helper.
+//
+// This module used to export one — a `git checkout -- <path>` wrapper a session
+// test called in teardown after editing a tracked source in the REAL working
+// tree. It is gone, and nothing like it may come back.
+//
+// `git checkout -- <path>` restores a file to its COMMITTED content, so it does
+// not "undo the test's edit" — it discards every uncommitted change in that
+// file, the test's own and the developer's alike. In this repository it silently
+// destroyed in-progress work twice.
+//
+// A test that needs to mutate a source file mutates its OWN copy: call
+// {@link pristineWorktree}, write inside the returned `dir`, and restore (if the
+// test needs the original back mid-run) by writing back bytes it captured from
+// that copy with `writeFileSync`. `dev-error-recovery.test.ts` and
+// `dev-session-scope.test.ts` are the worked examples.

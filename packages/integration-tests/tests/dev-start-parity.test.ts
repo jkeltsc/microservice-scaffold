@@ -333,10 +333,12 @@ describe("Property 11: Production_Start is unchanged (execution, pristine tree)"
       expect(idxReady).toBeGreaterThan(idxRegistered);
 
       // The Overseer answers over the wire from the compiled artifacts.
+      // Liveness probe (R13.12): microservice1 is mounted at its Mount_Root "/",
+      // so a request there is dispatched to its router. Assert `status !== 404`
+      // and nothing else — no body, no content type, no per-method status.
       const res = await fetch(`${BASE_URL}/`);
-      expect(res.status).toBe(200);
-      const body = (await res.json()) as Record<string, unknown>;
-      expect(body).toEqual({ "microservice-name": "microservice1", path: "/" });
+      await res.text();
+      expect(res.status).not.toBe(404);
 
       // One-shot: Production_Start terminates when its Overseer exits, exiting
       // with the Overseer's status, and never restarts or watches (R11.6).

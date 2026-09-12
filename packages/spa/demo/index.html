@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Microservice Scaffold demo</title>
+  </head>
+  <body>
+    <main>
+      <h1>Microservice Scaffold demo</h1>
+      <p>Call a microservice through the Overseer and read what comes back.</p>
+
+      <!--
+        Exactly two Service_Buttons, in document order "Microservice 2" then
+        "Microservice 3" (R9.1). Each is a native `button type="button"`, so it is
+        keyboard reachable in document order with no `tabindex`, and its accessible
+        name is computed from its text content — no `aria-label` overrides it (R9.1,
+        R9.7). The ids let main.ts (task 8.6) wire click handlers.
+      -->
+      <p>
+        <button id="call-microservice2" type="button">Microservice 2</button>
+        <button id="call-microservice3" type="button">Microservice 3</button>
+      </p>
+
+      <!--
+        Exactly three display fields AFTER both buttons, in the order
+        request -> status -> body (R9.2). The Request_Field and Status_Field are
+        native `output` elements, each programmatically associated with a visibly
+        rendered `<label for=...>` (R9.3). Each field starts holding no text (R9.8).
+
+        No `aria-live` attribute appears anywhere in this document, and that is
+        deliberate: an `output` maps to the ARIA `status` role, which is an implicit
+        polite live region, so the Request_Field and Status_Field announce their own
+        updates with no explicit attribute declared (R9.3). An `output`'s content is
+        a text node — the thing assistive technology can announce — whereas a
+        `textarea`'s value is not. The Body_Field is deliberately left unannounced
+        (R9.5): reading a multi-kilobyte JSON body aloud on every request would be
+        hostile rather than helpful.
+      -->
+      <p><label for="request">Request</label> <output id="request"></output></p>
+      <p><label for="status">Status</label> <output id="status"></output></p>
+
+      <!--
+        The Body_Field is the one `textarea`, carrying `readonly` (NOT `disabled`) so
+        it stays focusable, keyboard reachable, scrollable, and selectable for a body
+        larger than the control (R9.4). Its `<label for="body">` is programmatically
+        associated and visibly rendered. It ships with empty content (R9.8).
+      -->
+      <p><label for="body">Response body</label></p>
+      <textarea id="body" rows="16" cols="72" readonly></textarea>
+    </main>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

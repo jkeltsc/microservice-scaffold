@@ -73,8 +73,23 @@ const ASSEMBLE_TIMEOUT_MS = 180_000;
 /**
  * The Pre_Change_Baseline scoped entry sets from the design's "BuildPlan for
  * the two shipped Selectors" table. `contracts` is the always-staged
- * Framework_Singleton; `config` is present exactly when it is a required dependency
- * (any Selector including `microservice2` or `microservice3`).
+ * Framework_Singleton; a Common_Package is present exactly when it is a
+ * required dependency of a Selected Microservice (directly or transitively).
+ *
+ * Since Microservice3 switched from a direct `@microservices/config` dependency
+ * to `@microservices/extended-config` (which itself depends on
+ * `@microservices/config`), any Selector reaching Microservice3 now stages BOTH
+ * `config` and `extended-config` (design worked staged sets: `ms3 →
+ * extended-config → config` stages `{config, extended-config}`). Of the two
+ * shipped Selectors, only `*` reaches Microservice3, so only its set gains
+ * `extended-config`; `microservice1,microservice2` never reaches Microservice3
+ * and its Common_Package set stays `{config}` (config comes in via Microservice2).
+ *
+ * And since Microservice1 now serves the Demo_Spa, it declares
+ * `@microservices/demo` in its Required_Dependencies (R7.1), so every Selector
+ * that selects Microservice1 stages the Spa_Package `demo` as a real directory
+ * at `node_modules/@microservices/demo`. Both shipped Selectors select
+ * Microservice1, so BOTH staged sets gain `demo`.
  */
 const BASELINE = {
   "*": {
@@ -82,6 +97,8 @@ const BASELINE = {
     scopedEntries: [
       "config",
       "contracts",
+      "demo",
+      "extended-config",
       "microservice1",
       "microservice2",
       "microservice3",
@@ -89,7 +106,13 @@ const BASELINE = {
   },
   "microservice1,microservice2": {
     selected: ["microservice1", "microservice2"],
-    scopedEntries: ["config", "contracts", "microservice1", "microservice2"],
+    scopedEntries: [
+      "config",
+      "contracts",
+      "demo",
+      "microservice1",
+      "microservice2",
+    ],
   },
 } as const;
 

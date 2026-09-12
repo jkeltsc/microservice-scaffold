@@ -1,0 +1,1150 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Raise the root Node floor and confirm the `workspaces` globs already cover both new packages": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216417313
+      },
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216432007
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216473549
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216484290
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216712190
+      }
+    ],
+    "1.2 Add the browser-globals ESLint block, scoped to the `spa` category": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216417393
+      },
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216435394
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216473616
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216487600
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216713572
+      }
+    ],
+    "1.3 Add an all-methods HTTP arbitrary to the shared test-support module": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216417449
+      },
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216438908
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216473691
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216489148
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216714572
+      }
+    ],
+    "2.1 Create the `packages/common/extended-config/` skeleton": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216417483
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216473744
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216489757
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216715623
+      }
+    ],
+    "2.2 Implement the barrel at `src/index.ts`": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216417521
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216473778
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216725582
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216794796
+      }
+    ],
+    "2.3 Write the barrel-surface tests, value-level and type-level": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216417561
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216473810
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216801205
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216989403
+      }
+    ],
+    "2.4 Write the Extended_Config_Payload property tests": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216417613
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216473857
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216802124
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216988429
+      }
+    ],
+    "2.5 Write the Extended_Config_Block content and manifest example tests": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216417648
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216473893
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216803411
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216991761
+      }
+    ],
+    "2.6 Update the two repository-mirror oracles for the new Common_Package": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216417684
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216473929
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216804389
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216990889
+      }
+    ],
+    "2.7 Extend the Common_Package convention checks to `extended-config`": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216417738
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474006
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216805414
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216987103
+      }
+    ],
+    "3. Checkpoint — step 2 verification gate": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216417789
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474059
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217006689
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217232711
+      }
+    ],
+    "4.1 Swap Microservice3's shared-library dependency": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216417855
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474105
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216726686
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216795822
+      }
+    ],
+    "4.2 Rewrite Microservice3's router for the extended payload and Subtree_Ownership": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216417893
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474142
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217237420
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217315976
+      }
+    ],
+    "4.3 Rewrite Microservice3's property tests": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216417932
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474179
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217320925
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217486415
+      }
+    ],
+    "4.4 Write Microservice3's fixed-payload example tests": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216417971
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474217
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217324133
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217481987
+      }
+    ],
+    "4.5 Adopt Subtree_Ownership in Microservice2's router": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418009
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474258
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217324383
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217482851
+      }
+    ],
+    "4.6 Rewrite Microservice2's property tests": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418055
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474296
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217493161
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217864890
+      }
+    ],
+    "4.7 Write Microservice2's fixed-payload example tests": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418092
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474347
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217494017
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217865908
+      }
+    ],
+    "4.8 Update the two repository-mirror oracles for Microservice3's changed edge": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418140
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474417
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217324565
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217486534
+      }
+    ],
+    "4.9 Update the Integration_Suite's config-dependency and staged-set expectations": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418229
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474475
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217325341
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217484569
+      }
+    ],
+    "5. Checkpoint — step 3 verification gate": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418264
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474513
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789218067978
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789223501468
+      }
+    ],
+    "6.1 Rewrite `endpoint-contract.test.ts` as a framework-scope mount-dispatch suite": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418298
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474559
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217495450
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217862424
+      }
+    ],
+    "6.2 Reduce the six liveness probes to the Mount_Root rule": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418331
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474597
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217496366
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217863858
+      }
+    ],
+    "6.3 Retarget the two mutation anchors away from Microservice1's identifier response": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418364
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474641
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217497551
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217861565
+      }
+    ],
+    "6.4 Add the Integration_Suite scope guard": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418397
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474679
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217870871
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789218062152
+      }
+    ],
+    "7. Checkpoint — step 4 verification gate": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418434
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474724
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789218069005
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789223502535
+      }
+    ],
+    "8.1 Create the `packages/spa/demo/` skeleton, bundler pin, and configs": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418473
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474774
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789223511049
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789223646646
+      }
+    ],
+    "8.2 Write the Demo_Page markup at `index.html`": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418507
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474823
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789223652469
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789223777225
+      }
+    ],
+    "8.3 Implement `src/result-formatter.ts`": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418548
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474906
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789223651538
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789223776197
+      }
+    ],
+    "8.4 Write the Result_Formatter property tests": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418597
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474946
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789223784289
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789224054557
+      }
+    ],
+    "8.5 Write the Result_Formatter example tests": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418675
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216474983
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789223785147
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789224053453
+      }
+    ],
+    "8.6 Implement `src/main.ts` — the DOM wiring": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418713
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475024
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789223784027
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789224057244
+      }
+    ],
+    "8.7 Write the Demo_Page markup and wiring tests": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418746
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475063
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789224074124
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789224388623
+      }
+    ],
+    "8.8 Update the two repository-mirror oracles for the first Spa_Package": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418783
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475103
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789223786677
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789224057836
+      }
+    ],
+    "8.9 Invert the \"spa is empty\" assertions in the Integration_Suite": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418823
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475146
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789223787342
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789224057322
+      }
+    ],
+    "8.10 Write the bundle-output shape integration test": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418858
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475195
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789224074942
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789224387686
+      }
+    ],
+    "8.11 Write the Spa_Package convention and Node-floor tests": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418899
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475239
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789224072736
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789224386628
+      }
+    ],
+    "9. Checkpoint — step 5 verification gate": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216418992
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475279
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789224394648
+      }
+    ],
+    "10.1 Declare the Demo_Spa dependency in Microservice1's manifest": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419029
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475359
+      }
+    ],
+    "10.2 Create `src/spa-root.ts` — resolve the Spa_Root exactly once": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419063
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475404
+      }
+    ],
+    "10.3 Create `src/static-router.ts` — `createSpaRouter(spaRoot)`": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419097
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475442
+      }
+    ],
+    "10.4 Rewire `src/index.ts` to the resolved Spa_Root": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419142
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475479
+      }
+    ],
+    "10.5 Rewrite Microservice1's property tests for method policy and totality": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419190
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475522
+      }
+    ],
+    "10.6 Write Microservice1's Spa-serving suite": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419230
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475562
+      }
+    ],
+    "10.7 Write Microservice1's absent-Spa_Root suite": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419273
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475599
+      }
+    ],
+    "10.8 Update the two repository-mirror oracles for Microservice1's new edge": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419312
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475641
+      }
+    ],
+    "10.9 Check the synthesised probe microservice in `dev-session-scope.test.ts`": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419359
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475683
+      }
+    ],
+    "11. Checkpoint — step 6 verification gate": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419443
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475749
+      }
+    ],
+    "12.1 Extend the staged-set integration suite for both samples": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419480
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475821
+      }
+    ],
+    "12.2 Write the Dependency_Resolver determinism property test": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419513
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475859
+      }
+    ],
+    "12.3 Write the peer-shadowing integration test": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419559
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475905
+      }
+    ],
+    "12.4 Write the Overseer-startup-with-absent-Spa_Root integration test": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419597
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475945
+      }
+    ],
+    "12.5 Extend the clean-tree build-order integration test": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419639
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216475987
+      }
+    ],
+    "12.6 Extend the script-wiring and release-workflow tests": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419674
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216476026
+      }
+    ],
+    "12.7 Write the Container end-to-end test for the extended payload": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419714
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216476071
+      }
+    ],
+    "13. Checkpoint — step 7 verification gate": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419758
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216476110
+      }
+    ],
+    "14.1 Update `README.md` for both samples and for Subtree_Ownership": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419797
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216476146
+      }
+    ],
+    "14.2 Update `.kiro/steering/structure.md`": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419876
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216476213
+      }
+    ],
+    "14.3 Correct the build-phase-order paragraph in `.kiro/steering/tech.md`": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419922
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216476271
+      }
+    ],
+    "15. Final checkpoint — full gate on a cold tree": [
+      {
+        "executionId": "2fb6c315-09e8-469d-8cda-dac66ff0e783",
+        "chatSessionId": "sess_746d1994-ac9c-459e-ba6d-d082cf230c97",
+        "timestamp": 1789216419959
+      },
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216476312
+      }
+    ],
+    "1. Step 1 — Additive groundwork": [
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216714621
+      }
+    ],
+    "2. Step 2 — The Extended_Config_Package (additive)": [
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789216991805
+      }
+    ],
+    "4. Step 3 — Microservice3's extended payload, and Subtree_Ownership for both peers": [
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789217865997
+      }
+    ],
+    "6. Step 4 — The framework/sample test boundary correction (precondition for step 6)": [
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789218062200
+      }
+    ],
+    "8. Step 5 — The Demo_Spa, the first Spa_Package (additive)": [
+      {
+        "executionId": "0ac8f68c-400a-4b3f-8477-d8da8c516059",
+        "chatSessionId": "sess_3ba05240-fcd3-460d-8c74-c7b072ddd4c0",
+        "timestamp": 1789224388671
+      }
+    ]
+  }
+}

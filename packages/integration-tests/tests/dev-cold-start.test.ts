@@ -74,13 +74,20 @@ const PROJECT_LIST_PACKAGES = [
 let pristine: PristineWorktreeResult | undefined;
 let session: DevSession | undefined;
 
-/** Poll the Overseer's mount root until it answers 200 or the deadline passes. */
+/**
+ * Poll the Overseer's Mount_Root until it dispatches (any status other than 404)
+ * or the deadline passes. This is a pristine `npm run dev` tree: by design F9 the
+ * Dev_Command never invokes a Spa build, so the Spa_Root is absent and
+ * microservice1's Mount_Root answers 503, not 200. The readiness signal is
+ * therefore "the Overseer is serving and dispatched this request", i.e.
+ * `status !== 404`, which holds in both the 200 and the 503 case.
+ */
 async function waitForServer(deadline: number): Promise<Response> {
   let lastError: unknown;
   while (Date.now() < deadline) {
     try {
       const res = await fetch(`${BASE_URL}/`);
-      if (res.ok) {
+      if (res.status !== 404) {
         return res;
       }
       await res.text();
@@ -90,7 +97,7 @@ async function waitForServer(deadline: number): Promise<Response> {
     await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error(
-    `Overseer did not answer 200 within timeout; last error: ${String(lastError)}`,
+    `Overseer did not dispatch at "/" within timeout; last error: ${String(lastError)}`,
   );
 }
 
@@ -197,17 +204,25 @@ describe("Dev_Server cold start (api-dev-server Property 8)", () => {
       });
 
       // R4.3, R4.4, R9.1: the Overseer answers a request from the cold-built,
-      // consistent Compiled_Tree. microservice1 mounts at "/" and returns its
-      // identifier body.
+      // consistent Compiled_Tree. microservice1 mounts at its Mount_Root "/".
+      //
+      // Liveness probe (R13.12): assert `status !== 404` at the Mount_Root and
+      // nothing else — no body, no content type, no per-method status. The rule
+      // is not merely tidy here: this suite materialises a PRISTINE worktree and
+      // drives `npm run dev`, which by design F9 never invokes a Spa build. Once
+      // Microservice1 serves the Demo_Page at "/", its Mount_Root answers 503 in
+      // this pristine tree (the Spa_Root is absent) rather than 200. A probe
+      // asserting 200 would fail; `status !== 404` holds in both the 200 and the
+      // 503 case, so the probe stays correct whether or not the bundle was built.
       const res = await waitForServer(Date.now() + 60_000);
-      expect(res.status).toBe(200);
-      const body = (await res.json()) as Record<string, unknown>;
-      expect(body).toEqual({ "microservice-name": "microservice1", path: "/" });
+      expect(res.status).not.toBe(404);
+      await res.text();
 
-      // A second enabled microservice also answers, confirming the whole
-      // selected set was compiled and mounted, not just the root one.
+      // A second enabled microservice also dispatches at its own Mount_Root,
+      // confirming the whole selected set was compiled and mounted, not just the
+      // root one. Same liveness rule: `status !== 404`.
       const ms2 = await fetch(`${BASE_URL}/microservice2`);
-      expect(ms2.status).toBe(200);
+      expect(ms2.status).not.toBe(404);
       await ms2.text();
 
       // R4.1, R9.1: the launch point is production's entrypoint. Assert it

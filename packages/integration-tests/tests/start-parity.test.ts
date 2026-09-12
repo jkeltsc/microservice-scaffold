@@ -176,12 +176,16 @@ describe("`npm start` local-parity integration (MICROSERVICES=microservice1)", (
         );
       }
 
-      // / serves 200 (microservice1 is enabled and mounted).
+      // Liveness probe: microservice1 is mounted at its Mount_Root "/", so a
+      // request there is dispatched to its router rather than the Overseer's
+      // catch-all. Assert `status !== 404` and nothing else — no body, no
+      // content type, no per-method status (R13.12). The Mount_Root is the
+      // probe point because under Subtree_Ownership a path *under* it can carry
+      // a legitimate 404 from the owning microservice, so only the Mount_Root
+      // distinguishes "the Overseer is serving" from "nothing is mounted here".
       const hello = await fetch(`${BASE_URL}/`);
-      expect(hello.status).toBe(200);
-      expect(hello.headers.get("content-type")).toMatch(/application\/json/);
-      const helloBody = (await hello.json()) as Record<string, unknown>;
-      expect(helloBody).toEqual({ "microservice-name": "microservice1", path: "/" });
+      await hello.text();
+      expect(hello.status).not.toBe(404);
 
       // /_registry no longer exists — it should 404.
       const registry = await fetch(`${BASE_URL}/_registry`);

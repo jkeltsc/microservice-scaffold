@@ -5,7 +5,7 @@
   "type": "module",
   "description": "A template repository for building small, HTTP-based Node.js microservices behind a single routing frontend (the Overseer).",
   "engines": {
-    "node": ">=22",
+    "node": ">=22.12.0",
     "npm": ">=10"
   },
   "workspaces": [

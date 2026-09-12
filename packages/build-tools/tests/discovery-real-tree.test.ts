@@ -10,12 +10,14 @@
 // that stops being read, or a framework directory that starts being discovered.
 //
 // The design's Data Models table is the oracle. Over the committed tree
-// `discoverPackages()` must yield exactly these four rows and no others:
+// `discoverPackages()` must yield exactly these six rows and no others:
 //
-//   packages/microservices/microservice1  microservice  @microservices/microservice1  tsc-project  [contracts]
-//   packages/microservices/microservice2  microservice  @microservices/microservice2  tsc-project  [config, contracts]
-//   packages/microservices/microservice3  microservice  @microservices/microservice3  tsc-project  [config, contracts]
-//   packages/common/config                common        @microservices/config         tsc-project  [contracts]
+//   packages/microservices/microservice1  microservice  @microservices/microservice1  tsc-project     [contracts, demo]
+//   packages/microservices/microservice2  microservice  @microservices/microservice2  tsc-project     [config, contracts]
+//   packages/microservices/microservice3  microservice  @microservices/microservice3  tsc-project     [contracts, extended-config]
+//   packages/common/config                common        @microservices/config         tsc-project     [contracts]
+//   packages/common/extended-config       common        @microservices/extended-config tsc-project    [config]
+//   packages/spa/demo                      spa           @microservices/demo           bundler-project []
 //
 // Two negatives the table calls out explicitly are asserted directly:
 //   - No framework directory (contracts, overseer, build-tools,
@@ -27,7 +29,10 @@
 //     (R2.10). (Its manifest is bin-only; the inverse case — a manifest that
 //     *does* declare main/types yet is still not discovered — is contracts and
 //     overseer, also asserted absent below.)
-//   - `packages/spa/` contributes no row (it is empty on the committed tree).
+//   - `packages/spa/` contributes exactly one row, the first Spa_Package
+//     `@microservices/demo`: a Bundler_Project (buildKind `bundler-project`)
+//     that declares no `@microservices`-scoped dependency, so its
+//     dependencySpecifiers are empty — a true sink.
 //
 // `discoverPackages()` resolves the Namespace_Containers as repo-relative
 // paths, so the test runs with the repository root as cwd regardless of whether
@@ -61,8 +66,10 @@ interface ExpectedRow {
 
 const CONTRACTS = "@microservices/contracts";
 const CONFIG = "@microservices/config";
+const EXTENDED_CONFIG = "@microservices/extended-config";
+const DEMO = "@microservices/demo";
 
-/** The four rows of the design's "Discovery over the current tree" table. */
+/** The six rows of the design's "Discovery over the current tree" table. */
 const EXPECTED_ROWS: readonly ExpectedRow[] = [
   {
     category: "microservice",
@@ -70,7 +77,11 @@ const EXPECTED_ROWS: readonly ExpectedRow[] = [
     packageDir: `${NAMESPACE_CONTAINER.microservice}/microservice1`,
     name: "@microservices/microservice1",
     buildKind: "tsc-project",
-    dependencySpecifiers: [CONTRACTS],
+    // sorted: contracts precedes demo. microservice1 declares
+    // @microservices/demo because it serves the Demo_Spa at its Mount_Root; it
+    // reaches the Spa_Package's dist/ through a run-time module-resolution call,
+    // but the manifest edge is what discovery records here.
+    dependencySpecifiers: [CONTRACTS, DEMO],
   },
   {
     category: "microservice",
@@ -87,7 +98,9 @@ const EXPECTED_ROWS: readonly ExpectedRow[] = [
     packageDir: `${NAMESPACE_CONTAINER.microservice}/microservice3`,
     name: "@microservices/microservice3",
     buildKind: "tsc-project",
-    dependencySpecifiers: [CONFIG, CONTRACTS],
+    // sorted: contracts precedes extended-config; microservice3 reaches the
+    // base Config_Package transitively through @microservices/extended-config
+    dependencySpecifiers: [CONTRACTS, EXTENDED_CONFIG],
   },
   {
     category: "common",
@@ -96,6 +109,28 @@ const EXPECTED_ROWS: readonly ExpectedRow[] = [
     name: CONFIG,
     buildKind: "tsc-project",
     dependencySpecifiers: [CONTRACTS],
+  },
+  {
+    category: "common",
+    dirName: "extended-config",
+    packageDir: `${NAMESPACE_CONTAINER.common}/extended-config`,
+    name: EXTENDED_CONFIG,
+    buildKind: "tsc-project",
+    // only scoped dependency is the base Config_Package; contracts arrives
+    // transitively through it, so discovery records just this one specifier
+    dependencySpecifiers: [CONFIG],
+  },
+  {
+    category: "spa",
+    dirName: "demo",
+    packageDir: `${NAMESPACE_CONTAINER.spa}/demo`,
+    name: DEMO,
+    // a Spa_Package is a Bundler_Project — built by its own `npm run build`,
+    // never a `tsc --build` root
+    buildKind: "bundler-project",
+    // declares no @microservices-scoped dependency at all: the Demo_Spa is a
+    // true sink
+    dependencySpecifiers: [],
   },
 ];
 
@@ -121,7 +156,7 @@ describe("discoverPackages() over the committed repository (Data Models table)",
     process.chdir(originalCwd);
   });
 
-  it("yields exactly the four rows of the design's Data Models table", () => {
+  it("yields exactly the six rows of the design's Data Models table", () => {
     const discovery = discoverPackages();
 
     const rows = [
@@ -131,14 +166,24 @@ describe("discoverPackages() over the committed repository (Data Models table)",
     ].map(rowOf);
 
     // Order the actual rows the same way the table lists them — the three
-    // microservices in code-point order, then the one common package — so the
-    // comparison is exact, not merely set-equal.
+    // microservices in code-point order, then the two common packages (config
+    // before extended-config, also code-point order), then the one
+    // Spa_Package (demo) — so the comparison is exact, not merely set-equal.
     expect(rows).toEqual(EXPECTED_ROWS);
   });
 
-  it("discovers zero Spa_Packages (packages/spa is empty on the committed tree)", () => {
+  it("discovers exactly one Spa_Package, demo (packages/spa now holds the Demo_Spa)", () => {
     const discovery = discoverPackages();
-    expect(discovery.byCategory.spa).toEqual([]);
+    expect(discovery.byCategory.spa.map(rowOf)).toEqual([
+      {
+        category: "spa",
+        dirName: "demo",
+        packageDir: `${NAMESPACE_CONTAINER.spa}/demo`,
+        name: DEMO,
+        buildKind: "bundler-project",
+        dependencySpecifiers: [],
+      },
+    ]);
   });
 
   it("discovers no framework directory as a Consumer_Package", () => {
@@ -171,7 +216,7 @@ describe("discoverPackages() over the committed repository (Data Models table)",
     expect(discovery.byName.has("@microservices/overseer")).toBe(false);
   });
 
-  it("records only the four declared names in the resolution index", () => {
+  it("records only the six declared names in the resolution index", () => {
     const discovery = discoverPackages();
 
     expect([...discovery.byName.keys()].sort()).toEqual(

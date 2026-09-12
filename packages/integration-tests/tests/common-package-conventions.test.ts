@@ -1,5 +1,5 @@
-// Common-package conventions test for the sample Common_Package
-// (packages/common/config).
+// Common-package conventions test for the sample Common_Packages
+// (packages/common/config and packages/common/extended-config).
 //
 // A Common_Package is a Consumer_Category package at `packages/common/<name>/`:
 // a consumer-written leaf library imported by package name
@@ -29,7 +29,7 @@
 // Validates: Requirements 8.4, 8.8, 8.9, 12.1, 12.2, 12.3, 12.4, 12.5, 12.15, 12.16, 12.20
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
@@ -65,48 +65,108 @@ function readManifest(relativePath: string): Manifest {
   ) as Manifest;
 }
 
-describe("packages/common/config manifest follows Common_Package conventions", () => {
-  const manifest = readManifest("packages/common/config/package.json");
+// The Common_Packages present under `packages/common/`, each asserted against
+// the same structural contract. `config` is the original sample; `extended-config`
+// is the second Common_Package (R1.1, R1.2, R1.3, R1.7, R4.1, R4.7) — it lives
+// under `packages/common/`, mirrors its directory in its scoped name, and points
+// downward only (it depends on `@microservices/config`, another Common_Package,
+// never on a Microservice_Package or the Overseer).
+const commonPackages = [
+  { dir: "config", name: "@microservices/config" },
+  { dir: "extended-config", name: "@microservices/extended-config" },
+] as const;
 
-  it("is an ES module", () => {
-    expect(manifest.type).toBe("module");
-  });
+describe.each(commonPackages)(
+  "packages/common/$dir manifest follows Common_Package conventions",
+  ({ dir, name }) => {
+    const relDir = `packages/common/${dir}`;
+    const manifest = readManifest(`${relDir}/package.json`);
 
-  it("has an @microservices-scoped name that mirrors the directory", () => {
-    // Directory name is `config`; the scoped name must mirror it. The name is
-    // unchanged by the relocation into the `common` category (R8.5, R8.10).
-    expect(manifest.name).toBe("@microservices/config");
-  });
+    it("lives at a direct subdirectory of packages/common/", () => {
+      // Membership in the common Consumer_Category is decided by location alone:
+      // a Common_Package is a direct subdirectory of `packages/common/`.
+      expect(existsSync(resolve(repoRoot, relDir, "package.json"))).toBe(true);
+    });
 
-  it("points main and types at compiled output under dist/", () => {
-    expect(manifest.main).toBe("./dist/index.js");
-    expect(manifest.types).toBe("./dist/index.d.ts");
-    expect(manifest.main).toMatch(/^\.\/dist\//);
-    expect(manifest.types).toMatch(/^\.\/dist\//);
-  });
+    it("is an ES module", () => {
+      expect(manifest.type).toBe("module");
+    });
 
-  it("exposes the four standard scripts", () => {
-    const scripts = manifest.scripts ?? {};
-    for (const name of ["build", "test", "lint", "typecheck"] as const) {
-      expect(scripts, `missing script '${name}'`).toHaveProperty(name);
-      expect(typeof scripts[name]).toBe("string");
-    }
-  });
+    it("has an @microservices-scoped name that mirrors the directory", () => {
+      // The scoped name must mirror the directory name exactly (`@microservices/<dir>`).
+      expect(manifest.name).toBe(name);
+    });
 
-  it("declares no microservice or Overseer dependency (points downward only)", () => {
-    // A Common_Package is a leaf library: it depends on third-party packages,
-    // other Common_Packages, and Framework_Singletons only, never upward on a
-    // Microservice_Package or the Overseer (R8.9).
-    const deps = Object.keys(manifest.dependencies ?? {});
-    expect(deps).not.toContain("@microservices/overseer");
-    for (const dep of deps) {
+    it("points main and types at compiled output under dist/", () => {
+      expect(manifest.main).toBe("./dist/index.js");
+      expect(manifest.types).toBe("./dist/index.d.ts");
+      expect(manifest.main).toMatch(/^\.\/dist\//);
+      expect(manifest.types).toMatch(/^\.\/dist\//);
+    });
+
+    it("exposes the four standard scripts", () => {
+      const scripts = manifest.scripts ?? {};
+      for (const scriptName of ["build", "test", "lint", "typecheck"] as const) {
+        expect(scripts, `missing script '${scriptName}'`).toHaveProperty(
+          scriptName,
+        );
+        expect(typeof scripts[scriptName]).toBe("string");
+      }
+    });
+
+    it("declares a barrel index.ts as its sole stable public API", () => {
+      // The barrel `src/index.ts` is the sole stable public API of a Common_Package;
+      // `main`/`types` under `dist/` are the compiled projection of that barrel.
+      expect(existsSync(resolve(repoRoot, relDir, "src", "index.ts"))).toBe(true);
+    });
+
+    it("declares no microservice or Overseer dependency in any dependency field (points downward only)", () => {
+      // A Common_Package is a leaf library: it depends on third-party packages,
+      // other Common_Packages, and Framework_Singletons only, never upward on a
+      // Microservice_Package or the Overseer (R8.9). Assert across every
+      // dependency field, not just `dependencies`.
+      const raw = JSON.parse(
+        readFileSync(resolve(repoRoot, relDir, "package.json"), "utf8"),
+      ) as Record<string, unknown>;
+      const depFields = [
+        "dependencies",
+        "devDependencies",
+        "peerDependencies",
+        "optionalDependencies",
+      ] as const;
+      const allDeps = depFields.flatMap((field) =>
+        Object.keys((raw[field] as Record<string, string> | undefined) ?? {}),
+      );
+      expect(allDeps).not.toContain("@microservices/overseer");
+      for (const dep of allDeps) {
+        expect(
+          /^@microservices\/microservice/.test(dep),
+          `${dir} must not depend on microservice package '${dep}'`,
+        ).toBe(false);
+      }
+    });
+
+    it("is matched by exactly one workspaces entry", () => {
+      // Workspace_Coverage: the package directory is matched by exactly one
+      // `workspaces` entry — here the `packages/common/*` glob (R4.1, R12.15).
+      const workspaces = readManifest("package.json").workspaces ?? [];
+      const matching = workspaces.filter((entry) => {
+        if (entry.endsWith("/*")) {
+          const container = entry.slice(0, -"/*".length);
+          const rest = relDir.startsWith(`${container}/`)
+            ? relDir.slice(container.length + 1)
+            : undefined;
+          return rest !== undefined && rest.length > 0 && !rest.includes("/");
+        }
+        return entry === relDir;
+      });
       expect(
-        /^@microservices\/microservice/.test(dep),
-        `config must not depend on microservice package '${dep}'`,
-      ).toBe(false);
-    }
-  });
-});
+        matching,
+        `${relDir} must be matched by exactly one workspaces entry, matched: ${JSON.stringify(matching)}`,
+      ).toHaveLength(1);
+    });
+  },
+);
 
 describe("the @microservices/config barrel is the stable public API", () => {
   it("exports the sampleConfig constant", () => {
@@ -137,8 +197,14 @@ describe("the @microservices/config barrel is the stable public API", () => {
   });
 });
 
-describe("both consumers declare @microservices/config by package name", () => {
-  it.each(["microservice2", "microservice3"] as const)(
+describe("microservice2 declares @microservices/config by package name", () => {
+  // Only microservice2 names `@microservices/config` directly. Microservice3 now
+  // depends on `@microservices/extended-config` and reaches the Config_Package
+  // transitively through that Common_Package (design worked staged sets:
+  // `ms3 → extended-config → config`), so it no longer declares
+  // `@microservices/config` in its own manifest. The direct-dependency
+  // assertion narrows to `microservice2` alone accordingly.
+  it.each(["microservice2"] as const)(
     "%s declares the dependency in package.json",
     (id) => {
       const manifest = readManifest(`packages/microservices/${id}/package.json`);

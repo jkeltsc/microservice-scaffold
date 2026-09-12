@@ -26,6 +26,19 @@
 // and nothing else.
 //
 // Validates: Requirements R11.2, R11.4, R11.5, R11.6, R11.7
+//
+// scaffold-demo-samples task 12.6 extends this suite with one further static
+// clause a green run cannot verify: the release matrix must publish EXACTLY the
+// two shipped configurations — the Generic Container (Selector `*`) and the
+// Specific Container (Selector `microservice1,microservice2`) — with both
+// selector values unchanged. A third leg, a dropped leg, or a mutated selector
+// still builds green on a PR (the extra/wrong image just publishes, or a leg
+// silently stops), so only a static check holds the set to the two the samples
+// leave unchanged. The existing suite asserts the legs' distinct image suffixes
+// and the trigger set; the added clause pins the two selector VALUES, which the
+// suffix test does not (it derives a suffix from whatever selector it finds).
+//
+// Validates (added): Requirements 11.12, 11.13
 
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -189,5 +202,27 @@ describe("release.yml — clauses a workflow run cannot verify", () => {
         derived,
       );
     }
+  });
+
+  // R11.12 / R11.13. The samples must leave the shipped set exactly as it is:
+  // the Generic Container (`*`) and the Specific Container
+  // (`microservice1,microservice2`), and no third configuration. A green PR run
+  // does not reveal an added, dropped, or mutated selector — the suffix test
+  // above only checks that whatever selectors are present derive distinct
+  // suffixes, not that they are these two. This pins the two values themselves.
+  it("publishes exactly the two shipped configurations `*` and `microservice1,microservice2` (R11.12, R11.13)", () => {
+    const legs = releaseJob?.strategy?.matrix?.include ?? [];
+
+    // Exactly two legs — not "at least two". A third shipped configuration is a
+    // product decision this feature does not make.
+    expect(legs).toHaveLength(2);
+
+    // The selector values are exactly `*` and `microservice1,microservice2`,
+    // set-equal and each present once, trimmed of incidental whitespace.
+    const selectors = legs.map((leg) => leg.selector.trim());
+    expect(new Set(selectors)).toEqual(
+      new Set(["*", "microservice1,microservice2"]),
+    );
+    expect(selectors).toHaveLength(2);
   });
 });

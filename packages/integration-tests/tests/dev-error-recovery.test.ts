@@ -30,46 +30,78 @@
 // `waitForOutput` only waits on a contiguous, un-styled substring (the file
 // path, which tsc emits as one colored run).
 //
-// These tests MUTATE a tracked source file (microservice1/src/index.ts) and
-// restore it with restoreWorktreeFile() in teardown so the working tree is left
-// clean. `dist/` and the generated registry are gitignored and expected to
-// churn, so they are not restored.
+// --- Why this suite runs on a pristine COPY of the tree ---------------------
+//
+// This suite MUTATES two microservice source files — microservice1/src/index.ts
+// (for the type error, whose diagnostic path it asserts) and
+// microservice2/src/index.ts (for the observable-behaviour change, read at
+// microservice2's Mount_Root /microservice2 rather than at `/`, which
+// Microservice1 owns). Every one of those mutations happens inside the suite's
+// OWN pristine copy of the tree, materialised by `pristineWorktree()` into an OS
+// temp directory. The REAL working tree is NEVER written to, and no path under
+// `repoRoot` is ever touched.
+//
+// This is not stylistic. An earlier revision of this suite edited the real
+// tracked files and "restored" them with `git checkout -- <path>`, which reverts
+// a file to its COMMITTED content — silently destroying any uncommitted work in
+// those files. It did exactly that, twice. Restoration between the two examples
+// is therefore done by WRITING BACK the original bytes captured from the
+// pristine tree, never by invoking git. `pristineWorktree()` lists tracked plus
+// untracked-but-not-gitignored files (`git ls-files --cached --others
+// --exclude-standard`) and tars them from disk, so the copy reflects uncommitted
+// edits as they currently are, while gitignored `dist/`, `*.tsbuildinfo`, and the
+// generated registry are excluded and free to churn inside the copy.
+//
+// tsc prints diagnostic paths relative to its own cwd — the pristine directory
+// here — so the relative path the diagnostic assertions match on is unchanged.
 //
 // Validates: Requirements 6.1, 6.3, 6.4, 6.7
 
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { readFileSync, writeFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   startDevSession,
-  restoreWorktreeFile,
-  repoRoot,
+  pristineWorktree,
   OVERSEER_READY_MARKER,
   type DevSession,
+  type PristineWorktreeResult,
 } from "./helpers.js";
 
-// The tracked source file both examples mutate. microservice1 serves GET / with
-// `{ "microservice-name": "microservice1", path: "/" }`.
-const MICROSERVICE1_SRC = resolve(
-  repoRoot,
-  "packages",
-  "microservices",
-  "microservice1",
-  "src",
-  "index.ts",
-);
+// Repo-relative locations, resolved against the PRISTINE tree (never repoRoot).
+const MS1_SRC_REL = "packages/microservices/microservice1/src/index.ts";
+const MS2_SRC_REL = "packages/microservices/microservice2/src/index.ts";
+const MS1_PKG_REL = "packages/microservices/microservice1";
+const OVERSEER_PKG_REL = "packages/overseer";
 
-// Compiled output and TypeScript incremental build state for microservice1 and
-// the Overseer. These tests clear them before a session so the Build_Watcher's
-// FIRST Compile_Pass actually EMITS: the supervisor starts the Overseer only on
-// a clean, EMITTING pass, so against a fully warm tree (nothing to emit) it
-// would never boot within a session. Clearing the Overseer's output guarantees
-// a cold, emitting first pass; clearing microservice1's output additionally
-// makes example two's poisoned first pass have no prior good output to fall back
-// on (R6.7's "no Last_Good_Output" precondition). All of this is gitignored
-// churn that the session itself rebuilds.
-const MICROSERVICE1_DIR = resolve(repoRoot, "packages", "microservices", "microservice1");
-const OVERSEER_DIR = resolve(repoRoot, "packages", "overseer");
+// microservice2's Mount_Root. The observable-behaviour change is read here — a
+// path microservice2 owns — so the assertion is independent of whatever
+// Microservice1 now serves at `/` (R13.14, R13.15).
+const MS2_MOUNT_ROOT = "/microservice2";
+
+// The relative path tsc prints in its diagnostics (POSIX separators on the
+// platforms this suite runs on). tsc's cwd is the pristine dir, so this relative
+// path is the same one it would print in the real tree. Used as the contiguous,
+// un-styled substring `waitForOutput` waits on, and as the anchor for the
+// (line,character) check.
+const DIAG_PATH = MS1_SRC_REL;
+
+// The Mutation_Anchors this suite string-replaces. The type-error anchor lives
+// in Microservice1's source; the new-behavior anchor is Microservice2's
+// identifier-response literal.
+const TYPE_ERROR_ANCHOR = 'export const path = "/";';
+const NEW_BEHAVIOR_ANCHOR = '.json({ "microservice-name": "microservice2", path });';
+
+/** The extra `revision` marker example one asserts microservice2 starts serving. */
+const REVISION_MARKER = "error-then-fix-roundtrip";
+
+// Generous budget: materialising the pristine tree runs `npm ci`, and each
+// session bootstrap-builds, generates the registry, and starts a resident tsc
+// build watcher plus the Overseer. Recompiles then follow.
+const PRISTINE_TIMEOUT_MS = 600_000;
+const BOOT_TIMEOUT_MS = 120_000;
+const RECOMPILE_TIMEOUT_MS = 90_000;
+const TEST_TIMEOUT_MS = 300_000;
 
 /** Remove a package's `dist/` and its `tsconfig.tsbuildinfo` so its next compile emits. */
 function clearBuildOutput(packageDir: string): void {
@@ -77,52 +109,93 @@ function clearBuildOutput(packageDir: string): void {
   rmSync(resolve(packageDir, "tsconfig.tsbuildinfo"), { force: true });
 }
 
-// The relative path tsc prints in its diagnostics (POSIX separators on the
-// platforms this suite runs on). Used as the contiguous, un-styled substring
-// `waitForOutput` waits on, and as the anchor for the (line,character) check.
-const DIAG_PATH = "packages/microservices/microservice1/src/index.ts";
-
-// Generous budget: each session bootstrap-builds, generates the registry, and
-// starts a resident tsc build watcher plus the Overseer. Recompiles then follow.
-const BOOT_TIMEOUT_MS = 120_000;
-const RECOMPILE_TIMEOUT_MS = 90_000;
-const TEST_TIMEOUT_MS = 300_000;
-
-/** The committed content of microservice1's source, captured once for rewriting. */
-const ORIGINAL_SRC = readFileSync(MICROSERVICE1_SRC, "utf8");
+/**
+ * A valid version of microservice2 that changes its observable response body:
+ * GET /microservice2 now includes an extra `revision` marker. This compiles
+ * cleanly, so the Compile_Pass emits and the Dev_Server performs an
+ * Overseer_Restart with no developer action.
+ */
+function withNewBehavior(source: string): string {
+  return source.replace(
+    NEW_BEHAVIOR_ANCHOR,
+    `.json({ "microservice-name": "microservice2", path, revision: "${REVISION_MARKER}" });`,
+  );
+}
 
 /**
  * A version of microservice1's router with a genuine TypeScript type error: a
  * `number` assigned to a `string`-typed local. `tsc` reports a diagnostic
- * naming this file at a real (line,character) position. The error sits on a
- * known non-trivial line so the position in the diagnostic is meaningful.
+ * naming this file at a real (line,character) position.
  */
-const WITH_TYPE_ERROR = ORIGINAL_SRC.replace(
-  'export const path = "/";',
-  ['export const path = "/";', "", "const _brokenTypeCheck: string = 42;", "void _brokenTypeCheck;"].join(
-    "\n",
-  ),
-);
-
-/**
- * A valid version that changes the observable response body: GET / now includes
- * an extra `revision` marker. This compiles cleanly, so the Compile_Pass emits
- * and the Dev_Server performs an Overseer_Restart with no developer action.
- */
-const REVISION_MARKER = "error-then-fix-roundtrip";
-function withNewBehavior(source: string): string {
+function withTypeError(source: string): string {
   return source.replace(
-    '.json({ "microservice-name": "microservice1", path });',
-    `.json({ "microservice-name": "microservice1", path, revision: "${REVISION_MARKER}" });`,
+    TYPE_ERROR_ANCHOR,
+    [TYPE_ERROR_ANCHOR, "", "const _brokenTypeCheck: string = 42;", "void _brokenTypeCheck;"].join(
+      "\n",
+    ),
   );
 }
 
-/** Sanity: the string substitutions above must actually change the source. */
-if (WITH_TYPE_ERROR === ORIGINAL_SRC) {
-  throw new Error("type-error mutation did not modify the source; anchor changed");
+/**
+ * Everything the examples need, all of it rooted in the PRISTINE tree. The
+ * original file contents are read from the pristine copy (not from repoRoot),
+ * and the mutated variants are derived from those captured strings — so the
+ * bytes written back on restore are exactly the bytes the copy started with.
+ */
+interface Fixture {
+  /** The pristine tree root; the cwd every Dev_Session is spawned in. */
+  readonly dir: string;
+  readonly ms1Src: string;
+  readonly ms2Src: string;
+  readonly ms1PkgDir: string;
+  readonly overseerPkgDir: string;
+  readonly originalMs1: string;
+  readonly originalMs2: string;
+  readonly ms1WithTypeError: string;
+  readonly ms2WithNewBehavior: string;
 }
-if (withNewBehavior(ORIGINAL_SRC) === ORIGINAL_SRC) {
-  throw new Error("new-behavior mutation did not modify the source; anchor changed");
+
+/**
+ * Read the two source files from the pristine tree, derive the mutated variants,
+ * and enforce the Mutation_Anchor guards against the pristine copy.
+ *
+ * The guards are real: if an anchor no longer appears, this throws naming the
+ * source file and the anchor rather than letting an example proceed with an
+ * unmodified file (R13.16).
+ */
+function makeFixture(dir: string): Fixture {
+  const ms1Src = resolve(dir, MS1_SRC_REL);
+  const ms2Src = resolve(dir, MS2_SRC_REL);
+  const originalMs1 = readFileSync(ms1Src, "utf8");
+  const originalMs2 = readFileSync(ms2Src, "utf8");
+
+  const ms1WithTypeError = withTypeError(originalMs1);
+  const ms2WithNewBehavior = withNewBehavior(originalMs2);
+
+  if (ms1WithTypeError === originalMs1) {
+    throw new Error(
+      `type-error Mutation_Anchor '${TYPE_ERROR_ANCHOR}' not found in ${ms1Src}; ` +
+        `the anchor is stale — refusing to proceed with an unmodified file`,
+    );
+  }
+  if (ms2WithNewBehavior === originalMs2) {
+    throw new Error(
+      `new-behavior Mutation_Anchor '${NEW_BEHAVIOR_ANCHOR}' not found in ${ms2Src}; ` +
+        `the anchor is stale — refusing to proceed with an unmodified file`,
+    );
+  }
+
+  return {
+    dir,
+    ms1Src,
+    ms2Src,
+    ms1PkgDir: resolve(dir, MS1_PKG_REL),
+    overseerPkgDir: resolve(dir, OVERSEER_PKG_REL),
+    originalMs1,
+    originalMs2,
+    ms1WithTypeError,
+    ms2WithNewBehavior,
+  };
 }
 
 /** Strip ANSI color/style escape sequences so a styled diagnostic can be pattern-matched. */
@@ -132,22 +205,22 @@ function stripAnsi(text: string): string {
   return text.replace(ANSI, "");
 }
 
-/** GET <base>/ once and return the parsed JSON body. */
-async function getRoot(baseUrl: string): Promise<Record<string, unknown>> {
-  const res = await fetch(`${baseUrl}/`);
+/** GET the given absolute URL once and return the parsed JSON body. */
+async function getJson(url: string): Promise<Record<string, unknown>> {
+  const res = await fetch(url);
   return (await res.json()) as Record<string, unknown>;
 }
 
-/** Poll GET <base>/ until the predicate holds on its body, or reject at the deadline. */
+/** Poll GET <url> until the predicate holds on its body, or reject at the deadline. */
 async function waitForBody(
-  baseUrl: string,
+  url: string,
   predicate: (body: Record<string, unknown>) => boolean,
   deadline: number,
 ): Promise<Record<string, unknown>> {
   let last: unknown;
   while (Date.now() < deadline) {
     try {
-      const body = await getRoot(baseUrl);
+      const body = await getJson(url);
       if (predicate(body)) {
         return body;
       }
@@ -157,7 +230,7 @@ async function waitForBody(
     }
     await new Promise((r) => setTimeout(r, 200));
   }
-  throw new Error(`GET ${baseUrl}/ never satisfied predicate; last: ${JSON.stringify(last)}`);
+  throw new Error(`GET ${url} never satisfied predicate; last: ${JSON.stringify(last)}`);
 }
 
 /** True when anything answers an HTTP request on baseUrl (a bound Overseer). */
@@ -171,35 +244,76 @@ async function portAnswers(baseUrl: string): Promise<boolean> {
   }
 }
 
+let pristine: PristineWorktreeResult | undefined;
+let fixture: Fixture | undefined;
+let unavailableReason: string | undefined;
 let session: DevSession | undefined;
+
+beforeAll(() => {
+  // ONE pristine tree for the whole suite: `npm ci` is the slow step, so it runs
+  // once. Every mutation below happens inside `pristine.dir`.
+  pristine = pristineWorktree();
+  if (pristine.available !== true) {
+    unavailableReason = pristine.reason;
+    return;
+  }
+  fixture = makeFixture(pristine.dir);
+}, PRISTINE_TIMEOUT_MS);
 
 afterEach(async () => {
   // Kill the whole dev-session process tree first so no child is mid-recompile
-  // when we restore the source, then restore the tracked file to its committed
-  // content. dist/ and the generated registry are gitignored and left as-is.
+  // when we rewrite the sources, then restore both files by WRITING BACK the
+  // bytes captured from the pristine tree. Never `git checkout` — that would
+  // discard uncommitted work. `dist/`, `*.tsbuildinfo` and the generated
+  // registry are gitignored churn inside the temp copy and are left as-is.
   if (session !== undefined) {
     await session.stop();
     session = undefined;
   }
-  restoreWorktreeFile(MICROSERVICE1_SRC);
+  if (fixture !== undefined) {
+    writeFileSync(fixture.ms1Src, fixture.originalMs1);
+    writeFileSync(fixture.ms2Src, fixture.originalMs2);
+  }
+});
+
+afterAll(() => {
+  // Teardown is just removing the temp tree.
+  if (pristine?.available === true) {
+    pristine.cleanup();
+  }
+  pristine = undefined;
+  fixture = undefined;
 });
 
 describe("Dev_Server error-then-fix round trip (api-dev-server Property 5)", () => {
   it(
     "example one: a type error is reported while the last-good Overseer keeps serving, and fixing it restarts against the new behavior (R6.1, R6.3, R6.4)",
     async () => {
+      if (fixture === undefined) {
+        // git (or tar / npm ci) unavailable — skip with a clear message.
+        console.warn(
+          `SKIP dev-error-recovery example one: ${unavailableReason ?? "pristine tree unavailable"}`,
+        );
+        return;
+      }
+      const fx = fixture;
+
       // A dedicated non-default port so we never collide with 8080 or the other
       // session-level suites.
       const PORT = 8241;
       const baseUrl = `http://127.0.0.1:${PORT}`;
 
-      // Start from the committed source so the first Compile_Pass is clean.
-      restoreWorktreeFile(MICROSERVICE1_SRC);
+      // The pristine tree starts from the captured sources, so the first
+      // Compile_Pass is clean. (afterEach also restores them between examples.)
+      writeFileSync(fx.ms1Src, fx.originalMs1);
+      writeFileSync(fx.ms2Src, fx.originalMs2);
 
       // Clear the Overseer's build output so the session's first Compile_Pass
       // emits and the supervisor starts the Overseer (a warm tree emits nothing,
-      // so the Overseer would never boot within the session).
-      clearBuildOutput(OVERSEER_DIR);
+      // so the Overseer would never boot within the session). A freshly
+      // materialised pristine tree has none anyway; this keeps the example
+      // correct if it ever runs second against a warmed copy.
+      clearBuildOutput(fx.overseerPkgDir);
 
       // Pre-flight: nothing may already own PORT, or a leaked server from a
       // previous run would satisfy the readiness probe without our session.
@@ -209,25 +323,34 @@ describe("Dev_Server error-then-fix round trip (api-dev-server Property 5)", () 
           `Kill it (e.g. \`lsof -ti tcp:${PORT} | xargs kill -9\`) and retry.`,
       ).toBe(false);
 
+      // Widen the selector to microservice1,microservice2 so the probed peer
+      // (microservice2, whose Mount_Root /microservice2 the observable-behaviour
+      // assertion reads) is actually mounted alongside microservice1. The session
+      // runs IN the pristine tree.
       session = startDevSession({
+        cwd: fx.dir,
         env: {
-          MICROSERVICES: "microservice1",
+          MICROSERVICES: "microservice1,microservice2",
           MICROSERVICE_MICROSERVICE1_ENABLED: "enabled",
+          MICROSERVICE_MICROSERVICE2_ENABLED: "enabled",
           PORT: String(PORT),
         },
       });
 
-      // The Overseer boots and answers with the original body.
+      // The Overseer boots and microservice2 answers with its original body at
+      // its Mount_Root.
       await session.waitForOutput(OVERSEER_READY_MARKER, { timeout: BOOT_TIMEOUT_MS });
       const original = await waitForBody(
-        baseUrl,
-        (body) => body["microservice-name"] === "microservice1",
+        `${baseUrl}${MS2_MOUNT_ROOT}`,
+        (body) => body["microservice-name"] === "microservice2",
         Date.now() + RECOMPILE_TIMEOUT_MS,
       );
-      expect(original).toEqual({ "microservice-name": "microservice1", path: "/" });
+      expect(original).toEqual({ "microservice-name": "microservice2", path: MS2_MOUNT_ROOT });
 
-      // Introduce a genuine type error.
-      writeFileSync(MICROSERVICE1_SRC, WITH_TYPE_ERROR);
+      // Introduce a genuine type error into the pristine copy of microservice1's
+      // source (its `export const path = "/";` line stays the anchor, so the
+      // diagnostic still names microservice1's file).
+      writeFileSync(fx.ms1Src, fx.ms1WithTypeError);
 
       // R6.1: a diagnostic naming the source file appears. The file path is a
       // single un-styled run in tsc's colored output, so we wait on it verbatim,
@@ -238,30 +361,36 @@ describe("Dev_Server error-then-fix round trip (api-dev-server Property 5)", () 
       // character position, i.e. `.../microservice1/src/index.ts:LINE:CHAR`.
       expect(diagnostics).toMatch(/microservice1\/src\/index\.ts:\d+:\d+/);
 
-      // R6.3: the live Overseer keeps serving the Last_Good_Output — its body is
-      // still the original, never the (never-emitted) errored output. Poll so a
-      // brief restart-against-last-good window does not flake; the invariant is
-      // that whenever it answers, the body is the ORIGINAL (no revision marker).
+      // R6.3: the live Overseer keeps serving the Last_Good_Output — microservice2's
+      // body at its Mount_Root is still the original, never the (never-emitted)
+      // errored output. The type error is in microservice1, which the Overseer
+      // imports, so the whole tree fails to emit and the last-good process keeps
+      // answering everywhere. Poll so a brief restart-against-last-good window
+      // does not flake; the invariant is that whenever it answers, the body is
+      // the ORIGINAL (no revision marker).
       const stillOriginal = await waitForBody(
-        baseUrl,
-        (body) => body["microservice-name"] === "microservice1",
+        `${baseUrl}${MS2_MOUNT_ROOT}`,
+        (body) => body["microservice-name"] === "microservice2",
         Date.now() + RECOMPILE_TIMEOUT_MS,
       );
-      expect(stillOriginal).toEqual({ "microservice-name": "microservice1", path: "/" });
+      expect(stillOriginal).toEqual({ "microservice-name": "microservice2", path: MS2_MOUNT_ROOT });
 
-      // Fix the file to a NEW valid behavior. This clean, emitting pass triggers
-      // an Overseer_Restart with no developer action (R6.4).
-      writeFileSync(MICROSERVICE1_SRC, withNewBehavior(ORIGINAL_SRC));
+      // Fix microservice1 back to valid AND change microservice2 to a NEW valid
+      // behavior. This clean, emitting pass triggers an Overseer_Restart with no
+      // developer action (R6.4); the observable new behavior is microservice2's.
+      writeFileSync(fx.ms1Src, fx.originalMs1);
+      writeFileSync(fx.ms2Src, fx.ms2WithNewBehavior);
 
-      // The new behavior is served on the same port, with no manual restart.
+      // The new behavior is served at microservice2's Mount_Root on the same
+      // port, with no manual restart.
       const revised = await waitForBody(
-        baseUrl,
+        `${baseUrl}${MS2_MOUNT_ROOT}`,
         (body) => body["revision"] === REVISION_MARKER,
         Date.now() + RECOMPILE_TIMEOUT_MS,
       );
       expect(revised).toEqual({
-        "microservice-name": "microservice1",
-        path: "/",
+        "microservice-name": "microservice2",
+        path: MS2_MOUNT_ROOT,
         revision: REVISION_MARKER,
       });
     },
@@ -271,6 +400,14 @@ describe("Dev_Server error-then-fix round trip (api-dev-server Property 5)", () 
   it(
     "example two: a first-pass compile error binds no Overseer but keeps the watcher alive, and fixing it starts the Overseer (R6.4, R6.7)",
     async () => {
+      if (fixture === undefined) {
+        console.warn(
+          `SKIP dev-error-recovery example two: ${unavailableReason ?? "pristine tree unavailable"}`,
+        );
+        return;
+      }
+      const fx = fixture;
+
       const PORT = 8242;
       const baseUrl = `http://127.0.0.1:${PORT}`;
 
@@ -286,19 +423,25 @@ describe("Dev_Server error-then-fix round trip (api-dev-server Property 5)", () 
       // first pass has NO prior good output to boot against: with microservice1
       // failing to compile the Overseer (which imports it) cannot emit either, so
       // nothing valid exists for the supervisor to start against — R6.7's "no
-      // Last_Good_Output" precondition. A stale-but-valid dist/ left by a prior
-      // clean build would otherwise let the Overseer start.
-      clearBuildOutput(MICROSERVICE1_DIR);
-      clearBuildOutput(OVERSEER_DIR);
+      // Last_Good_Output" precondition. Example one leaves a warm copy behind, so
+      // this clearing is load-bearing here.
+      clearBuildOutput(fx.ms1PkgDir);
+      clearBuildOutput(fx.overseerPkgDir);
 
-      // Poison the source BEFORE the session starts, so the FIRST Compile_Pass of
-      // the Build_Watcher errors and no Last_Good_Output ever exists (R6.7).
-      writeFileSync(MICROSERVICE1_SRC, WITH_TYPE_ERROR);
+      // Poison the pristine copy's source BEFORE the session starts, so the FIRST
+      // Compile_Pass of the Build_Watcher errors and no Last_Good_Output ever
+      // exists (R6.7).
+      writeFileSync(fx.ms1Src, fx.ms1WithTypeError);
 
+      // Widen the selector to microservice1,microservice2 so, once the poison is
+      // fixed, the recovery probe can read a dispatched response at
+      // microservice2's Mount_Root rather than a path Microservice1 owns.
       session = startDevSession({
+        cwd: fx.dir,
         env: {
-          MICROSERVICES: "microservice1",
+          MICROSERVICES: "microservice1,microservice2",
           MICROSERVICE_MICROSERVICE1_ENABLED: "enabled",
+          MICROSERVICE_MICROSERVICE2_ENABLED: "enabled",
           PORT: String(PORT),
         },
       });
@@ -307,9 +450,7 @@ describe("Dev_Server error-then-fix round trip (api-dev-server Property 5)", () 
       // (line,character) position. Wait on the contiguous file path, then check
       // the position on the ANSI-stripped output.
       await session.waitForOutput(DIAG_PATH, { timeout: BOOT_TIMEOUT_MS });
-      expect(stripAnsi(session.output())).toMatch(
-        /microservice1\/src\/index\.ts:\d+:\d+/,
-      );
+      expect(stripAnsi(session.output())).toMatch(/microservice1\/src\/index\.ts:\d+:\d+/);
 
       // R6.7: no Last_Good_Output exists, so no Overseer binds. Give a grace
       // window in case a (buggy) child were mid-bind, then confirm still unbound.
@@ -329,15 +470,18 @@ describe("Dev_Server error-then-fix round trip (api-dev-server Property 5)", () 
 
       // Fix the file. The next clean, emitting Compile_Pass starts the Overseer
       // on its own (R6.4) — no developer re-invocation.
-      writeFileSync(MICROSERVICE1_SRC, ORIGINAL_SRC);
+      writeFileSync(fx.ms1Src, fx.originalMs1);
 
       await session.waitForOutput(OVERSEER_READY_MARKER, { timeout: RECOMPILE_TIMEOUT_MS });
+      // Probe microservice2's Mount_Root — a dispatched response — to confirm
+      // the Overseer started, rather than `/`, which Microservice1 owns
+      // (R13.14, R13.15).
       const body = await waitForBody(
-        baseUrl,
-        (b) => b["microservice-name"] === "microservice1",
+        `${baseUrl}${MS2_MOUNT_ROOT}`,
+        (b) => b["microservice-name"] === "microservice2",
         Date.now() + RECOMPILE_TIMEOUT_MS,
       );
-      expect(body).toEqual({ "microservice-name": "microservice1", path: "/" });
+      expect(body).toEqual({ "microservice-name": "microservice2", path: MS2_MOUNT_ROOT });
     },
     TEST_TIMEOUT_MS,
   );

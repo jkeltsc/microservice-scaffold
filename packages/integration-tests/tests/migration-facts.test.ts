@@ -132,8 +132,15 @@ describe("the relocated manifest declares the same fields as before (R8.10)", ()
   });
 });
 
-describe("both consumers still declare @microservices/config (R8.6)", () => {
-  it.each(["microservice2", "microservice3"] as const)(
+describe("microservice2 still declares @microservices/config directly (R8.6)", () => {
+  // Only microservice2 declares `@microservices/config` in its own manifest.
+  // Microservice3 no longer names the Config_Package directly: it now depends
+  // on `@microservices/extended-config` and reaches `@microservices/config`
+  // transitively through it (design "Migration shape" / worked staged sets:
+  // `ms3 → extended-config → config`). The by-name importer test therefore
+  // narrows to `microservice2` alone — asserting a direct `@microservices/config`
+  // dependency on `microservice3` would contradict that new dependency chain.
+  it.each(["microservice2"] as const)(
     "%s depends on @microservices/config by package name",
     (id) => {
       const deps =

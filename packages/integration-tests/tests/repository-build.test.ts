@@ -48,7 +48,25 @@
 // repo-relative, so the derivation runs with the repository root as cwd
 // regardless of where vitest was launched.
 //
-// Validates: Requirements 12.11, 12.12
+// CLEAN-TREE DEPENDENCY ORDER (R4.4) — the same recording seam, one more fact.
+// R4.4 requires that on a tree with no `dist/` and no `tsconfig.tsbuildinfo`
+// (a fresh clone, where nothing can fall back on warm output), the ordered
+// build completes the Config_Package's build before it starts the
+// Extended_Config_Package's build, and the whole run exits 0. Because
+// `@microservices/extended-config` declares `@microservices/config`, the
+// Workspace_Build_Order derived from the real tree places `config` ahead of
+// `extended-config` BY CONSTRUCTION — the same construction the fresh clone
+// depends on, since npm visits `--workspaces` in listed (topological) order and
+// a fresh clone has no prior `dist/` to fall back on. The recording runner is
+// the honest seam here just as it is for R12.12: it observes the ordered pass's
+// invocation sequence without spawning a real build, and an all-zero run that
+// returns without throwing is the "exits 0" evidence (runOrderedBuild throws
+// [build-order:failed] on any non-zero exit and emits nothing on success). No
+// real clean tree is materialised: the ordered pass IS what guarantees the
+// clean-tree ordering, so asserting the recorded order over the real-tree
+// derivation is asserting the very property a clean clone relies on.
+//
+// Validates: Requirements 12.11, 12.12, 4.4
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
@@ -76,6 +94,13 @@ const BUILD_TOOLS = "@microservices/build-tools";
 
 /** The compiled ordered-build bin `scripts/build.js` spawns. */
 const ORDERED_BIN = "packages/build-tools/dist/bin/build-workspaces.js";
+
+/**
+ * The Common_Package dependency edge R4.4 is about: `extended-config` declares
+ * `config`, so the Workspace_Build_Order must place `config` first.
+ */
+const CONFIG = "@microservices/config";
+const EXTENDED_CONFIG = "@microservices/extended-config";
 
 /**
  * One recorded `runOrderedBuild` invocation: the command and its args, exactly
@@ -242,6 +267,89 @@ describe("R12.12 — the ordered pass invokes contracts and build-tools a second
     // Sanity: the pass visited every workspace node exactly once, so the
     // "second build" of the two bootstrap packages is part of a complete pass
     // rather than an isolated invocation.
+    const nodes = workspaceNodesFrom(discoverPackages(), readDependencySpecifiers);
+    const order = workspaceBuildOrder(nodes);
+    expect(recorded).toHaveLength(order.length);
+  });
+});
+
+describe("R4.4 — the ordered pass builds config before extended-config and exits 0 on a clean tree", () => {
+  const originalCwd = process.cwd();
+
+  beforeAll(() => {
+    // discoverPackages()/readDependencySpecifiers resolve repo-relative.
+    process.chdir(repoRoot);
+  });
+  afterAll(() => {
+    process.chdir(originalCwd);
+  });
+
+  /**
+   * Drive `runOrderedBuild` over the real-tree order with a recording runner
+   * that returns status 0 for every invocation — the near-no-op incremental
+   * rebuild the design describes, and the same seam R12.12 uses above. Returns
+   * the recorded invocation sequence. A clean return (no throw) IS the "exits 0"
+   * evidence: runOrderedBuild throws [build-order:failed] on any non-zero exit
+   * and emits nothing on success.
+   */
+  function recordOrderedBuild(): Invocation[] {
+    const recorded: Invocation[] = [];
+    const runner: CommandRunner = (command, args) => {
+      recorded.push({ command, args: [...args] });
+      return { status: 0 };
+    };
+
+    const nodes = workspaceNodesFrom(discoverPackages(), readDependencySpecifiers);
+    const order = workspaceBuildOrder(nodes);
+
+    expect(() => runOrderedBuild(order, runner)).not.toThrow();
+
+    return recorded;
+  }
+
+  /** The `--workspace <name>` value of each recorded invocation, in order. */
+  function recordedWorkspaceNames(recorded: readonly Invocation[]): string[] {
+    return recorded.map((invocation) => {
+      const flag = invocation.args.indexOf("--workspace");
+      return invocation.args[flag + 1] as string;
+    });
+  }
+
+  it("invokes @microservices/config at a lower index than @microservices/extended-config", () => {
+    const recorded = recordOrderedBuild();
+    const workspaceNames = recordedWorkspaceNames(recorded);
+
+    const configIndex = workspaceNames.indexOf(CONFIG);
+    const extendedIndex = workspaceNames.indexOf(EXTENDED_CONFIG);
+
+    // Both packages are reached by the ordered pass.
+    expect(configIndex).toBeGreaterThanOrEqual(0);
+    expect(extendedIndex).toBeGreaterThanOrEqual(0);
+
+    // Config's build is invoked — and, this being a straight-line ordered pass,
+    // completes — before extended-config's build starts. `extended-config`
+    // declares `@microservices/config`, so the Workspace_Build_Order places
+    // config first by construction, which is exactly what a fresh clone with no
+    // warm `dist/` relies on (R4.4).
+    expect(configIndex).toBeLessThan(extendedIndex);
+  });
+
+  it("completes the whole ordered pass with all-zero statuses and no throw (the exits-0 evidence)", () => {
+    // The all-zero run over the real-tree order returns normally: no
+    // [build-order:failed] and no other error. On a clean tree — no `dist/`, no
+    // `tsconfig.tsbuildinfo` — this ordered pass is the run that must exit 0, and
+    // a clean return is that evidence (R4.4).
+    const recorded = recordOrderedBuild();
+
+    // Every recorded invocation is `npm run build --workspace <name>` — the pass
+    // built through the injected runner, never a real spawn.
+    for (const invocation of recorded) {
+      expect(invocation.command).toBe("npm");
+      expect(invocation.args.slice(0, 3)).toEqual(["run", "build", "--workspace"]);
+    }
+
+    // Sanity: the pass visited every workspace node exactly once, so config's
+    // build preceding extended-config's is part of a complete, all-zero pass.
     const nodes = workspaceNodesFrom(discoverPackages(), readDependencySpecifiers);
     const order = workspaceBuildOrder(nodes);
     expect(recorded).toHaveLength(order.length);

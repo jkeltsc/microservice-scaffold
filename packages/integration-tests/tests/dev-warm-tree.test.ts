@@ -54,13 +54,18 @@ const TEST_TIMEOUT_MS = WARM_TIMEOUT_MS + BOOT_TIMEOUT_MS + 60_000;
 
 let session: DevSession | undefined;
 
-/** Poll the Overseer's mount root until it answers 200 or the deadline passes. */
+/**
+ * Poll the Overseer's Mount_Root until it dispatches (any status other than 404)
+ * or the deadline passes. The readiness signal is "the Overseer is serving and
+ * dispatched this request", i.e. `status !== 404`, which is the Mount_Root
+ * liveness rule (R13.12) and holds whatever body microservice1 serves at "/".
+ */
 async function waitForServer(deadline: number): Promise<Response> {
   let lastError: unknown;
   while (Date.now() < deadline) {
     try {
       const res = await fetch(`${BASE_URL}/`);
-      if (res.ok) {
+      if (res.status !== 404) {
         return res;
       }
       await res.text();
@@ -70,7 +75,7 @@ async function waitForServer(deadline: number): Promise<Response> {
     await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error(
-    `Overseer did not answer 200 within timeout; last error: ${String(lastError)}`,
+    `Overseer did not dispatch at "/" within timeout; last error: ${String(lastError)}`,
   );
 }
 
@@ -150,11 +155,12 @@ describe("Dev_Server warm-tree start (api-dev-server Property 8)", () => {
       expect(session.output()).toContain(`${OVERSEER_READY_MARKER} ${PORT}`);
 
       // The Overseer answers a request from the warm Compiled_Tree: microservice1
-      // mounts at "/" and returns its identifier body.
+      // mounts at its Mount_Root "/". Liveness probe (R13.12): assert
+      // `status !== 404` at the Mount_Root and nothing else — no body, no content
+      // type, no per-method status.
       const res = await waitForServer(Date.now() + 60_000);
-      expect(res.status).toBe(200);
-      const body = (await res.json()) as Record<string, unknown>;
-      expect(body).toEqual({ "microservice-name": "microservice1", path: "/" });
+      expect(res.status).not.toBe(404);
+      await res.text();
     },
     TEST_TIMEOUT_MS,
   );
