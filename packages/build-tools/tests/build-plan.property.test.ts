@@ -339,12 +339,22 @@ function referenceOrderedRequired(
 }
 
 /**
- * R6.3, R6.6, and R13.5 restated as one concatenation: `packages/contracts`,
- * then the required Common_Packages in required-dependency order, then the
- * Selected_Microservices in Selector order, then `packages/overseer`. The
- * Required_Dependencies are filtered on `category === "common"` — an independent restatement of
- * "the Tsc_Projects the Selector justifies", where production filters on the
- * derived `buildKind`.
+ * R6.3, R6.6, and R13.5 restated in Build_Sequence terms as one concatenation —
+ * the image-path membership handed to the primitive, spelled out here rather
+ * than by calling it:
+ *
+ *   - statement 1: `packages/contracts`, always the first root;
+ *   - statement 3: the required Common_Packages, in required-dependency
+ *     (lexicographically-least topological) order;
+ *   - statement 4: the Selected_Microservices, in Selector order;
+ *   - statement 5: `packages/overseer`, last.
+ *
+ * Statements 2, 6, and 7 (`build-tools`, `integration-tests`, and the
+ * Spa_Packages) contribute no image `tsc --build` root, so they are absent from
+ * this concatenation. The Required_Dependencies are filtered on
+ * `category === "common"` — an independent restatement of "the Common_Packages
+ * the Selector justifies", where production hands the primitive the same set and
+ * filters on the derived `buildKind`.
  */
 function referenceTscRoots(
   layout: Layout,
@@ -882,13 +892,22 @@ describe("Property 15: Build_Kind is total and determined by category alone", ()
         const plan = planOf(layout, selector);
         const spaDirs = plan.spaBuilds.map((pkg) => pkg.packageDir);
 
+        // `build-tools` (Build_Sequence statement 2) and `integration-tests`
+        // (statement 6) are excluded from the Selector-driven `tsc --build`
+        // (R13.7); `contracts` (statement 1) and the Overseer (statement 5) are
+        // always roots. Stated as an explicit two-name exclusion rather than
+        // read off a per-package field.
+        const EXCLUDED_FROM_ROOTS: readonly string[] = [
+          BUILD_TOOLS.packageDir,
+          INTEGRATION_TESTS.packageDir,
+        ];
         for (const singleton of FRAMEWORK_SINGLETONS) {
           // No Framework_Singleton is ever handed to a bundler.
           expect(spaDirs).not.toContain(singleton.packageDir);
-          // A positioned singleton is a `tsc --build` root; an excluded one is
-          // not a root of the Selector-driven build at all (R13.7).
+          // A Framework_Singleton is a `tsc --build` root unless it is one of
+          // the two excluded from the Selector-driven build at all (R13.7).
           expect(plan.tscRoots.includes(singleton.packageDir)).toBe(
-            singleton.buildPosition !== "excluded",
+            !EXCLUDED_FROM_ROOTS.includes(singleton.packageDir),
           );
         }
       }),

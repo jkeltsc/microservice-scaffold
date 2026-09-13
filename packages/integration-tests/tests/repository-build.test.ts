@@ -69,8 +69,9 @@
 // Validates: Requirements 12.11, 12.12, 4.4
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { discoverPackages, readDependencySpecifiers } from "@microservices/build-tools/dist/discovery.js";
@@ -80,6 +81,7 @@ import {
   workspaceNodesFrom,
 } from "@microservices/build-tools/dist/workspace-build-order.js";
 import type { CommandRunner } from "@microservices/build-tools/dist/workspace-build-order.js";
+import { pristineWorktree, type PristineWorktreeResult } from "./helpers.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // tests/ -> integration-tests -> packages -> repo root
@@ -354,4 +356,249 @@ describe("R4.4 — the ordered pass builds config before extended-config and exi
     const order = workspaceBuildOrder(nodes);
     expect(recorded).toHaveLength(order.length);
   });
+});
+
+// ---------------------------------------------------------------------------
+// Feature: unified-build-order — the clean-tree ordered build with a REAL
+// registry (task 8.1; Requirements 1.3, 1.4, 2.8, 2.21).
+//
+// This is the single highest-value execution in this fix, and unlike every
+// block above it it does NOT use the recording runner — it genuinely compiles.
+// The recording seam proves the ORDER is right; only a real compile proves the
+// order is right FOR THE REASON THAT MATTERS: that the Overseer's `tsc` pass
+// finds every `@microservices/microservice<N>` module the generated registry
+// statically imports, because each microservice was compiled before it.
+//
+// It reproduces exactly the state bugfix.md 1.3/1.4 describe and the pre-fix
+// order failed on:
+//   - no `dist/` and no `*.tsbuildinfo` anywhere (a clean tree, where nothing
+//     can fall back on warm output — the fresh-clone condition), AND
+//   - a REAL Microservice_Registry naming all three microservices (not the
+//     empty template `prepare` installs, which is what keeps CI green today).
+//
+// Pre-fix, the derived order placed `packages/overseer` (position 7) ahead of
+// `packages/microservices/microservice1` (position 9), so compiling the Overseer
+// against that real registry failed with
+//   error TS2307: Cannot find module '@microservices/microservice1' …
+// and — the ordered build stopping at the first failure — a re-run failed
+// identically (1.3, 1.4). Post-fix (current code) the Build_Sequence places every
+// microservice (statement 4) before the Overseer (statement 5), matching the
+// ten-entry order of 2.21, so the registry's static imports resolve and the
+// ordered build exits 0 (2.8).
+//
+// --- WORKTREE SAFETY (a hard prohibition) -----------------------------------
+//
+// This test compiles the whole repository AND relies on a REAL, all-three
+// registry — which is a mutation of a gitignored generated file, and clearing
+// every `dist/` and `*.tsbuildinfo` is more churn still. All of it happens
+// inside the suite's OWN `pristineWorktree()` copy, materialised into an OS temp
+// directory in `beforeAll`. The checked-out tree is NEVER written to, no path
+// under `repoRoot` is ever touched, and NO git command is used to undo anything.
+// `pristineWorktree()` lists tracked + untracked-but-not-gitignored files and
+// tars them from disk, so the copy reflects uncommitted edits while the
+// gitignored `dist/`, `*.tsbuildinfo`, and generated registry are excluded and
+// free to be regenerated/cleared inside the copy. `dev-error-recovery.test.ts`
+// is the worked example this follows.
+//
+// Validates: Requirements 1.3, 1.4, 2.8, 2.21
+
+/** The compiled ordered-build bin, spawned inside the pristine copy. */
+const ORDERED_BIN_REL = "packages/build-tools/dist/bin/build-workspaces.js";
+/** The compiled registry generator bin, spawned inside the pristine copy. */
+const GENERATE_REGISTRY_BIN_REL =
+  "packages/build-tools/dist/bin/generate-registry.js";
+/** The generated (real) registry the generator writes for the Selector. */
+const REGISTRY_REL = "packages/overseer/src/generated/microservice-registry.ts";
+/** The Overseer's compiled entrypoint — present iff its `tsc` pass succeeded. */
+const OVERSEER_ENTRY_REL = "packages/overseer/dist/index.js";
+/** The Overseer's compiled registry import — the module 1.3's TS2307 was about. */
+const OVERSEER_REGISTRY_JS_REL =
+  "packages/overseer/dist/generated/microservice-registry.js";
+
+// Materialising the copy runs `npm ci`; the ordered build then compiles every
+// workspace package from cold. Both are slow, so the budget is generous and the
+// single copy is reused across examples.
+const PRISTINE_TIMEOUT_MS = 600_000;
+const BUILD_TIMEOUT_MS = 600_000;
+
+/**
+ * Recursively delete every `dist/` directory and every `*.tsbuildinfo` file
+ * under `root`, skipping `node_modules`. This is what makes the copy a CLEAN
+ * tree — the 1.3/1.4 precondition where nothing can fall back on warm output.
+ * It writes only inside the pristine copy.
+ */
+function clearBuildArtifacts(root: string): void {
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const full = join(root, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "node_modules" || entry.name === ".git") {
+        continue;
+      }
+      if (entry.name === "dist") {
+        rmSync(full, { recursive: true, force: true });
+        continue;
+      }
+      clearBuildArtifacts(full);
+    } else if (entry.isFile() && entry.name.endsWith(".tsbuildinfo")) {
+      rmSync(full, { force: true });
+    }
+  }
+}
+
+describe("unified-build-order — clean-tree ordered build with a real registry compiles the Overseer (1.3, 1.4, 2.8, 2.21)", () => {
+  let pristine: PristineWorktreeResult | undefined;
+  let dir: string | undefined;
+  let unavailableReason: string | undefined;
+
+  beforeAll(() => {
+    // ONE pristine copy for the whole block: `npm ci` is the slow step. Every
+    // path this block writes or clears is re-rooted at `pristine.dir`.
+    pristine = pristineWorktree();
+    if (pristine.available !== true) {
+      unavailableReason = pristine.reason;
+      return;
+    }
+    dir = pristine.dir;
+  }, PRISTINE_TIMEOUT_MS);
+
+  afterAll(() => {
+    // Teardown is just removing the temp tree; there is nothing in the real
+    // tree to undo.
+    if (pristine?.available === true) {
+      pristine.cleanup();
+    }
+    pristine = undefined;
+    dir = undefined;
+  });
+
+  it(
+    "generates a real all-three registry on a clean tree, then the ordered build exits 0 with the Overseer compiled (no TS2307)",
+    () => {
+      if (dir === undefined) {
+        // git (or tar / npm ci) unavailable — skip with the returned reason
+        // rather than failing, exactly as pristineWorktree's contract asks.
+        console.warn(
+          `SKIP unified-build-order clean-tree ordered build: ${
+            unavailableReason ?? "pristine tree unavailable"
+          }`,
+        );
+        return;
+      }
+      const treeDir = dir;
+
+      // STEP 1 — bootstrap so the generator and ordered-build bins exist. On a
+      // clean tree they are not compiled yet; this is the same Bootstrap_Build
+      // `scripts/build.js` performs before spawning the ordered bin. Run it by
+      // workspace name, cwd the copy.
+      const bootstrap = spawnSync(
+        "npm",
+        [
+          "run",
+          "build",
+          "--workspace",
+          "@microservices/contracts",
+          "--workspace",
+          "@microservices/build-tools",
+        ],
+        {
+          cwd: treeDir,
+          encoding: "utf8",
+          shell: process.platform === "win32",
+        },
+      );
+      expect(
+        bootstrap.status,
+        `bootstrap build failed:\n${bootstrap.stdout ?? ""}\n${bootstrap.stderr ?? ""}`,
+      ).toBe(0);
+
+      // STEP 2 — generate the REAL registry for MICROSERVICES='*' (all three
+      // microservices), overwriting the empty template `npm ci` installed. This
+      // is the registry that makes the defect bite: it statically imports each
+      // microservice by package name (2.8). The generator reads the selector
+      // from the environment.
+      const generate = spawnSync(
+        process.execPath,
+        [GENERATE_REGISTRY_BIN_REL],
+        {
+          cwd: treeDir,
+          encoding: "utf8",
+          env: { ...process.env, MICROSERVICES: "*" },
+        },
+      );
+      expect(
+        generate.status,
+        `registry generation failed:\n${generate.stdout ?? ""}\n${generate.stderr ?? ""}`,
+      ).toBe(0);
+
+      // The generated registry names all three microservices by package name —
+      // the static imports whose targets must be compiled first.
+      const registry = readFileSync(resolve(treeDir, REGISTRY_REL), "utf8");
+      for (const id of ["microservice1", "microservice2", "microservice3"]) {
+        expect(registry).toContain(`@microservices/${id}`);
+      }
+
+      // STEP 3 — make the tree CLEAN: no `dist/`, no `*.tsbuildinfo` anywhere.
+      // This is the 1.3/1.4 precondition — a fresh-clone state where nothing can
+      // fall back on warm output, so the Overseer's compile genuinely depends on
+      // each microservice having been built ahead of it. (The bootstrap's dist/
+      // for contracts and build-tools goes too; the ordered pass rebuilds them
+      // incrementally as it reaches them.)
+      clearBuildArtifacts(treeDir);
+      expect(existsSync(resolve(treeDir, OVERSEER_ENTRY_REL))).toBe(false);
+
+      // STEP 4 — bootstrap again (the ordered bin's dist/ was just cleared),
+      // then run the ordered build inside the copy. This is a REAL compile of
+      // every workspace package in the Build_Sequence order.
+      const rebootstrap = spawnSync(
+        "npm",
+        [
+          "run",
+          "build",
+          "--workspace",
+          "@microservices/contracts",
+          "--workspace",
+          "@microservices/build-tools",
+        ],
+        {
+          cwd: treeDir,
+          encoding: "utf8",
+          shell: process.platform === "win32",
+        },
+      );
+      expect(
+        rebootstrap.status,
+        `re-bootstrap build failed:\n${rebootstrap.stdout ?? ""}\n${rebootstrap.stderr ?? ""}`,
+      ).toBe(0);
+
+      const ordered = spawnSync(process.execPath, [ORDERED_BIN_REL], {
+        cwd: treeDir,
+        encoding: "utf8",
+      });
+
+      // THE ESSENTIAL ASSERTION: the ordered build succeeds. Pre-fix this failed
+      // at the Overseer with TS2307 because a microservice sat after it in the
+      // order; post-fix the Build_Sequence places every microservice ahead of
+      // the Overseer (2.8, 2.21), so the registry's imports resolve and the pass
+      // exits 0. Surface the TS2307 explicitly if it recurs.
+      const combined = `${ordered.stdout ?? ""}\n${ordered.stderr ?? ""}`;
+      expect(
+        combined.includes("error TS2307"),
+        `ordered build hit the TS2307 the fix removes:\n${combined}`,
+      ).toBe(false);
+      expect(
+        ordered.status,
+        `ordered build did not exit 0:\n${combined}`,
+      ).toBe(0);
+
+      // And the Overseer's compiled output — including the compiled registry
+      // import that 1.3's TS2307 named — exists afterward, which it cannot if
+      // the Overseer's `tsc` pass failed.
+      expect(existsSync(resolve(treeDir, OVERSEER_ENTRY_REL))).toBe(true);
+      const overseerRegistryJs = resolve(treeDir, OVERSEER_REGISTRY_JS_REL);
+      expect(existsSync(overseerRegistryJs)).toBe(true);
+      // A non-empty compiled artifact, not a stray empty file.
+      expect(statSync(overseerRegistryJs).size).toBeGreaterThan(0);
+    },
+    BUILD_TIMEOUT_MS,
+  );
 });

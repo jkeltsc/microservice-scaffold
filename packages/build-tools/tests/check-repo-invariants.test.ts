@@ -1,17 +1,18 @@
 // Task 5.15 — the `check-repo-invariants` bin's exit behavior (R12.8).
 //
-// The three checks in `repo-invariants.ts` are pure and property-tested in
-// `repo-invariants.property.test.ts`. What is NOT covered there is the bin
-// around them: that it resolves the repository from cwd, runs all three checks
-// in one invocation, writes every message to stderr, and exits 0 / 1 as R12.8
-// requires. That boundary is only observable by running the bin as a process,
-// which is what this does.
+// The checks in `repo-invariants.ts` are pure and property-tested in
+// `repo-invariants.property.test.ts` (and, for the fourth `[workspaces:order-source]`
+// check, example-tested in `build-order-source.test.ts`). What is NOT covered
+// there is the bin around them: that it resolves the repository from cwd, runs
+// every check in one invocation, writes every message to stderr, and exits 0 / 1
+// as R12.8 requires. That boundary is only observable by running the bin as a
+// process, which is what this does.
 //
 // An example test rather than a property test: the observable contract is two
 // exit statuses and the message set that accompanies them, and the interesting
-// part is the *combination* — one violating tree, three checks, five messages,
-// one run. Generating trees would re-test the pure checks through a slower
-// interface.
+// part is the *combination* — one violating tree, the four checks, one message
+// per check, one run. Generating trees would re-test the pure checks through a
+// slower interface.
 //
 // The bin resolves the Root_Manifest and every package directory against cwd,
 // so each case runs it with a generated temp repository as cwd. Nothing in the
@@ -185,7 +186,7 @@ function cleanTree(): Tree {
 }
 
 /**
- * The clean tree seeded with one violation of each of the three checks, four
+ * The clean tree seeded with one violation of each of the four checks, five
  * messages in total:
  *
  *   1. `[workspaces:coverage]` — `packages/common/*` is dropped from the array,
@@ -200,6 +201,9 @@ function cleanTree(): Tree {
  *   3. `[imports:peer]` — `alpha`'s `src/` imports `beta` by name.
  *   4. `[deps:direction]` — the Common_Package declares a dependency on a
  *      Microservice_Package.
+ *   5. `[workspaces:order-source]` — a `scripts/*.js` source spawns
+ *      `npm run build --workspaces`, the deleted Ordering_Mechanism the fourth
+ *      check (2.10, 2.15) forbids from reappearing.
  */
 function violatingTree(): Tree {
   const clean = cleanTree();
@@ -240,6 +244,15 @@ function violatingTree(): Tree {
         `export { thing };`,
         "",
       ].join("\n"),
+
+      // (5) A repo-level script that derives a build order from the
+      // `workspaces` array by spawning `npm run build --workspaces` — the
+      // fourth check's one violation.
+      "scripts/start.js": [
+        `import { spawnSync } from "node:child_process";`,
+        `spawnSync("npm", ["run", "build", "--workspaces"], { stdio: "inherit" });`,
+        "",
+      ].join("\n"),
     },
   };
 }
@@ -251,6 +264,7 @@ function expectedViolations(): readonly string[] {
     `[imports:escape] "packages/microservices/alpha/tests/alpha.test.ts" imports "../../beta/src/index.js", a relative path that escapes the package directory`,
     `[imports:peer] "packages/microservices/alpha/src/index.ts" imports "${BETA}", a peer Microservice_Package`,
     `[deps:direction] Common_Package "packages/common/cfg" depends on "${ALPHA}"; a Common_Package must point downward only`,
+    `[workspaces:order-source] "scripts/start.js" invokes a build with \`--workspaces\`; the build order comes from the Build_Sequence, so no script may derive it from the "workspaces" array`,
   ];
 }
 
@@ -362,7 +376,7 @@ describe("the check-repo-invariants bin's exit behavior (R12.8)", () => {
 
     const messages = messagesOf(result.stderr);
     // Every expected message, and nothing else: one run of the bin reports all
-    // three invariants rather than stopping at the first failing one.
+    // four invariants rather than stopping at the first failing one.
     expect([...messages].sort()).toEqual([...expectedViolations()].sort());
     expect(result.stdout).toBe("");
   });

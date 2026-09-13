@@ -53,28 +53,24 @@ const EXPECTED_SINGLETONS: readonly FrameworkSingleton[] = [
     dirName: "contracts",
     packageDir: "packages/contracts",
     staging: "scoped-node-modules",
-    buildPosition: "first",
   },
   {
     name: "@microservices/overseer",
     dirName: "overseer",
     packageDir: "packages/overseer",
     staging: "package-dir",
-    buildPosition: "last",
   },
   {
     name: "@microservices/build-tools",
     dirName: "build-tools",
     packageDir: "packages/build-tools",
     staging: "none",
-    buildPosition: "excluded",
   },
   {
     name: "@microservices/integration-tests",
     dirName: "integration-tests",
     packageDir: "packages/integration-tests",
     staging: "none",
-    buildPosition: "excluded",
   },
 ];
 
@@ -180,5 +176,57 @@ describe("framework.ts surface: Namespace_Containers (R10.1)", () => {
     for (const directory of directories) {
       expect(directory.startsWith(`${PACKAGES_DIR}/`)).toBe(true);
     }
+  });
+});
+
+// Feature: unified-build-order — the source-level absence of `buildPosition`.
+//
+// Requirement 2.2 says the Build_System must consult no per-package
+// build-order position metadata to produce the Build_Sequence: the statement
+// order is hardcoded and its framework members are named by name, so no
+// ordering input is read from a manifest or from a declared Build_Position.
+// Per requirement 1.11, the old `FrameworkSingleton.buildPosition` field was
+// exactly such metadata declared here in the Framework_Constants_Module — one
+// Ordering_Mechanism read it, another did not, and that split was root cause 2.
+//
+// Task 4.3 retired the field. 2.2 is "only checkable by inspection if there is
+// no per-package position metadata left to consult" (design "framework.ts —
+// buildPosition retires"), so the one mechanical check the requirement admits
+// is that no file under `packages/build-tools/src/` names `buildPosition`.
+// This test is the tripwire against reintroducing it.
+//
+// Validates: Requirements 1.11, 2.2
+
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+describe("no per-package build-order position metadata survives (2.2, 1.11)", () => {
+  it("no file under packages/build-tools/src/ names `buildPosition`", () => {
+    // Resolve the build-tools src/ from this test file's location, the way the
+    // other real-tree tests in this package resolve the repo root from __dirname.
+    const here = dirname(fileURLToPath(import.meta.url));
+    const srcDir = resolve(here, "..", "src");
+
+    const files: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        // Skip generated/installed trees that should not live under src/ anyway.
+        if (entry.name === "node_modules" || entry.name === "dist") continue;
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+        } else if (entry.isFile()) {
+          files.push(full);
+        }
+      }
+    };
+    walk(srcDir);
+
+    const offenders = files.filter((file) =>
+      readFileSync(file, "utf8").includes("buildPosition"),
+    );
+
+    expect(offenders).toEqual([]);
   });
 });

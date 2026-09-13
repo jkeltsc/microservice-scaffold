@@ -600,10 +600,11 @@ describe("Property 10: a Framework_Singleton specifier resolves and never become
         expect(layout.overseerDeps).toContain(CONTRACTS.name);
         expect(required.map((pkg) => pkg.name)).not.toContain(CONTRACTS.name);
 
-        // It is nevertheless always built first and always staged, on
-        // Framework_Singleton grounds alone rather than required dependencyship
-        // (R5.4, R5.5, R5.10) — neither fact depends on the Selector.
-        expect(CONTRACTS.buildPosition).toBe("first");
+        // It is nevertheless always staged, on Framework_Singleton grounds
+        // alone rather than required dependencyship (R5.4, R5.10) — the fact
+        // does not depend on the Selector. That `contracts` is also the first
+        // build root is now Build_Sequence statement 1, pinned by the
+        // build-sequence suites rather than by a field here.
         expect(CONTRACTS.staging).toBe("scoped-node-modules");
         expect(ALWAYS_STAGED_SCOPED_ENTRIES).toContain(CONTRACTS.dirName);
       }),

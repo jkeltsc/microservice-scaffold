@@ -8,18 +8,28 @@
 // (`packages/microservices/<id>`), and `packages/overseer` — and nothing else.
 // No Spa_Package is ever a member, whether or not it is a required dependency
 // (R13.4), and `packages/build-tools` and `packages/integration-tests` are never
-// members either (R13.7): both are Framework_Singletons with `buildPosition:
-// "excluded"`, and neither sits inside a Namespace_Container, so neither can be
-// discovered nor become a required dependency. For every dependency edge between two
-// members the dependency appears strictly before its dependent (R13.6), and
-// every selected microservice appears before `packages/overseer` (R13.5).
+// members either (R13.7): both are Framework_Singletons that the Build_Sequence
+// never emits into a `tsc --build` root list — `build-tools` is statement 2 and
+// `integration-tests` statement 6 of the Workspace_Build_Order, but the
+// Tsc_Root_Order the Project_List is derives its membership from the Selector, so
+// neither appears — and neither sits inside a Namespace_Container, so neither can
+// be discovered nor become a required dependency. For every dependency edge
+// between two members the dependency appears strictly before its dependent
+// (R13.6), and every selected microservice appears before `packages/overseer`
+// (R13.5).
 //
-// Property 2 — The microservice members of the Project_List equal
-// `resolveSelected(selector, discoveredIdentifiers)` exactly, for unset, blank,
-// `*`, whitespace-padded and duplicate-bearing selectors, because
-// `projectListFrom` composes `resolveSelected` (via `buildPlanFrom`) rather than
-// reimplementing selection. An unmatched identifier surfaces as the existing
-// `[selector:unmatched]` error naming every offender (R13.10).
+// Property 2 — The microservice members of the Project_List are the same SET as
+// `resolveSelected(selector, discoveredIdentifiers)`, for unset, blank, `*`,
+// whitespace-padded and duplicate-bearing selectors, because `projectListFrom`
+// composes `resolveSelected` (via `buildPlanFrom`) rather than reimplementing
+// selection. Statement 4 of the Build_Sequence, however, iterates the selected
+// microservices in `packageDir` order and de-duplicates them (design.md D1), so
+// the Project_List's microservice members match `resolveSelected` element for
+// element only for a Selector already in ascending directory order without
+// repeats; the general Selector-order-and-duplicates claim now lives over
+// `plan.selected`, cross-referenced to _Property 12_ in
+// build-order-preservation.property.test.ts. An unmatched identifier surfaces as
+// the existing `[selector:unmatched]` error naming every offender (R13.10).
 //
 // Both properties are stated over `projectListFrom(selector, discovery,
 // readDependencies)`, which IS `buildPlanFrom(...).tscRoots` — so no filesystem
@@ -43,6 +53,7 @@ import * as fc from "fast-check";
 
 import type { ReadDependencies } from "../src/required-dependencies.js";
 import { projectListFrom } from "../src/dev-supervisor.js";
+import { buildPlanFrom } from "../src/build-plan.js";
 import { resolveSelected } from "../src/selector.js";
 import {
   buildKindOf,
@@ -151,6 +162,22 @@ function listOf(
   selector: string | undefined,
 ): readonly string[] {
   return projectListFrom(selector, discoveryOf(layout), readerFor(layout));
+}
+
+/**
+ * `plan.selected` for a layout and a raw Selector value — the list that keeps
+ * Selector order and duplicates (design.md D1). The Project_List (`tscRoots`)
+ * de-duplicates and reorders its microservice members into `packageDir` order,
+ * so the Selector-order-and-duplicates claim is asserted here rather than over
+ * the Project_List; _Property 12_ in build-order-preservation.property.test.ts
+ * is that claim's home.
+ */
+function selectedOf(
+  layout: Layout,
+  selector: string | undefined,
+): readonly string[] {
+  return buildPlanFrom(selector, discoveryOf(layout), readerFor(layout))
+    .selected;
 }
 
 /** The Microservice_Identifiers a layout discovers, in discovery order. */
@@ -615,7 +642,17 @@ describe("Property 2: selector resolution is the existing behavior", () => {
     );
   });
 
-  it("matches resolveSelected for whitespace-padded and duplicated identifiers", () => {
+  it("re-scopes the whitespace-padded and duplicated Selector claim onto plan.selected (Property 12's home), while the Project_List's microservice members stay the same set as resolveSelected", () => {
+    // RE-SCOPED per design.md D1 and F10: the pre-fix block asserted the
+    // Project_List's microservice members equalled `resolveSelected` element for
+    // element INCLUDING duplicates. That is no longer true of the Project_List —
+    // statement 4 of the Build_Sequence iterates the selected microservices in
+    // `packageDir` order and de-duplicates them, since a repeated `tsc --build`
+    // root is a no-op for the solution builder. The element-for-element,
+    // duplicate-preserving claim now lives over `plan.selected` and is owned by
+    // _Property 12_ in build-order-preservation.property.test.ts; what remains to
+    // assert over the Project_List is only that its microservice members are the
+    // same SET as `resolveSelected`'s output.
     fc.assert(
       fc.property(
         arbLayout.chain((layout) => {
@@ -645,8 +682,20 @@ describe("Property 2: selector resolution is the existing behavior", () => {
             );
         }),
         ({ layout, selector }) => {
-          expect(microserviceMembers(listOf(layout, selector))).toEqual(
-            resolveSelected(selector, discoveredIdentifiers(layout)),
+          const resolved = resolveSelected(
+            selector,
+            discoveredIdentifiers(layout),
+          );
+
+          // The re-scoped claim (cross-referenced to _Property 12_): plan.selected
+          // keeps Selector order AND duplicates, element for element.
+          expect([...selectedOf(layout, selector)]).toEqual([...resolved]);
+
+          // What survives over the Project_List: its microservice members are the
+          // same SET as resolveSelected's output — order and duplicates having
+          // moved to plan.selected above.
+          expect(new Set(microserviceMembers(listOf(layout, selector)))).toEqual(
+            new Set(resolved),
           );
         },
       ),

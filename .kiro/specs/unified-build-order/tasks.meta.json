@@ -1,0 +1,625 @@
+{
+  "pbtResults": {
+    "1. Write the bug condition exploration test": {
+      "status": "passed",
+      "failingExample": "Property 1 (Bug Condition) FAILS on unfixed code as expected, confirming the Ordering_Violation of 1.2 is live. Three counterexamples:\n\n1. Committed tree (non-generated): Workspace_Build_Order = [build-tools, contracts, common/config, common/extended-config, integration-tests, microservice2, microservice3, overseer, spa/demo, microservice1]. Violation {prerequisite: \"packages/microservices/microservice1\", dependent: \"packages/overseer\"} — the Overseer's registry statically imports microservice1, so microservice1 is a Compile_Time_Prerequisite of the Overseer, yet it sits after the Overseer in the order.\n\n2. Scoped failing shape (fast-check seed 666633962, shrunk): layout with microservice \"a\" declaring Spa_Package \"p\" at packages/spa/p (> packages/overseer). Order = [build-tools, contracts, integration-tests, overseer, spa/p, microservices/a]. Violation {prerequisite: \"packages/microservices/a\", dependent: \"packages/overseer\"}.\n\n3. Freely sampled (fast-check seed -1839109890, shrunk): microservice \"up\" declaring common \"a\" and spa \"aa\". Violation {prerequisite: \"packages/microservices/up\", dependent: \"packages/overseer\"}.\n\nThis is bugfix.md 1.3's TS2307 latent failure and 1.10's non-repair. No production code modified.",
+      "lastRunTimestamp": 1789250838023
+    },
+    "4.9 Verify the bug condition exploration test now passes": {
+      "status": "passed",
+      "lastRunTimestamp": 1789254107523
+    }
+  },
+  "executionHistory": {
+    "1. Write the bug condition exploration test": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250665295
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250675363
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250857611
+      }
+    ],
+    "2. Write the preservation property tests (BEFORE implementing the fix)": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250665353
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250861277
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789251093085
+      }
+    ],
+    "3.1 Create `packages/build-tools/src/build-sequence.ts` with the ordering primitive": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250665401
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789251102116
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789251213347
+      }
+    ],
+    "3.2 Add the Verification_Pass to `build-sequence.ts`": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250665508
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789251216657
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789252807523
+      }
+    ],
+    "3.3 Write the statement-scaffold example tests": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250665563
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789252812080
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789253293107
+      }
+    ],
+    "3.4 Write the Verification_Pass property tests": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250665618
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789252813034
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789253294027
+      }
+    ],
+    "3.5 Confirm the Verification_Pass would have caught the committed defect, and record the observation": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250665662
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789252813988
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789253295101
+      }
+    ],
+    "4.1 Rewrite `workspaceBuildOrder()` in `packages/build-tools/src/workspace-build-order.ts` over the primitive": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250665707
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789253302682
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789253424019
+      }
+    ],
+    "4.2 Rewrite `tscRoots` derivation in `packages/build-tools/src/build-plan.ts`": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250665756
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789253427609
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789253545964
+      }
+    ],
+    "4.3 Retire `buildPosition` from `packages/build-tools/src/framework.ts` and its three test readers": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250665813
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789253550818
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789253669948
+      }
+    ],
+    "4.4 Update the real-tree oracle to the Build_Sequence order": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250665876
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789253676560
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789254058065
+      }
+    ],
+    "4.5 Rewrite `workspace-build-order.property.test.ts` against a Build_Sequence oracle": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250665928
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789253677445
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789254059019
+      }
+    ],
+    "4.6 Invert the phase-boundary clause in `ordered-build.property.test.ts` and attribute _Property 9_ there": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666025
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789253678848
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789254060396
+      }
+    ],
+    "4.7 Re-scope the duplicate-bearing Selector block in `dev-project-list.property.test.ts`": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666092
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789253680268
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789254061712
+      }
+    ],
+    "4.8 Write the remaining Build_Sequence property tests": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666143
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789253681179
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789254062855
+      }
+    ],
+    "4.9 Verify the bug condition exploration test now passes": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666192
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789254069531
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258320185
+      }
+    ],
+    "4.10 Verify the preservation tests still pass": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666251
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789254070362
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258320719
+      }
+    ],
+    "5. Checkpoint — step 2 verification gate": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666304
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258329700
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258515433
+      }
+    ],
+    "6.1 Replace the `--workspaces` build in `scripts/start.js` with a spawn of the ordered bin": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666353
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258527778
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258727257
+      }
+    ],
+    "6.2 Correct the module comment in `scripts/common-startup.js`": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666405
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258529187
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258728663
+      }
+    ],
+    "6.3 Retarget the three `/topological/i` assertions in `dev-start-parity.test.ts`": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666462
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258746560
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258850701
+      }
+    ],
+    "6.4 Add the fourth check `checkBuildOrderSource` to `packages/build-tools/src/repo-invariants.ts`": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666510
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258530226
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258729550
+      }
+    ],
+    "6.5 Write the `[workspaces:order-source]` example tests": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666563
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258862474
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789259041127
+      }
+    ],
+    "6.6 Extend the `ci-wiring.test.ts` no-`--workspaces` assertion to `scripts/*.js`": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666617
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258863470
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789259042753
+      }
+    ],
+    "6.7 Write the `scripts/start.js` wiring assertions": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666662
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258747416
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789259120405
+      }
+    ],
+    "7. Checkpoint — step 3 verification gate": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666707
+      },
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789259125409
+      },
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789285840042
+      }
+    ],
+    "8.1 Add the clean-tree ordered build with a real registry to `repository-build.test.ts`": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666766
+      },
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789285863492
+      },
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789286102769
+      }
+    ],
+    "8.2 Assert `npm start` end to end on a pristine copy after the step-3 change": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666869
+      },
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789285864877
+      },
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789286104012
+      }
+    ],
+    "8.3 Add the pre-`scaffold-demo-samples` expected-order example test": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666921
+      },
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789285865831
+      },
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789286104972
+      }
+    ],
+    "8.4 Add the source-level assertion that no `buildPosition` reader survives": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250666988
+      },
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789285867130
+      },
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789286106167
+      }
+    ],
+    "9.1 Correct `.kiro/steering/tech.md`": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250667053
+      },
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789286262712
+      }
+    ],
+    "9.2 Mark the superseded definition in `.kiro/specs/shared-packages/requirements.md`": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250667120
+      },
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789286260842
+      }
+    ],
+    "9.3 Update `README.md`": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250667175
+      },
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789286259398
+      }
+    ],
+    "9.4 Update the `spa` category section of `.kiro/steering/structure.md`": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250667236
+      },
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789286261741
+      }
+    ],
+    "10. Checkpoint — final verification gate": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789250667286
+      },
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789286269546
+      },
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789287359114
+      }
+    ],
+    "3. Step 1 — The Build_Sequence primitive and the Verification_Pass (additive, inert)": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789253295147
+      }
+    ],
+    "4. Step 2 — Both derivations call the primitive; `buildPosition` retires (atomic)": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789258320776
+      }
+    ],
+    "6. Step 3 — `npm start` off the Declared_Array_Sequence, and the order-source invariant": [
+      {
+        "executionId": "3e84c881-36de-4c09-91f7-d7df5891847f",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789259120509
+      }
+    ],
+    "8. Step 4 — The concrete Fix Checking and Preservation executions": [
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789286106206
+      }
+    ],
+    "9. Step 5 — Documentation": [
+      {
+        "executionId": "93ca0b46-9c09-42c1-af5a-adf8342a55f9",
+        "chatSessionId": "sess_4d137bb5-d4aa-484e-8833-c0625fee8eeb",
+        "timestamp": 1789286262753
+      }
+    ]
+  }
+}

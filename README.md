@@ -87,21 +87,23 @@ A common package follows the same conventions as every other package:
 
 A common package points downward only. It may depend on third-party packages and other common packages, but it must never import from a microservice or from the Overseer. That leaf-only rule is what keeps it safely shareable.
 
-### Workspace ordering matters
+### Workspace membership matters
 
-Add a new common package to the `workspaces` array in the root `package.json`, positioned **before every package that depends on it** — each consuming microservice, the Overseer if it consumes the package, and any other common package that depends on it. `npm run <script> --workspaces` visits packages in array order, and that order is the build order. A package listed *after* one of its consumers builds in the wrong order and breaks a fresh clone, where no compiled `dist/` exists yet to fall back on. The `packages/common/*` glob sits after `packages/contracts` and `packages/build-tools` and before `packages/microservices/*` and `packages/overseer`, so `config` and `extended-config` are already built when a microservice or the Overseer that imports them is visited:
+Add a new common package to the `workspaces` array in the root `package.json` — that entry is what makes it a workspace, so npm links it and every `--workspaces` script and the build system's discovery can see it. What matters is **that** it is listed, not **where**: the array declares membership only, and no path reads its order to decide a build order (see [How a build order is produced](#how-a-build-order-is-produced)). The build order comes from each package's declared `@microservices`-scoped dependencies through the Build_Sequence, so a package listed after one of its consumers still builds after that consumer's prerequisites — including on a fresh clone with no compiled `dist/` to fall back on. The existing glob entry already covers new common packages:
 
 ```jsonc
 "workspaces": [
   "packages/contracts",
   "packages/build-tools",
-  "packages/common/*",       // config, extended-config — before their consumers
+  "packages/common/*",       // covers config, extended-config, and any new common package
   "packages/spa/*",
   "packages/microservices/*",
   "packages/overseer",
   "packages/integration-tests"
 ]
 ```
+
+Because `packages/common/*` is a glob, a common package dropped into `packages/common/` is already a member — no array edit is needed for it. An entry needs adding only for a package the existing globs do not cover.
 
 ### Consuming a common package
 
@@ -119,11 +121,13 @@ A microservice declares the dependency in its own `package.json` and imports it 
 import { buildConfigPayload } from "@microservices/config";
 ```
 
-Adding a common package and wiring up one consumer is a bounded change: create the package, insert it into `workspaces` in topological position, and add the dependency to the consuming microservice's `package.json`. No other microservice, `Dockerfile.template`, or workflow needs to change — the image build stages a common package only when a selected microservice or the Overseer actually depends on it (directly or transitively), so specific images stay minimal.
+Adding a common package and wiring up one consumer is a bounded change: create the package, make sure it is a `workspaces` member (the `packages/common/*` glob already covers one under `packages/common/`), and add the dependency to the consuming microservice's `package.json`. No other microservice, `Dockerfile.template`, or workflow needs to change — the image build stages a common package only when a selected microservice or the Overseer actually depends on it (directly or transitively), so specific images stay minimal.
 
 ### The `spa` category and `packages/spa/demo`
 
 A `spa` package is a bundler-built frontend that lives under `packages/spa/<name>/`, inside the `spa` namespace container. It is discovered by location, and its category contract is a non-empty `scripts.build` (its own bundler build, e.g. Vite) rather than a barrel — a `spa` package declares no `main` and no `types`. `packages/spa/demo` (`@microservices/demo`) is the first member: the demo page `microservice1` serves at its mount root `/`. A microservice depends on a `spa` package only for staging — the microservice serves the SPA's bundled output; it never imports the SPA's code.
+
+A microservice serving a SPA must **compile and start with that SPA's bundle absent**. It compiles without the Spa_Root because it never statically imports the SPA — it resolves the bundle at run time (see below) — which is exactly what lets a `spa` package build in a trailing phase after the single `tsc --build` pass rather than as one of its roots: no TypeScript project ever reads a `spa` package's output. It starts without the Spa_Root too: while the bundle is missing, `microservice1` answers a GET or HEAD at its mount root `/` with `503` and a body naming the resolved Spa_Root and the build command that produces it, then serves the page on the next request once the bundle appears — no restart (see [The demo page and its bundled output](#the-demo-page-and-its-bundled-output)).
 
 #### Locating a SPA's build output
 
@@ -205,10 +209,25 @@ Copy `.env.example` to `.env` and adjust. See `.env.example` for all available v
 | `npm start` | Run locally once and exit with the Overseer's status (uses dotenvx for `.env` injection). |
 | `npm test` | Run the root test suite. |
 | `npm run test --workspaces` | Run every package's test suite. |
-| `npm run build --workspaces` | Build all packages. |
+| `npm run build` | Build all packages in dependency order. |
 | `npm run typecheck --workspaces` | Typecheck all packages. |
 | `npm run lint --workspaces` | Lint all packages. |
 | `sh scripts/rename-scope.sh @your-product` | Rebrand the npm scope after cloning (see "Adopting this scaffold"). |
+
+### How a build order is produced
+
+Four entry points produce a build order, each through its own repo script and, in three cases, a compiled bin from `packages/build-tools` (bin paths below are relative to that package):
+
+| Command | Repo script | Compiled bin | Order function | Membership |
+|---|---|---|---|---|
+| `npm run build` (also `npm test` via `pretest`, and `npm run ci`) | `scripts/build.js` | `dist/bin/build-workspaces.js` | `workspaceBuildOrder()` | whole repository |
+| `npm start` | `scripts/start.js` | `dist/bin/build-workspaces.js` | `workspaceBuildOrder()` | whole repository |
+| `docker build` | `scripts/emit-effective-dockerfile.sh`, then the image's `RUN` | `dist/bin/build-image-tree.js` | `buildPlanFrom()` | Selector-scoped |
+| `npm run dev` | `scripts/dev.js` | `dist/bin/dev-supervisor.js` | `devProjectList()` → `buildPlanFrom()` | Selector-scoped |
+
+There are two memberships here, not four. The whole-repository derivation builds every workspace package whatever the selector says — a test-only package such as `packages/integration-tests` is built by it and by nothing else. The Selector-scoped derivation builds only what the `MICROSERVICES` selector justifies, which is what keeps a specific image minimal.
+
+No path reads the `workspaces` array for ordering. The array declares *membership* only — which packages are workspaces — not the order they build in. All four entry points reach their order through the same Build_Sequence, differing only in the membership they hand it: two memberships between them, the full-workspace membership that produces the Workspace_Build_Order (`npm run build` and `npm start`), and the Selector-scoped membership that produces the Tsc_Root_Order (`docker build` and `npm run dev`).
 
 ## Runtime toggles
 

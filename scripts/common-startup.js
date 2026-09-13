@@ -11,9 +11,10 @@
 // generator runs as a compiled bin a fresh clone does not have, so the bootstrap
 // comes first. Generating the registry before the full build is what gives
 // `npm start` the same behaviour as a container build — the Overseer compiles
-// against a fresh registry rather than a stale one — and it is sound only because
-// the root `workspaces` array is in topological order, the generated registry
-// statically importing each selected microservice.
+// against a fresh registry rather than a stale one. This is sound because the
+// ordered build derives the Workspace_Build_Order from the Build_Sequence, which
+// places the Overseer after the microservices its registry imports — not because
+// of the order the root `workspaces` array happens to declare.
 //
 // Nothing here calls process.exit or writes to a stream: it returns a discriminated
 // result plus the steps it ran, and the caller owns the process effects. Paths are

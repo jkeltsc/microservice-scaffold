@@ -15,6 +15,11 @@
 // (R6.14, R7.13). With no Spa_Package present the two sets are equal and the
 // asymmetry is invisible.
 
+import {
+  assertBuildOrder,
+  buildSequence,
+  prerequisiteEdges,
+} from "./build-sequence.js";
 import type { ConsumerPackage, Discovery } from "./discovery.js";
 import { discoverPackages, readDependencySpecifiers } from "./discovery.js";
 import {
@@ -28,6 +33,7 @@ import {
   type FrameworkSingleton,
 } from "./framework.js";
 import { resolveSelected } from "./selector.js";
+import { workspaceNodesFrom } from "./workspace-build-order.js";
 
 /**
  * The Image_Tree directory holding the workspace scope's real package
@@ -65,7 +71,11 @@ export interface BuildPlan {
   readonly spaBuilds: readonly ConsumerPackage[];
   /**
    * The ordered roots of the single `tsc --build` invocation, holding no
-   * Spa_Package and each root once (R6.3, R6.6, R13.3–R13.6).
+   * Spa_Package and each root once (R6.3, R6.6, R13.3–R13.6). It is the
+   * Build_Sequence over the Selector-scoped membership: statement 1 (`contracts`),
+   * statement 3 (the required Common_Packages), statement 4 (the
+   * Selected_Microservices), statement 5 (the Overseer). Statements 2, 6, and 7
+   * contribute no root on the image path (2.5).
    */
   readonly tscRoots: readonly string[];
   /** Everything to stage, in the order it is written (R7.3–R7.5, R5.6). */
@@ -106,37 +116,6 @@ function scopedStage(
     scopedEntry: entry,
     justification,
   };
-}
-
-/**
- * This function orders the roots of the single `tsc --build` invocation.
- *
- * `contracts` comes first for every build, even one where nothing names it, then
- * the required Tsc_Projects in the order the Dependency_Resolver gave them, then
- * the selected microservices, then the Overseer, whose generated registry imports
- * them (R5.4, R5.5, R13.5). Every root lands ahead of anything depending on it
- * (R13.6), and each appears once with no dedupe step (R6.6), because neither
- * `contracts` nor a selected microservice is ever a required dependency.
- */
-function tscRootsOf(
-  selected: readonly string[],
-  required: readonly ConsumerPackage[],
-): readonly string[] {
-  const positioned = (
-    position: FrameworkSingleton["buildPosition"],
-  ): readonly string[] =>
-    FRAMEWORK_SINGLETONS.filter(
-      (entry) => entry.buildPosition === position,
-    ).map((entry) => entry.packageDir);
-
-  return [
-    ...positioned("first"),
-    ...required
-      .filter((pkg) => pkg.buildKind === "tsc-project")
-      .map((pkg) => pkg.packageDir),
-    ...selected.map(microserviceDir),
-    ...positioned("last"),
-  ];
 }
 
 /**
@@ -207,14 +186,74 @@ export function buildPlanFrom(
     readDependencies,
   );
 
+  // The Tsc_Root_Order is the Build_Sequence primitive over the Selector-scoped
+  // membership: statement 1 (`contracts`) and statement 5 (the Overseer) are named
+  // by the sequence, statement 3 the required Common_Packages, statement 4 the
+  // Selected_Microservices. Both `false` values are a stated decision, not the
+  // emergent consequence F4 describes: `build-tools` (statement 2) and
+  // `integration-tests` (statement 6) are Framework_Singletons that never ship in
+  // an image and are excluded from the image `tsc --build` here on purpose (3.15).
+  // `spa: []` because on the image path statement 7 is handed no members: a
+  // Spa_Package is not a `tsc --build` root, so its Spa_Packages live in
+  // `plan.spaBuilds` and are built by their own `npm run build`. Statement 7's
+  // placement and `spaBuilds`' phase are two independent facts that agree, not one
+  // claim expressed twice (D7).
+  const tscSequence = buildSequence({
+    common: required.filter((pkg) => pkg.category === "common"),
+    microservices: selected,
+    spa: [],
+    buildTools: false,
+    testOnly: false,
+  });
+
+  // Derive the repository-wide order from the discovery and readDependencies this
+  // function already holds, and run the Verification_Pass's divergence check
+  // (2.14) with `workspaceOrder` as the counterpart. The check runs on the image
+  // path and the dev path over the real Selector, at the cost of three extra
+  // manifest reads and no spawned process (D2). `workspaceOrder` is the
+  // SequencedPackage[] over the full workspace membership, and `edges` the
+  // Prerequisite_Graph over the same nodes and this Selector.
+  const workspaceNodes = workspaceNodesFrom(discovery, readDependencies);
+  const workspaceOrder = buildSequence({
+    common: workspaceNodes
+      .filter((node) => node.tier === "common")
+      .map((node) => ({
+        category: "common" as const,
+        dirName: node.packageDir.slice(node.packageDir.lastIndexOf("/") + 1),
+        packageDir: node.packageDir,
+        name: node.name,
+        dependencySpecifiers: node.dependencySpecifiers,
+        buildKind: "tsc-project" as const,
+      })),
+    microservices: workspaceNodes
+      .filter((node) => node.tier === "microservice")
+      .map((node) => node.packageDir.slice(node.packageDir.lastIndexOf("/") + 1)),
+    spa: workspaceNodes
+      .filter((node) => node.tier === "spa")
+      .map((node) => ({
+        category: "spa" as const,
+        dirName: node.packageDir.slice(node.packageDir.lastIndexOf("/") + 1),
+        packageDir: node.packageDir,
+        name: node.name,
+        dependencySpecifiers: node.dependencySpecifiers,
+        buildKind: "bundler-project" as const,
+      })),
+    buildTools: true,
+    testOnly: true,
+  });
+  const edges = prerequisiteEdges(workspaceNodes, selected);
+  assertBuildOrder(tscSequence, edges, workspaceOrder);
+
   return {
     selected,
     requiredDependencies: required,
     stagedDependencies: staged,
-    // Mirrors tscRootsOf's positive Build_Kind filter, so the two partition the
-    // BUILD set and no Spa_Package can reach `tscRoots` (R6.3, R13.4).
+    // Mirrors the Build_Sequence's positive Build_Kind partition: `spaBuilds` is
+    // the bundler-project half of the BUILD set and `tscRoots` the tsc-project
+    // half, so the two `buildKind` filters partition the BUILD set and no
+    // Spa_Package can reach `tscRoots` (R6.3, R13.4).
     spaBuilds: required.filter((pkg) => pkg.buildKind === "bundler-project"),
-    tscRoots: tscRootsOf(selected, required),
+    tscRoots: tscSequence.map((pkg) => pkg.packageDir),
     stage: stageOf(selected, staged),
   };
 }

@@ -26,7 +26,7 @@ The scope is limited to enabling shared *libraries* consumed at build/runtime by
 - **Image_Tree**: The staging tree assembled by `packages/build-tools/` (`/out`) that the container runtime stage overlays.
 - **Generic_Container**: A container image built with Selector `*` (every discovered Microservice).
 - **Specific_Container**: A container image built with a comma-separated Selector (a declared subset of Microservices).
-- **Workspace_Build_Order**: The order of the `workspaces` array in the root `package.json`, which is also the topological order npm visits packages in.
+- **Workspace_Build_Order**: The order of the `workspaces` array in the root `package.json`, which is also the topological order npm visits packages in. **Superseded:** this definition no longer holds. The Workspace_Build_Order is now produced by the Build_Sequence primitive (derived from declared `@microservices`-scoped dependencies), not by the order of the `workspaces` array — the array declares membership only. For the current definition see `.kiro/specs/unified-build-order/` (its `bugfix.md` and `design.md`) and `.kiro/steering/tech.md`.
 - **Root_Manifest**: The root `package.json`.
 
 ## Requirements

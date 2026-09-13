@@ -58,7 +58,7 @@
 // Validates: Requirements 11.4, 11.5, 11.6, 12.6
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 
@@ -109,6 +109,43 @@ describe("the root package.json builds in the Workspace_Build_Order", () => {
       expect(
         value.includes("npm run build --workspaces"),
         `script "${name}" must not contain \`npm run build --workspaces\``,
+      ).toBe(false);
+    }
+  });
+
+  // The last `--workspaces` build invocation did not live in the root manifest
+  // at all — it lived in `scripts/start.js` (`runOrExit("npm", ["run", "build",
+  // "--workspaces"])`), which the root-script assertion above never ranged over
+  // (F8). Task 6.1 removed it; this assertion generalises the no-`--workspaces`
+  // build rule to every `scripts/*.js` source so the deleted mechanism cannot
+  // return there unnoticed (2.15).
+  //
+  // The pattern matches the one the production check
+  // (`repo-invariants.ts` -> `checkBuildOrderSource`) uses: a `build` run
+  // combined with a `--workspaces` traversal flag belonging to the SAME
+  // invocation — both the shell-string `npm run build --workspaces` form and
+  // the array/spawn form `["run", "build", "--workspaces"]`. It deliberately
+  // does NOT match `npm run test/lint/typecheck --workspaces`, whose
+  // `--workspaces` is reached only across a command separator or a second
+  // `run` keyword (as in `npm run build && npm run typecheck --workspaces`).
+  const BUILD_WORKSPACES_PATTERN =
+    /\bbuild\b(?:(?!&&|\|\||[;|\n]|\brun\b)[^\n])*?--workspaces(?:=[^\s"'`]*)?(?![\w-])/;
+
+  it("no scripts/*.js source invokes a build with `--workspaces`", () => {
+    const scriptsDir = resolve(repoRoot, "scripts");
+    const jsFiles = readdirSync(scriptsDir).filter((name) =>
+      name.endsWith(".js"),
+    );
+
+    // Sanity: the scripts directory does hold `.js` sources to range over.
+    expect(jsFiles.length).toBeGreaterThan(0);
+
+    for (const file of jsFiles) {
+      const rel = `scripts/${file}`;
+      const text = readFileSync(resolve(scriptsDir, file), "utf8");
+      expect(
+        BUILD_WORKSPACES_PATTERN.test(text),
+        `${rel} must not invoke a build with \`--workspaces\`; the build order comes from the Build_Sequence`,
       ).toBe(false);
     }
   });
@@ -276,28 +313,46 @@ describe("the ordered build precedes the first test and the Overseer spawn (R11.
     expect(scripts.test ?? "").toContain("vitest --run");
   });
 
-  it("start.js runs the ordered build before it spawns the Overseer (R11.5)", () => {
-    // scripts/start.js is a straight-line script: it must invoke the build
-    // before it spawns the Overseer entrypoint, so the Demo_Spa's build (part
-    // of that build) is observed to exit 0 before the Overseer process starts.
+  it("start.js runs the ordered build before it spawns the Overseer (R11.5, 2.10, 2.15)", () => {
+    // scripts/start.js is a straight-line script. After the step-3 change
+    // (task 6.1) its full build no longer goes through `npm run build
+    // --workspaces` — the Declared_Array_Sequence — but through the compiled
+    // ordered `build-workspaces` bin, whose order comes from the
+    // Build_Sequence-derived Workspace_Build_Order (2.10, 2.15). That ordered
+    // build must run before it spawns the Overseer entrypoint, so the ordered
+    // build (the Demo_Spa's build among it) is observed to exit 0 before the
+    // Overseer process starts.
     const startSource = readFileSync(
       resolve(repoRoot, "scripts", "start.js"),
       "utf8",
     );
     // Strip comments so the ordering is asserted over executable statements
-    // only — the file documents the Overseer entrypoint path in a comment.
+    // only — the file documents the Overseer entrypoint path and the ordered
+    // bin's guarantee in comments.
     const code = startSource
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/(^|[^:])\/\/.*$/gm, "$1");
 
-    const buildPos = code.indexOf('"build"');
+    // The build goes through the ordered `build-workspaces` bin by path, NOT
+    // through `npm run build --workspaces`: its order is the Build_Sequence's,
+    // not the manifest's entry order (2.10, 2.15).
+    const orderedBinPos = code.indexOf(
+      "packages/build-tools/dist/bin/build-workspaces.js",
+    );
     const overseerSpawnPos = code.indexOf("packages/overseer/dist/index.js");
 
-    expect(buildPos).toBeGreaterThanOrEqual(0);
+    expect(orderedBinPos).toBeGreaterThanOrEqual(0);
     expect(overseerSpawnPos).toBeGreaterThanOrEqual(0);
-    // The build step precedes the Overseer spawn textually and, this being a
+    // The ordered build precedes the Overseer spawn textually and, this being a
     // straight-line script, logically.
-    expect(buildPos).toBeLessThan(overseerSpawnPos);
+    expect(orderedBinPos).toBeLessThan(overseerSpawnPos);
+
+    // start.js does not fall back to the Declared_Array_Sequence anywhere: it
+    // invokes no `npm run build --workspaces`. (The suite's `no scripts/*.js
+    // source invokes a build with --workspaces` block, added by task 6.6, is
+    // the general form; this is the direct, readable pin for start.js itself.)
+    expect(code).not.toContain("npm run build --workspaces");
+    expect(code).not.toContain("--workspaces");
   });
 });
 

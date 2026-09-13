@@ -9,11 +9,14 @@
 // saying which microservices a build includes — so it builds every package,
 // always.
 //
-// The order comes from the `@microservices`-scoped `dependencies` each package
-// already declares, over the graph machinery in topological-order.ts. A
-// specifier naming one of the scaffold's own packages counts as an ordering edge
-// too, which is why `packages/contracts` comes out first and
-// `packages/integration-tests` last with neither position hard-coded.
+// The order comes from the Build_Sequence primitive (build-sequence.ts), the one
+// place the seven-statement order is written. `packages/contracts` comes out
+// first because it is statement 1 and `packages/integration-tests` next-to-last
+// because it is statement 6 — those positions are the sequence's, not a
+// consequence of a declared dependency. A package's declared `@microservices`
+// dependency is honoured by the Verification_Pass, not by the ordering sort: the
+// pass rejects any produced order that places a package ahead of one of its own
+// Compile_Time_Prerequisites, and runs before any `build` script is spawned.
 //
 // No dependency-direction rule is applied here, on purpose:
 // `packages/integration-tests` legitimately depends on nearly everything.
@@ -23,16 +26,21 @@
 
 import { spawnSync } from "node:child_process";
 
-import type { ConsumerPackage, Discovery } from "./discovery.js";
-import { discoverPackages, readDependencySpecifiers } from "./discovery.js";
-import type { ConsumerCategory } from "./framework.js";
-import { FRAMEWORK_SINGLETONS, WORKSPACE_SCOPE } from "./framework.js";
-import type { ReadDependencies } from "./required-dependencies.js";
 import {
-  compareCodePoints,
-  findCyclePath,
-  leastTopologicalOrder,
-} from "./topological-order.js";
+  assertBuildOrder,
+  buildSequence,
+  prerequisiteEdges,
+} from "./build-sequence.js";
+import type { SequencedPackage } from "./build-sequence.js";
+import type { ConsumerPackage, Discovery } from "./discovery.js";
+import {
+  buildKindOf,
+  discoverPackages,
+  readDependencySpecifiers,
+} from "./discovery.js";
+import type { ConsumerCategory } from "./framework.js";
+import { FRAMEWORK_SINGLETONS } from "./framework.js";
+import type { ReadDependencies } from "./required-dependencies.js";
 
 /**
  * One package in the build order. Any workspace package is one of these.
@@ -47,42 +55,9 @@ export interface WorkspaceNode {
   readonly name: string;
   /** This package's own `@microservices`-scoped `dependencies` keys (R12.4). */
   readonly dependencySpecifiers: readonly string[];
-  /** Framework tier, or the Consumer_Category. Diagnostics only; no rule reads it. */
+  /** Framework tier, or the Consumer_Category. Partitions the nodes into the
+   *  Build_Sequence's statements — its `common`, `spa`, and microservice members. */
   readonly tier: "framework" | ConsumerCategory;
-}
-
-/**
- * Builds the error for a dependency specifier that names no known package.
- *
- * The wording matches required-dependencies.ts's message for the same defect, so
- * a typo'd specifier reads the same wherever it is caught (R13.11).
- *
- * @param consumer the repo-relative directory of the declaring package.
- * @param unresolved deduplicated and sorted by the caller.
- */
-function unresolvedSpecifierError(
-  consumer: string,
-  unresolved: readonly string[],
-): Error {
-  const named = unresolved.map((name) => `"${name}"`).join(", ");
-  return new Error(
-    `[shared:unresolved] "${consumer}" depends on unknown ${WORKSPACE_SCOPE} package(s): ${named}`,
-  );
-}
-
-/**
- * Builds the error that names every package in a dependency cycle (R12.6).
- *
- * The path {@link findCyclePath} returns is closed, so a self-dependency reads
- * `"a" -> "a"` and a two-node cycle `"a" -> "b" -> "a"`.
- *
- * @param participants the cycle in traversal order, closed by its entry point.
- */
-function cycleError(participants: readonly string[]): Error {
-  const path = participants.map((name) => `"${name}"`).join(" -> ");
-  return new Error(
-    `[build-order:cycle] the ${WORKSPACE_SCOPE} workspace dependency graph contains a cycle: ${path}`,
-  );
 }
 
 /**
@@ -134,88 +109,87 @@ export function workspaceNodesFrom(
 }
 
 /**
- * Collects the package names a dependency specifier may resolve against.
- *
- * Both tiers go into the one set: a scaffold package's name is an ordering edge
- * like any other (R12.3).
- */
-function declaredNames(nodes: readonly WorkspaceNode[]): ReadonlySet<string> {
-  return new Set(nodes.map((node) => node.name));
-}
-
-/**
- * Resolves one package's dependency specifiers to the packages it must follow.
- *
- * Called once per node from {@link workspaceBuildOrder}, as the graph walk asks
- * for that node's edges. A specifier resolving to nothing fails the run rather
- * than being dropped (R12.3).
- *
- * @throws `[shared:unresolved]` for an `@microservices`-scoped specifier matching
- *   no declared package name.
- */
-function dependencyKeysOf(
-  node: WorkspaceNode,
-  names: ReadonlySet<string>,
-): readonly string[] {
-  const keys: string[] = [];
-  const unresolved: string[] = [];
-
-  for (const specifier of node.dependencySpecifiers) {
-    // Both suppliers already filter by scope; the guard keeps the rule true of
-    // this function on its own account (R3.10).
-    if (!specifier.startsWith(`${WORKSPACE_SCOPE}/`)) {
-      continue;
-    }
-    if (names.has(specifier)) {
-      keys.push(specifier);
-    } else {
-      unresolved.push(specifier);
-    }
-  }
-
-  if (unresolved.length > 0) {
-    throw unresolvedSpecifierError(
-      node.packageDir,
-      [...new Set(unresolved)].sort(),
-    );
-  }
-
-  return keys;
-}
-
-/**
  * Sorts the workspace packages into the order they must be built in.
  *
- * Every package comes out once (R12.1), after every package it declares a
- * dependency on (R12.2); unrelated packages are ordered by `packageDir`, so two
- * runs over an unchanged repository agree (R12.5). Called from
- * {@link runOrderedBuildCli}; {@link runOrderedBuild} walks the result.
+ * The order is the Build_Sequence primitive over the full workspace: every
+ * package takes part, so `buildTools` and `testOnly` are both true, and no
+ * Selector narrows the membership — the repository-wide build always builds every
+ * package (R12.1). `contracts` leads as statement 1 and `integration-tests`
+ * follows the microservices and the Overseer as statement 6; within a statement,
+ * members are ordered by `packageDir`, so two runs over an unchanged repository
+ * agree (R12.5).
  *
- * The cycle search runs before the ordering pass, whose leftover set also holds
- * packages merely downstream of a cycle and would over-report them.
+ * A declared dependency (R12.2) is honoured by the Verification_Pass, not by the
+ * ordering sort: {@link assertBuildOrder} rejects any produced order placing a
+ * package ahead of one of its own Compile_Time_Prerequisites, and runs before
+ * {@link runOrderedBuild} spawns a single `build` script (R12.6). Called from
+ * {@link runOrderedBuildCli}; {@link runOrderedBuild} walks the result.
  *
  * @throws `[build-order:cycle]` naming every participating package, having
  *   computed no order (R12.6) — the caller therefore invokes no `build` script.
+ * @throws `[build-order:prerequisite]` when the produced order places a package
+ *   ahead of one of its own prerequisites.
  * @throws `[shared:unresolved]` for an unresolvable specifier.
  */
 export function workspaceBuildOrder(
   nodes: readonly WorkspaceNode[],
 ): readonly WorkspaceNode[] {
-  const names = declaredNames(nodes);
-  const dependenciesOf = (node: WorkspaceNode): readonly string[] =>
-    dependencyKeysOf(node, names);
-  const keyOf = (node: WorkspaceNode): string => node.name;
+  // Partition the workspace by tier and category. Statement 3 (common) and
+  // statement 7 (spa) want ConsumerPackage-shaped members; reconstruct the fields
+  // buildSequence reads from each node — its category is its tier, and its
+  // buildKind derives from that category alone (discovery.ts). Statement 4 wants
+  // the microservice directory names, which are the last path segment of each
+  // microservice node's packageDir.
+  const consumerPackageOf = (
+    node: WorkspaceNode,
+    category: ConsumerCategory,
+  ): ConsumerPackage => ({
+    category,
+    dirName: node.packageDir.slice(node.packageDir.lastIndexOf("/") + 1),
+    packageDir: node.packageDir,
+    name: node.name,
+    dependencySpecifiers: node.dependencySpecifiers,
+    buildKind: buildKindOf(category),
+  });
 
-  const cycle = findCyclePath(nodes, keyOf, dependenciesOf);
-  if (cycle !== undefined) {
-    // Report directories, not declared names, as every build-order failure does.
-    const dirByName = new Map(nodes.map((node) => [node.name, node.packageDir]));
-    throw cycleError(cycle.map((name) => dirByName.get(name) ?? name));
-  }
+  const common = nodes
+    .filter((node) => node.tier === "common")
+    .map((node) => consumerPackageOf(node, "common"));
+  const spa = nodes
+    .filter((node) => node.tier === "spa")
+    .map((node) => consumerPackageOf(node, "spa"));
+  const microserviceIdentifiers = nodes
+    .filter((node) => node.tier === "microservice")
+    .map((node) => node.packageDir.slice(node.packageDir.lastIndexOf("/") + 1));
 
-  return leastTopologicalOrder(nodes, keyOf, dependenciesOf, (a, b) =>
-    compareCodePoints(a.packageDir, b.packageDir),
-  );
+  const order = buildSequence({
+    common,
+    microservices: microserviceIdentifiers,
+    spa,
+    buildTools: true,
+    testOnly: true,
+  });
+
+  // The Verification_Pass runs before any `build` script is spawned: it resolves
+  // every declared specifier (raising `[shared:unresolved]`), rejects a cyclic
+  // Prerequisite_Graph (`[build-order:cycle]`), and rejects an order placing a
+  // package ahead of one of its prerequisites (`[build-order:prerequisite]`).
+  // Every discovered microservice is a Selected_Microservice for this path.
+  assertBuildOrder(order, prerequisiteEdges(nodes, microserviceIdentifiers));
+
+  // Map each SequencedPackage back to its input WorkspaceNode by packageDir, so
+  // the return type stays `readonly WorkspaceNode[]` for `runOrderedBuild` and
+  // the suites that consume it (D5).
+  const nodeByDir = new Map(nodes.map((node) => [node.packageDir, node]));
+  return order.map((sequenced: SequencedPackage) => {
+    const node = nodeByDir.get(sequenced.packageDir);
+    if (node === undefined) {
+      throw new Error(
+        `[build-order:internal] the Build_Sequence produced "${sequenced.packageDir}", which is not a discovered workspace node`,
+      );
+    }
+    return node;
+  });
 }
 
 /**

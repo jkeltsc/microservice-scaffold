@@ -24,14 +24,19 @@
 //   3. Production_Start unchanged (1 example, execution half). On a
 //      pristineWorktree(), spawn `node scripts/start.js` and assert its step
 //      order (bootstrap build -> registry generation -> full build -> Overseer
-//      boot marker), that the Overseer answers, that Production_Start is
+//      boot marker), that the full build is the ORDERED `build-workspaces` bin
+//      (the Build_Sequence-derived Workspace_Build_Order, per-package
+//      `npm run build --workspace <name>` invocations) and not
+//      `npm run build --workspaces`, that the Selected_Microservice is built
+//      before the Overseer which then compiles against the fresh registry and
+//      boots (R2.9, R3.7), that the Overseer answers, that Production_Start is
 //      one-shot (it terminates with the Overseer's exit status and never
 //      restarts or watches), and — with an invalid MICROSERVICES selector — that
 //      it exits non-zero with the `[start] ... refusing to start the Overseer`
 //      stderr line and never boots the Overseer (R11.5, R11.6). Skips with a
 //      clear message when `git` is unavailable.
 //
-// Validates: Requirements 11.1, 11.2, 11.4, 11.5, 11.6
+// Validates: Requirements 11.1, 11.2, 11.4, 11.5, 11.6, 2.9, 3.7, 3.9
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
@@ -113,13 +118,14 @@ describe("Property 11: Common_Startup is single-sourced (static)", () => {
 
   it("documents the clean-checkout ordering constraints in common-startup.js and no other entry point (R11.2)", () => {
     // The three ordering constraints — Bootstrap_Build before the generator
-    // bin, registry generation before the full build, both relying on the
-    // topological root `workspaces` array — are documented in one place. The
-    // module names each; assert the distinctive phrases live there and nowhere
-    // else among the entry points.
+    // bin, registry generation before the full build, the latter's soundness
+    // resting on the ordered build deriving the Workspace_Build_Order from the
+    // Build_Sequence — are documented in one place. The module names each;
+    // assert the distinctive phrases live there and nowhere else among the
+    // entry points.
     const phrases = [
       /clean-checkout ordering/i,
-      /topological/i,
+      /Workspace_Build_Order/,
       /Bootstrap_Build/,
     ];
 
@@ -133,12 +139,14 @@ describe("Property 11: Common_Startup is single-sourced (static)", () => {
     // The ordering rationale is single-sourced. An entry point MAY point at
     // common-startup.js as the owner (start.js does: "the sole owner of the
     // clean-checkout ordering rationale"), but must not RE-DOCUMENT the
-    // constraints themselves. The distinctive constraint reasoning — the
-    // topological-workspaces argument — therefore appears only in
-    // common-startup.js and in neither entry point.
-    expect(/topological/i.test(commonStartupSrc)).toBe(true);
-    expect(/topological/i.test(startSrc)).toBe(false);
-    expect(/topological/i.test(devSrc)).toBe(false);
+    // constraints themselves. The distinctive constraint reasoning — that the
+    // registry-before-build soundness comes from the ordered build deriving the
+    // Workspace_Build_Order from the Build_Sequence, not from the `workspaces`
+    // array order — therefore appears only in common-startup.js and in neither
+    // entry point.
+    expect(/Workspace_Build_Order/.test(commonStartupSrc)).toBe(true);
+    expect(/Workspace_Build_Order/.test(startSrc)).toBe(false);
+    expect(/Workspace_Build_Order/.test(devSrc)).toBe(false);
   });
 });
 
@@ -331,6 +339,56 @@ describe("Property 11: Production_Start is unchanged (execution, pristine tree)"
       expect(idxReady, `overseer boot marker not seen:\n${combined}`).toBeGreaterThanOrEqual(0);
       expect(idxRegistered).toBeGreaterThan(idxBootstrap);
       expect(idxReady).toBeGreaterThan(idxRegistered);
+
+      // The full build between registry generation and the Overseer boot is the
+      // ORDERED build (R2.9): after step 3 of the fix, start.js spawns the
+      // compiled `build-workspaces` bin — the Build_Sequence-derived
+      // Workspace_Build_Order — rather than `npm run build --workspaces`. The
+      // ordered bin runs each package's own `npm run build --workspace <name>`
+      // in Build_Sequence order, so npm emits a per-package run header
+      // `> <name>@<version> build` for each. A `--workspaces`-array traversal
+      // would emit a single run over the whole array and never these distinct
+      // per-workspace headers, and — the point of the fix — would not guarantee
+      // a Selected_Microservice precedes the Overseer.
+      //
+      // Assert the ordered build's distinctive shape without over-pinning tsc
+      // or bundler output: the selected microservice's own build header appears,
+      // the Overseer's own build header appears, the microservice is built
+      // before the Overseer (statement 4 before statement 5 of the
+      // Build_Sequence), and the Overseer compiles against the fresh registry
+      // before it boots. `microservice1` is the Selector this example spawns.
+      const msBuildHeader = /^> @microservices\/microservice1@\S+ build\b/m;
+      const overseerBuildHeader = /^> @microservices\/overseer@\S+ build\b/m;
+
+      const msBuild = combined.match(msBuildHeader);
+      const overseerBuild = combined.match(overseerBuildHeader);
+      expect(
+        msBuild,
+        `ordered build did not run 'npm run build --workspace @microservices/microservice1' ` +
+          `(a --workspaces-array traversal would not emit this per-workspace header):\n${combined}`,
+      ).not.toBeNull();
+      expect(
+        overseerBuild,
+        `ordered build did not run 'npm run build --workspace @microservices/overseer':\n${combined}`,
+      ).not.toBeNull();
+
+      const idxMsBuild = combined.indexOf(msBuild![0]);
+      const idxOverseerBuild = combined.indexOf(overseerBuild![0]);
+
+      // The full ordered build runs after registry generation: the microservice
+      // build header appears after the bootstrap step landmark.
+      expect(idxMsBuild).toBeGreaterThan(idxBootstrap);
+      // Build_Sequence order: the Selected_Microservice (statement 4) is built
+      // before the Overseer (statement 5). This is exactly the ordering the
+      // Ordering_Violation broke and the fix restores.
+      expect(
+        idxOverseerBuild,
+        `Overseer was built before microservice1 — the ordered build did not place the ` +
+          `Selected_Microservice ahead of the Overseer:\n${combined}`,
+      ).toBeGreaterThan(idxMsBuild);
+      // The Overseer compiles against the fresh registry and only then boots:
+      // its build header precedes the boot marker.
+      expect(idxReady).toBeGreaterThan(idxOverseerBuild);
 
       // The Overseer answers over the wire from the compiled artifacts.
       // Liveness probe (R13.12): microservice1 is mounted at its Mount_Root "/",

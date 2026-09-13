@@ -412,8 +412,19 @@ describe("scripts/start.js change is confined to consuming Common_Startup (R9.9)
   });
 
   it("preserves the unchanged Production_Start effects: full build and the Overseer one-shot", () => {
-    // These are the parts of start.js that are intentionally NOT changed.
-    expect(startJs).toContain('"run", "build", "--workspaces"');
+    // The Production_Start EFFECTS are unchanged: start.js still performs the
+    // full workspace build before the Overseer, and the Overseer run is still
+    // one-shot. The MECHANISM of the full build changed in Step 3 (Task 6.1):
+    // the build now goes through the compiled ordered bin, not through npm's
+    // `workspaces` traversal. The Declared_Array_Sequence is an order source for
+    // no path (design 2.10, 2.15), so start.js no longer contains a
+    // `--workspaces` build invocation.
+    expect(startJs).toContain(
+      "packages/build-tools/dist/bin/build-workspaces.js",
+    );
+    // The full build no longer goes through the `workspaces` array.
+    expect(startJs).not.toContain("npm run build --workspaces");
+    expect(startJs).not.toContain('"build", "--workspaces"');
     expect(startJs).toContain("packages/overseer/dist/index.js");
     // One-shot: it uses spawnSync (blocking) and does not watch or restart.
     expect(startJs).toContain("spawnSync");

@@ -30,15 +30,6 @@ export type FrameworkStaging =
   /** Never staged into an image. */
   | "none";
 
-/** Where a framework package sits among the ordered `tsc --build` roots. */
-export type FrameworkBuildPosition =
-  /** Always the first root, ahead of every other Tsc_Project (R5.5). */
-  | "first"
-  /** Always the last root; its generated registry imports the microservices. */
-  | "last"
-  /** Never a root of the image/dev build (bootstrap or test-only tooling). */
-  | "excluded";
-
 /** A package of the scaffold itself, known to the Build_System by name. */
 export interface FrameworkSingleton {
   /** Declared package name, e.g. "@microservices/contracts". */
@@ -48,7 +39,6 @@ export interface FrameworkSingleton {
   /** Repo-relative package directory, e.g. "packages/contracts". */
   readonly packageDir: string;
   readonly staging: FrameworkStaging;
-  readonly buildPosition: FrameworkBuildPosition;
 }
 
 /** Builds one framework package record; composing `name` and `packageDir` from
@@ -56,46 +46,36 @@ export interface FrameworkSingleton {
 function singleton(
   dirName: string,
   staging: FrameworkStaging,
-  buildPosition: FrameworkBuildPosition,
 ): FrameworkSingleton {
   return {
     name: `${WORKSPACE_SCOPE}/${dirName}`,
     dirName,
     packageDir: `${PACKAGES_DIR}/${dirName}`,
     staging,
-    buildPosition,
   };
 }
 
-/** The scaffold's shared type surface: always built, always the first root, always
- *  staged, whatever the selector and whatever depends on it (R5.4-R5.6). */
+/** The scaffold's shared type surface: always built, always the first build root
+ *  (Build_Sequence statement 1), always staged, whatever the selector and whatever
+ *  depends on it (R5.4-R5.6). */
 export const CONTRACTS: FrameworkSingleton = singleton(
   "contracts",
   "scoped-node-modules",
-  "first",
 );
 
 /** The routing frontend. Staged at its package directory because the entrypoint
- *  invokes it by path; built last because its registry imports the microservices. */
-export const OVERSEER: FrameworkSingleton = singleton(
-  "overseer",
-  "package-dir",
-  "last",
-);
+ *  invokes it by path; its generated registry imports the microservices, so the
+ *  Build_Sequence emits it after them. */
+export const OVERSEER: FrameworkSingleton = singleton("overseer", "package-dir");
 
 /** The Build_System itself. Compiled by the image's bootstrap step, never a root
  *  of the selector-driven build, never shipped in a runtime image (R2.10). */
-export const BUILD_TOOLS: FrameworkSingleton = singleton(
-  "build-tools",
-  "none",
-  "excluded",
-);
+export const BUILD_TOOLS: FrameworkSingleton = singleton("build-tools", "none");
 
 /** The cross-package test suite. Never built for, never shipped in, an image. */
 export const INTEGRATION_TESTS: FrameworkSingleton = singleton(
   "integration-tests",
   "none",
-  "excluded",
 );
 
 /** All four framework packages, in fixed order; iterate this, never a copy (R10.6). */

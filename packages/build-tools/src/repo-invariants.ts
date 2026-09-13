@@ -1,4 +1,4 @@
-// This module runs three static checks over the repository and reports what they
+// This module runs four static checks over the repository and reports what they
 // find. It builds nothing and stages nothing.
 //
 // It is the CI path, reached through the `check-repo-invariants` bin
@@ -8,14 +8,16 @@
 //   1. workspace coverage — every workspace package is matched by exactly one
 //      `workspaces` entry of the root package.json;
 //   2. import discipline — no source file crosses a package boundary illegally;
-//   3. dependency direction — a Common_Package points downward only.
+//   3. dependency direction — a Common_Package points downward only;
+//   4. build-order source — no repository script derives a build order from the
+//      Declared_Array_Sequence by invoking a build with `--workspaces` (2.15).
 //
-// Sections 1 to 3 are those checks, each a pure function returning its violation
+// Sections 1 to 4 are those checks, each a pure function returning its violation
 // messages rather than throwing, so one run reports every problem at once. Section
-// 4 reads the real repository and feeds them; section 5 is the CLI the bin calls.
+// 5 reads the real repository and feeds them; section 6 is the CLI the bin calls.
 // Framework and category directory names all come from framework.ts (R10.5).
 //
-// (Requirements R8.9, R12.15–R12.20, R14.4, R14.5, R14.10, R14.13, R14.14.)
+// (Requirements R8.9, R12.15–R12.20, R14.4, R14.5, R14.10, R14.13, R14.14, 2.15.)
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 
@@ -38,6 +40,7 @@ const ESCAPE = "[imports:escape]";
 const PEER = "[imports:peer]";
 const SPA = "[imports:spa]";
 const DIRECTION = "[deps:direction]";
+const ORDER_SOURCE = "[workspaces:order-source]";
 
 // --- 1. Workspace coverage (R12.15–R12.20) ---
 //
@@ -100,7 +103,7 @@ function matchingEntries(
 
 /**
  * Checks that every workspace package is matched by exactly one `workspaces`
- * entry (R12.15). First of the three checks.
+ * entry (R12.15). First of the four checks.
  *
  * Zero matches is a violation, since npm never discovers such a package. Two or
  * more is one too, since the declaration is ambiguous, and the message then names
@@ -402,7 +405,7 @@ function importViolation(
 
 /**
  * Checks that no source file imports across a package boundary illegally. Second
- * of the three checks, applying four rules, each yielding one message per
+ * of the four checks, applying four rules, each yielding one message per
  * offending specifier:
  *
  *   1. no relative specifier escaping its own package directory (R14.4);
@@ -462,7 +465,7 @@ function pointsUpward(discovery: Discovery, specifier: string): boolean {
 }
 
 /**
- * Checks that every Common_Package points downward only. Third of the three checks.
+ * Checks that every Common_Package points downward only. Third of the four checks.
  *
  * A Common_Package may name third-party packages, other Common_Packages, and the
  * scaffold's own, but not a microservice and not the Overseer (R8.9) — that is what
@@ -491,13 +494,87 @@ export function checkDependencyDirection(
   return messages;
 }
 
-// --- 4. The real-filesystem effect shell (R8.9, R12.17, R12.18, R14.10) ---
+// --- 4. Build-order source (2.10, 2.15) ---
 //
-// This section reads the real repository and hands it to the three checks above: the
+// After the fix, the Build_Sequence is the one Ordering_Mechanism and the
+// Declared_Array_Sequence is an order source for no path. The mechanism that used
+// to make the `workspaces` array load-bearing is a build invocation traversing it
+// — `npm run build --workspaces` — so its reappearance in any repository script
+// silently reverts the fix (this is exactly what would put `npm start` back on the
+// array). This check fails on that reappearance, over both the Root_Manifest's
+// `scripts` values and every `scripts/*.js` source. It generalises the assertion
+// `ci-wiring.test.ts` already makes over root scripts (F8) to `scripts/*.js` too.
+//
+// Deliberately narrow: the prohibited pattern is a `build` run traversing the
+// workspaces array, not the `--workspaces` flag itself. `npm run typecheck
+// --workspaces`, `npm run lint --workspaces`, and `npm run test --workspaces` are
+// legitimate — `npm run ci` uses them — and must NOT be reported. Only a `build`
+// run combined with a `--workspaces` (or `--workspaces=<value>`) traversal flag is
+// an order source.
+
+/** One repository script the build-order-source check reasons about. */
+export interface ScriptSource {
+  /** How the message names it: a script name, or a `scripts/*.js` path. */
+  readonly source: string;
+  /** The script value or the file contents to scan. */
+  readonly text: string;
+}
+
+/**
+ * Matches a `build` run that traverses the `workspaces` array — the deleted
+ * Ordering_Mechanism. It requires, in order, the `build` npm-run script name and a
+ * `--workspaces` traversal flag (bare or `--workspaces=<value>`) belonging to the
+ * SAME invocation.
+ *
+ * "Same invocation" is what keeps this narrow. Between `build` and the flag the
+ * pattern allows only argument-like tokens — no command separator (`&&`, `||`, `;`,
+ * `|`, newline) and no further `run` keyword — so a legitimate line like
+ * `npm run build && npm run typecheck --workspaces` does NOT match: its
+ * `--workspaces` belongs to `typecheck`, reached only across a `&&` and a second
+ * `run`. The flag itself must be a whole token, so `--workspaces-foo` and
+ * `--workspace=x` (the single-package flag) do not match. What remains matching is
+ * exactly a build traversing the array, i.e. `npm run build --workspaces`.
+ */
+const BUILD_WORKSPACES_PATTERN =
+  /\bbuild\b(?:(?!&&|\|\||[;|\n]|\brun\b)[^\n])*?--workspaces(?:=[^\s"'`]*)?(?![\w-])/;
+
+/**
+ * Checks that no repository script derives a build order from the
+ * Declared_Array_Sequence (2.10, 2.15). Fourth of the four checks.
+ *
+ * A script — a Root_Manifest `scripts` value or a `scripts/*.js` source — that
+ * invokes a build traversing the `workspaces` array yields one message. Both inputs
+ * are injected as {@link ScriptSource} lists; section 5 reads the real files and the
+ * real manifest. Sources are visited in `source` order, so the message list is
+ * reproducible.
+ */
+export function checkBuildOrderSource(
+  scripts: readonly ScriptSource[],
+  sources: readonly ScriptSource[],
+): readonly string[] {
+  const messages: string[] = [];
+
+  for (const { source, text } of [...scripts, ...sources].sort((a, b) =>
+    compareStrings(a.source, b.source),
+  )) {
+    if (BUILD_WORKSPACES_PATTERN.test(text)) {
+      messages.push(
+        `${ORDER_SOURCE} "${source}" invokes a build with \`--workspaces\`; the build order comes from the Build_Sequence, so no script may derive it from the "workspaces" array`,
+      );
+    }
+  }
+
+  return messages;
+}
+
+// --- 5. The real-filesystem effect shell (R8.9, R12.17, R12.18, R14.10, 2.15) ---
+//
+// This section reads the real repository and hands it to the four checks above: the
 // `workspaces` array resolved to the directories it matches, one record per workspace
-// package, and a walk of every package's source files. Paths are repo-relative,
-// resolved against cwd, and composed with `/` rather than `path.join`, since the
-// checks compare them against the POSIX-separated directories discovery.ts records.
+// package, a walk of every package's source files, and the Root_Manifest `scripts`
+// values plus every `scripts/*.js` source. Paths are repo-relative, resolved against
+// cwd, and composed with `/` rather than `path.join`, since the checks compare them
+// against the POSIX-separated directories discovery.ts records.
 
 /** The root package.json, repo-relative. */
 const ROOT_MANIFEST = "package.json";
@@ -693,7 +770,60 @@ function consumerSourceFiles(discovery: Discovery): readonly string[] {
   );
 }
 
-/** Runs all three checks over the real repository and returns every message. */
+/** The directory holding the repo-level scripts the build-order check scans. */
+const SCRIPTS_DIR = "scripts";
+
+/**
+ * Reads the Root_Manifest `scripts` object as {@link ScriptSource} records, one per
+ * declared script, named by the script name. A manifest that is unreadable,
+ * unparsable, or declares no `scripts` object yields no records — the coverage
+ * reader already fails the run on an unreadable manifest, so this stays lenient.
+ */
+function rootManifestScripts(): readonly ScriptSource[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(ROOT_MANIFEST, "utf8"));
+  } catch {
+    return [];
+  }
+
+  const scripts: unknown = (parsed as { scripts?: unknown } | null)?.scripts;
+  if (typeof scripts !== "object" || scripts === null) {
+    return [];
+  }
+
+  return Object.entries(scripts as Record<string, unknown>)
+    .filter(([, value]) => typeof value === "string")
+    .map(([name, value]) => ({
+      source: `root package.json script "${name}"`,
+      text: value as string,
+    }));
+}
+
+/**
+ * Reads every `scripts/*.js` source as a {@link ScriptSource} record, named by its
+ * repo-relative path. Only the direct `.js` children of `scripts/` are read (the
+ * repo-level scripts npm lifecycle invokes); an absent directory yields none.
+ */
+function repoScriptSources(): readonly ScriptSource[] {
+  let entries;
+  try {
+    entries = readdirSync(SCRIPTS_DIR, { withFileTypes: true });
+  } catch (error) {
+    if (isAbsent(error)) {
+      return [];
+    }
+    throw error;
+  }
+
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".js"))
+    .map((entry) => `${SCRIPTS_DIR}/${entry.name}`)
+    .sort()
+    .map((path) => ({ source: path, text: readFileSync(path, "utf8") }));
+}
+
+/** Runs all four checks over the real repository and returns every message. */
 function collectViolations(): readonly string[] {
   const discovery = discoverPackages();
   const entries = resolveWorkspaceEntries(readWorkspacePatterns());
@@ -706,10 +836,11 @@ function collectViolations(): readonly string[] {
       (file) => readFileSync(file, "utf8"),
     ),
     ...checkDependencyDirection(discovery),
+    ...checkBuildOrderSource(rootManifestScripts(), repoScriptSources()),
   ];
 }
 
-// --- 5. The CLI entry (R12.17, R12.18) ---
+// --- 6. The CLI entry (R12.17, R12.18) ---
 //
 // This section holds all CLI policy, so bin/check-repo-invariants.ts can be a
 // shebang, one import and one call, like its three siblings.
@@ -718,7 +849,7 @@ function collectViolations(): readonly string[] {
  * Runs every check, reports what was found, and exits 1 if anything was. A clean
  * repository is silent and exits 0 (R12.17).
  *
- * All three checks always run, so one invocation reports every violation rather than
+ * All four checks always run, so one invocation reports every violation rather than
  * stopping at the first failing check — which is what makes it usable as a single CI
  * step. Nothing goes to stdout, and the root package.json is never opened for writing
  * (R12.18). A thrown error is reported as its message alone, not a stack trace, since

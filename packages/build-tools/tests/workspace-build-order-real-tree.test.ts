@@ -1,15 +1,15 @@
-// Feature: package-categories — real-tree Workspace_Build_Order (design "Data
-// Models / Workspace_Build_Order over the current tree").
+// Feature: unified-build-order — real-tree Workspace_Build_Order (design "Data
+// Models / The Build_Sequence over the committed tree at 35156ce", 2.21).
 //
 // An example test, not a property test: there is one committed repository and
 // exactly one correct Workspace_Build_Order over it, so quantifying over inputs
-// adds nothing. The general claim — that the derivation is a correct topological
-// order for ANY layout — is Property 33, already written elsewhere. This test
-// runs the SAME derivation over the REAL committed tree and pins the one order
-// that tree produces, so the two of them (the pure derivation and reality)
-// cannot silently drift apart: a manifest that stops declaring a scoped
-// dependency, a Framework_Singleton whose specifiers are misread, or a
-// Namespace_Container renamed would all move an entry here.
+// adds nothing. The general claim — that the derivation is a correct Build_Sequence
+// for ANY layout — lives in the Build_Sequence property suites. This test runs the
+// SAME derivation over the REAL committed tree and pins the one order that tree
+// produces, so the pure primitive and reality cannot silently drift apart: a
+// manifest that stops declaring a scoped dependency, a Framework_Singleton whose
+// specifiers are misread, or a Namespace_Container renamed would all move an
+// entry here.
 //
 // The derivation is run exactly as the CLI shell runs it, over the real
 // filesystem:
@@ -21,59 +21,50 @@
 // Framework_Singleton's own scoped dependencies — neither is discovered, so its
 // specifiers come from its manifest by directory.
 //
-// The design's "Workspace_Build_Order over the current tree" table is the
-// oracle. Over the committed tree the ten `packageDir`s must come out in
+// The order is the Build_Sequence's seven statements applied to the committed
+// tree (design Data Models table, 2.21). Each position below cites the STATEMENT
+// that emitted it, not a graph consequence — the derivation is the statement
+// scaffold of 2.1, and the Verification_Pass, not the sort, is what honours a
+// declared edge. Over the committed tree the ten `packageDir`s come out in
 // exactly this order:
 //
-//   1   packages/contracts                       (no scoped dependency, ready first)
-//   2   packages/build-tools                      (depends on contracts)
-//   3   packages/common/config                    (depends on contracts)
-//   4   packages/common/extended-config           (depends on config)
-//   5   packages/microservices/microservice2      (depends on config, contracts)
-//   6   packages/microservices/microservice3      (depends on contracts,
-//                                                  extended-config)
-//   7   packages/overseer                         (depends on contracts)
-//   8   packages/spa/demo                         (no scoped dependency)
-//   9   packages/microservices/microservice1      (depends on contracts, demo)
-//   10  packages/integration-tests                (depends on all three
-//                                                  microservices, the Overseer,
-//                                                  build-tools, contracts)
+//   1   packages/contracts                       (statement 1: contracts, first)
+//   2   packages/build-tools                      (statement 2: build-tools)
+//   3   packages/common/config                    (statement 3: Common_Packages)
+//   4   packages/common/extended-config           (statement 3: Common_Packages)
+//   5   packages/microservices/microservice1      (statement 4: Microservice_Packages)
+//   6   packages/microservices/microservice2      (statement 4: Microservice_Packages)
+//   7   packages/microservices/microservice3      (statement 4: Microservice_Packages)
+//   8   packages/overseer                         (statement 5: overseer)
+//   9   packages/integration-tests                (statement 6: integration-tests)
+//   10  packages/spa/demo                         (statement 7: Spa_Packages, last)
 //
-// `packages/common/extended-config` follows `packages/common/config`: it
-// declares `@microservices/config` as its sole scoped dependency, so an edge
-// from config precedes it, and once config is placed the tie-break by
-// `packageDir` code point puts `common/extended-config` ahead of every
-// `microservices/…` entry.
+// Statement 3 (positions 3 and 4) is its own calculated order: `extended-config`
+// declares `@microservices/config` as its sole scoped specifier, so the one
+// declared edge — not a rule — places `config` ahead of `extended-config`.
 //
-// `packages/spa/demo` before `packages/microservices/microservice1` is the
-// edge this feature adds, and it is what moves microservice1 from position 5 to
-// 9. The Demo_Spa declares NO scoped dependency, so it is ready from the first
-// step; on its own, its `packageDir` "packages/spa/…" sorts after everything
-// else, so the minimum-first ready queue (F8, the lexicographically least
-// topological order) would hold it to the very end. But Microservice1 now
-// declares `@microservices/demo` — it serves the Demo_Spa at its Mount_Root —
-// so an edge from demo to microservice1 exists, and microservice1 cannot be
-// emitted until demo has been. That single edge pulls demo forward to just
-// before microservice1: demo lands at 8, microservice1 at 9. Eligibility is
-// still not placement — demo was ready first — but a real dependent now fixes
-// where it is emitted.
+// Statement 4 (positions 5 to 7) is the three Microservice_Packages in
+// `packageDir` code-point order: microservice1, microservice2, microservice3.
+// This is 2.3's within-statement tiebreak, not a dependency consequence.
 //
-// `packages/contracts` first and `packages/integration-tests` last are NOT
-// asserted as rules — the derivation has no framework special case. They are
-// graph consequences: every other package declares `@microservices/contracts`
-// so an edge from contracts precedes each of them, and integration-tests
-// declares specifiers resolving to all three microservices, the Overseer,
-// build-tools, and contracts, so every other node precedes it (R12.3) — and
-// with microservice1 pulled to 9, integration-tests (which depends on it) lands
-// at 10, last, once more. The two focused assertions below therefore only
-// RECORD that the graph over this one tree produces those positions; they are
-// not a rule the code enforces.
+// `packages/contracts` first and `packages/integration-tests` last are NOT graph
+// consequences under the Build_Sequence — they are statements 1 and 6, emitted at
+// those positions by the statement scaffold itself regardless of what any
+// manifest declares. The two focused assertions below record those positions
+// against the primitive's fixed statement order.
+//
+// `packages/spa/demo` is the sole entry following `integration-tests`: it is the
+// only member of statement 7 (the trailing Spa_Package phase), so it lands last
+// at 10. Microservice1 declaring `@microservices/demo` (it serves the Demo_Spa)
+// no longer pulls the Demo_Spa forward — a Spa_Package is never a
+// Compile_Time_Prerequisite, so statement 7 emits it after everything else, and
+// the demo→microservice1 edge imposes no ordering on the tsc pass.
 //
 // `discoverPackages()` and `readDependencySpecifiers` resolve their paths
 // repo-relative, so the test runs with the repository root as cwd regardless of
 // whether vitest was launched from the package directory or the repo root.
 //
-// Validates: Requirements 12.1, 12.2, 12.3, 12.4, 12.5
+// Validates: Requirements 2.21, 3.1, 3.2
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { dirname, resolve } from "node:path";
@@ -90,25 +81,24 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..", "..", "..");
 
 /**
- * The ten `packageDir`s of the design's "Workspace_Build_Order over the
- * current tree" table, in table order. This is the whole oracle. `packages/spa/demo`
- * sits at position 8, immediately before `packages/microservices/microservice1`
- * at 9: Microservice1 now declares `@microservices/demo` (it serves the
- * Demo_Spa), so the demo→microservice1 edge pulls the otherwise-last Spa_Package
- * forward to just before its dependent, and `packages/integration-tests` — which
- * depends on every microservice — is last again at 10.
+ * The ten `packageDir`s of the design's "Build_Sequence over the committed tree"
+ * table (2.21), in table order. This is the whole oracle. The three
+ * Microservice_Packages occupy positions 5 to 7 in `packageDir` order (statement
+ * 4), `packages/overseer` is at 8 (statement 5), `packages/integration-tests` at
+ * 9 (statement 6), and `packages/spa/demo` last at 10 as the sole member of the
+ * trailing Spa_Package statement 7.
  */
 const EXPECTED_ORDER: readonly string[] = [
   "packages/contracts",
   "packages/build-tools",
   "packages/common/config",
   "packages/common/extended-config",
+  "packages/microservices/microservice1",
   "packages/microservices/microservice2",
   "packages/microservices/microservice3",
   "packages/overseer",
-  "packages/spa/demo",
-  "packages/microservices/microservice1",
   "packages/integration-tests",
+  "packages/spa/demo",
 ];
 
 /** The derivation exactly as the CLI shell runs it over the real filesystem. */
@@ -131,34 +121,22 @@ describe("Workspace_Build_Order over the committed repository (Data Models table
     expect(deriveOrder()).toEqual(EXPECTED_ORDER);
   });
 
-  it("records that the graph places packages/contracts first (a consequence, not a rule)", () => {
-    // Not asserted as a framework special case: contracts leads because every
-    // other package declares @microservices/contracts, so it is the sole node
-    // ready before any other (R12.3).
+  it("records that statement 1 places packages/contracts first", () => {
+    // Not a graph consequence: contracts leads because it is statement 1 of the
+    // Build_Sequence, emitted first by the statement scaffold itself (2.1).
     expect(deriveOrder()[0]).toBe("packages/contracts");
   });
 
-  it("records that the graph places packages/integration-tests last (a consequence, not a rule)", () => {
-    // integration-tests declares specifiers resolving to all three
-    // microservices, the Overseer, build-tools, and contracts, so every other
-    // node precedes it (R12.3) — it lands last with nothing asserting the
-    // position. With Microservice1 now depending on the Demo_Spa, microservice1
-    // is pulled to position 9 (just after demo at 8), and integration-tests —
-    // which depends on microservice1 — is last at 10 once more.
+  it("records that statement 6 places packages/integration-tests before the Spa phase", () => {
+    // integration-tests is statement 6, emitted after the Overseer (statement 5)
+    // and before the trailing Spa_Package statement 7. With packages/spa/demo the
+    // sole member of statement 7, integration-tests sits at position 9 — second to
+    // last — and spa/demo is the only entry that follows it.
     const order = deriveOrder();
-    expect(order[order.length - 1]).toBe("packages/integration-tests");
-  });
-
-  it("records that packages/spa/demo precedes packages/microservices/microservice1 (a consequence, not a rule)", () => {
-    // The edge this feature adds: Microservice1 declares @microservices/demo, so
-    // the Demo_Spa must be built before it. demo lands at 8, microservice1 at 9
-    // — demo immediately before its dependent. Not a framework rule; a graph
-    // consequence of the one manifest edge.
-    const order = deriveOrder();
+    const integrationIdx = order.indexOf("packages/integration-tests");
     const demoIdx = order.indexOf("packages/spa/demo");
-    const ms1Idx = order.indexOf("packages/microservices/microservice1");
-    expect(demoIdx).toBeGreaterThanOrEqual(0);
-    expect(demoIdx).toBeLessThan(ms1Idx);
-    expect(order[demoIdx + 1]).toBe("packages/microservices/microservice1");
+    expect(integrationIdx).toBeGreaterThanOrEqual(0);
+    expect(demoIdx).toBe(integrationIdx + 1);
+    expect(demoIdx).toBe(order.length - 1);
   });
 });
