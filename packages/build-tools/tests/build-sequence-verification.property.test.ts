@@ -736,3 +736,97 @@ describe("Property 10: preserved diagnostics keep wording and participant sets",
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Feature: spa-common-consumption, Property 12: The Verification_Pass accepts
+// every order the Build_Sequence produces — a spa → common edge included
+// ---------------------------------------------------------------------------
+//
+// The `spa-common-consumption` feature makes the Demo_Spa (a Spa_Package,
+// statement 7) declare `@microservices/extended-config` (a Common_Package,
+// statement 3), so a `spa → common` edge is now a real, committed edge. The
+// Verification_Pass must accept every order the Build_Sequence produces over a
+// layout carrying it: the Common_Package sits in the Ordered statement 3 and
+// the Spa_Package in statement 7, so the crossing edge is positionally sound
+// (statement 3 precedes statement 7) and structurally exempt (the two are in
+// different statements, so the same-Unordered_Statement check cannot fire),
+// while a Spa_Package is never a prerequisite in the first place. Neither a
+// `[build-order:prerequisite]` finding nor a `[build-order:divergence]` finding
+// is produced.
+//
+// `arbLayout` can produce a `spa → common` edge only by chance; the block below
+// plants at least one guaranteed edge on top of a random layout and asserts the
+// clean verdict.
+//
+// Validates: Requirements 4.10
+
+describe("Feature: spa-common-consumption, Property 12: a spa → common edge yields no prerequisite or divergence finding", () => {
+  /**
+   * A random layout guaranteed to hold at least one Common_Package and one
+   * Spa_Package, with every Spa_Package pointed at the first Common_Package —
+   * so a real `spa → common` edge is present in every run.
+   */
+  const arbLayoutWithSpaCommonEdge: fc.Arbitrary<Layout> = arbLayout
+    .filter(
+      (layout) =>
+        layout.consumers.some((pkg) => pkg.category === "common") &&
+        layout.consumers.some((pkg) => pkg.category === "spa"),
+    )
+    .map((layout) => {
+      const firstCommon = layout.consumers.find(
+        (pkg) => pkg.category === "common",
+      )!;
+      const consumers = layout.consumers.map((pkg) =>
+        pkg.category === "spa"
+          ? consumer("spa", pkg.dirName, [
+              ...new Set([...pkg.dependencySpecifiers, firstCommon.name]),
+            ])
+          : pkg,
+      );
+      return { consumers, selected: layout.selected };
+    });
+
+  it("reports no [build-order:prerequisite] and no [build-order:divergence] for a spa → common edge", () => {
+    fc.assert(
+      fc.property(arbLayoutWithSpaCommonEdge, (layout) => {
+        const order = buildSequence(repoMembership(layout));
+        const edges = prerequisiteEdges(nodesOf(layout), layout.selected);
+
+        // The order the Build_Sequence produces verifies clean.
+        const messages = verifyBuildOrder(order, edges);
+        expect(messages).toEqual([]);
+        expect(messages.every((m) => !m.startsWith(PREREQUISITE_PREFIX))).toBe(
+          true,
+        );
+        expect(messages.every((m) => !m.startsWith(DIVERGENCE_PREFIX))).toBe(
+          true,
+        );
+
+        // The Spa_Package is not a prerequisite of anything: the crossing edge
+        // is a staging fact, never an ordering one.
+        const spaDirs = new Set(
+          layout.consumers
+            .filter((pkg) => pkg.category === "spa")
+            .map((pkg) => pkg.packageDir),
+        );
+        expect(edges.some((e) => spaDirs.has(e.prerequisite))).toBe(false);
+
+        // Every Common_Package sits ahead of every Spa_Package in the produced
+        // order (statement 3 before statement 7).
+        const positionOf = new Map(
+          order.map((pkg, i) => [pkg.packageDir, i] as const),
+        );
+        const commonPositions = layout.consumers
+          .filter((pkg) => pkg.category === "common")
+          .map((pkg) => positionOf.get(pkg.packageDir)!);
+        const spaPositions = [...spaDirs].map((dir) => positionOf.get(dir)!);
+        for (const commonPos of commonPositions) {
+          for (const spaPos of spaPositions) {
+            expect(commonPos).toBeLessThan(spaPos);
+          }
+        }
+      }),
+      { numRuns: 200 },
+    );
+  });
+});

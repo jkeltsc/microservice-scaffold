@@ -119,18 +119,27 @@ describe("Demo_Page markup — Service_Buttons (R9.1, R9.7)", () => {
   });
 });
 
-describe("Demo_Page markup — the three display fields (R9.2, R9.3, R9.4, R9.8)", () => {
+describe("Demo_Page markup — the display fields (R9.2, R9.3, R9.4, R9.8)", () => {
   const buttons = openingTags("button");
   const outputs = openingTags("output");
   const textareas = openingTags("textarea");
   const lastButtonIndex = Math.max(...buttons.map((b) => b.index));
 
-  it("has exactly two `output` elements and one `textarea` (R9.3, R9.4)", () => {
+  /** The one `textarea` carrying the given id, selected by id rather than by position. */
+  const textareaById = (id: string): Tag => {
+    const found = textareas.find((t) => attr(t.attrs, "id") === id);
+    expect(found, `textarea#${id} present`).toBeDefined();
+    return found!;
+  };
+
+  it("has exactly two `output` elements and two `textarea` elements (R9.3, R9.4)", () => {
+    // Two textareas now: the Body_Field (id="body") and the Expected_Payload_Field
+    // (id="expected-microservice3").
     expect(outputs).toHaveLength(2);
-    expect(textareas).toHaveLength(1);
+    expect(textareas).toHaveLength(2);
   });
 
-  it("places all three fields after both Service_Buttons (R9.2)", () => {
+  it("places every field after both Service_Buttons (R9.2)", () => {
     for (const field of [...outputs, ...textareas]) {
       expect(field.index).toBeGreaterThan(lastButtonIndex);
     }
@@ -139,7 +148,7 @@ describe("Demo_Page markup — the three display fields (R9.2, R9.3, R9.4, R9.8)
   it("orders the fields request -> status -> body (R9.2)", () => {
     const requestOutput = outputs.find((o) => attr(o.attrs, "id") === "request");
     const statusOutput = outputs.find((o) => attr(o.attrs, "id") === "status");
-    const bodyTextarea = textareas[0];
+    const bodyTextarea = textareaById("body");
     expect(requestOutput).toBeDefined();
     expect(statusOutput).toBeDefined();
     // Request (output) before Status (output) before Body (textarea).
@@ -159,7 +168,7 @@ describe("Demo_Page markup — the three display fields (R9.2, R9.3, R9.4, R9.8)
   });
 
   it("makes the Body_Field a `readonly` (not `disabled`) `textarea` with a visible label (R9.4)", () => {
-    const textarea = textareas[0];
+    const textarea = textareaById("body");
     expect(hasAttr(textarea.attrs, "readonly")).toBe(true);
     expect(hasAttr(textarea.attrs, "disabled")).toBe(false);
     const id = attr(textarea.attrs, "id");
@@ -169,11 +178,170 @@ describe("Demo_Page markup — the three display fields (R9.2, R9.3, R9.4, R9.8)
     expect(textOf("label", label!.index).length).toBeGreaterThan(0);
   });
 
-  it("ships all three fields empty (R9.8)", () => {
+  it("ships every field empty (R9.8)", () => {
     for (const output of outputs) {
       expect(textOf("output", output.index)).toBe("");
     }
-    expect(textOf("textarea", textareas[0].index)).toBe("");
+    for (const textarea of textareas) {
+      expect(textOf("textarea", textarea.index)).toBe("");
+    }
+  });
+});
+
+describe("Demo_Page markup — the Expected_Payload_Field (R2.1–R2.7, R2.12, R2.13)", () => {
+  const EXPECTED_ID = "expected-microservice3";
+  const EXPECTED_HEADING = "microservice 3 should yield:";
+
+  const buttons = openingTags("button");
+  const outputs = openingTags("output");
+  const textareas = openingTags("textarea");
+  const labels = openingTags("label");
+
+  const expectedField = textareas.find((t) => attr(t.attrs, "id") === EXPECTED_ID);
+
+  it("renders exactly one Expected_Payload_Field, a `textarea` carrying the id (R2.1)", () => {
+    const matches = textareas.filter((t) => attr(t.attrs, "id") === EXPECTED_ID);
+    expect(matches).toHaveLength(1);
+  });
+
+  it("makes it `readonly` and not `disabled` (R2.2, R2.3, R2.15)", () => {
+    expect(expectedField).toBeDefined();
+    expect(hasAttr(expectedField!.attrs, "readonly")).toBe(true);
+    expect(hasAttr(expectedField!.attrs, "disabled")).toBe(false);
+  });
+
+  it("places it after both Service_Buttons and after every existing field (R2.4)", () => {
+    expect(expectedField).toBeDefined();
+    const priorFields = [
+      ...buttons,
+      ...outputs,
+      // Every textarea except the Expected_Payload_Field itself — i.e. the Body_Field.
+      ...textareas.filter((t) => attr(t.attrs, "id") !== EXPECTED_ID),
+    ];
+    for (const field of priorFields) {
+      expect(expectedField!.index).toBeGreaterThan(field.index);
+    }
+  });
+
+  it("carries its id exactly once across the whole document (R2.5)", () => {
+    // Any element's `id="expected-microservice3"`, counted over the raw markup.
+    const occurrences = html.match(new RegExp(`id\\s*=\\s*"${EXPECTED_ID}"`, "gi")) ?? [];
+    expect(occurrences).toHaveLength(1);
+    // And that id holds non-whitespace characters.
+    expect(EXPECTED_ID.trim().length).toBeGreaterThan(0);
+  });
+
+  it("associates a `label[for]` that precedes the field and reads exactly the heading (R2.5, R2.6, R2.7)", () => {
+    expect(expectedField).toBeDefined();
+    const label = labels.find((l) => attr(l.attrs, "for") === EXPECTED_ID);
+    expect(label, `label[for="${EXPECTED_ID}"] present`).toBeDefined();
+    // The heading precedes the field in document order (R2.7).
+    expect(label!.index).toBeLessThan(expectedField!.index);
+    // And holds exactly the heading text, nothing further (R2.6).
+    expect(textOf("label", label!.index)).toBe(EXPECTED_HEADING);
+  });
+
+  it("declares no `aria-live` on the Expected_Payload_Field (R2.13)", () => {
+    expect(expectedField).toBeDefined();
+    expect(hasAttr(expectedField!.attrs, "aria-live")).toBe(false);
+  });
+});
+
+describe("Demo_Spa wiring — the Expected_Payload_Field is filled once, apart from wireDemoPage (R2.8, R2.10, R2.11, R2.14)", () => {
+  const EXPECTED_ID = "expected-microservice3";
+
+  /** The body of `fillExpectedPayload` in the source, comments stripped. */
+  const fillBody = (() => {
+    const start = mainCode.indexOf("function fillExpectedPayload");
+    expect(start, "fillExpectedPayload defined").toBeGreaterThan(-1);
+    const open = mainCode.indexOf("{", start);
+    // Balance braces to find the function's closing brace.
+    let depth = 0;
+    let end = open;
+    for (let i = open; i < mainCode.length; i += 1) {
+      if (mainCode[i] === "{") depth += 1;
+      else if (mainCode[i] === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    return mainCode.slice(open, end + 1);
+  })();
+
+  /** The body of `wireDemoPage` in the source, comments stripped. */
+  const wireBody = (() => {
+    const start = mainCode.indexOf("function wireDemoPage");
+    expect(start, "wireDemoPage defined").toBeGreaterThan(-1);
+    const open = mainCode.indexOf("{", start);
+    let depth = 0;
+    let end = open;
+    for (let i = open; i < mainCode.length; i += 1) {
+      if (mainCode[i] === "{") depth += 1;
+      else if (mainCode[i] === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    return mainCode.slice(open, end + 1);
+  })();
+
+  it("assigns expectedPayloadText(...) to the field's `.value` exactly once (R2.8)", () => {
+    const assignments =
+      mainSource.match(/field\.value\s*=\s*expectedPayloadText\([^)]*\)/g) ?? [];
+    expect(assignments).toHaveLength(1);
+  });
+
+  it("makes fillExpectedPayload() a top-level synchronous statement, separate from wireDemoPage() (R2.8)", () => {
+    // Both are called at the module's top level, on their own statement lines.
+    expect(mainCode).toMatch(/^\s*fillExpectedPayload\(\);\s*$/m);
+    expect(mainCode).toMatch(/^\s*wireDemoPage\(\);\s*$/m);
+    // fillExpectedPayload runs before wireDemoPage.
+    const fillCall = mainCode.search(/^\s*fillExpectedPayload\(\);\s*$/m);
+    const wireCall = mainCode.search(/^\s*wireDemoPage\(\);\s*$/m);
+    expect(fillCall).toBeGreaterThan(-1);
+    expect(wireCall).toBeGreaterThan(-1);
+    expect(fillCall).toBeLessThan(wireCall);
+    // No setTimeout / await / listener defers the fill (R2.8).
+    expect(fillBody).not.toContain("setTimeout");
+    expect(fillBody).not.toContain("await");
+    expect(fillBody).not.toContain("addEventListener");
+  });
+
+  it("keeps the field's id out of wireDemoPage's guard, so an absent field leaves both buttons wired (R2.14)", () => {
+    expect(wireBody).not.toContain(EXPECTED_ID);
+    // fillExpectedPayload owns the field's lookup and its own guard.
+    expect(fillBody).toContain(`getElementById("${EXPECTED_ID}")`);
+    expect(fillBody).toContain("instanceof HTMLTextAreaElement");
+  });
+
+  it("attaches no input/keydown/paste listener to the field, so it has no second writer (R2.10, R2.11, R2.15)", () => {
+    // No handler on the Expected_Payload_Field anywhere in the module.
+    for (const event of ["input", "keydown", "paste"]) {
+      expect(mainCode).not.toContain(`addEventListener("${event}"`);
+    }
+    // Only one assignment to `field.value` exists at all.
+    const fieldValueAssignments = mainSource.match(/field\.value\s*=/g) ?? [];
+    expect(fieldValueAssignments).toHaveLength(1);
+  });
+
+  it("keeps payload-preview.ts free of literal payload values and of `fetch` (R2.9)", () => {
+    // Read the module with its comments stripped, so a prose mention of a
+    // forbidden word (e.g. "fetch" in the doc comment's purity list) is never
+    // mistaken for a call. Same strip main.ts uses for `mainCode`.
+    const previewCode = readFromPackage("src/payload-preview.ts")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+    // The pure module restates none of the payload's literal values.
+    expect(previewCode).not.toContain(EXPECTED_ID);
+    expect(previewCode).not.toContain("/microservice3");
+    // And issues no request of its own.
+    expect(previewCode).not.toContain("fetch");
   });
 });
 

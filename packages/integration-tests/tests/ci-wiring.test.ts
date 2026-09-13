@@ -73,6 +73,10 @@ import {
   type CommandRunner,
 } from "@microservices/build-tools/dist/workspace-build-order.js";
 import { devProjectList } from "@microservices/build-tools/dist/dev-supervisor.js";
+import {
+  checkBuildOrderSource,
+  type ScriptSource,
+} from "@microservices/build-tools/dist/repo-invariants.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // tests/ -> integration-tests -> packages -> repo root
@@ -516,5 +520,105 @@ describe("every command the README quotes for the samples resolves to a declared
     const demoScripts = wsScripts.get(DEMO_NAME);
     expect(demoScripts, `${DEMO_NAME} must be a discovered workspace`).toBeDefined();
     expect(demoScripts?.build, `${DEMO_NAME} must declare a build script`).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// spa-common-consumption task 7.4 — the root docker:build scripts (R6.9, R6.10, R7.9)
+// ---------------------------------------------------------------------------
+//
+// The Release_Pipeline ships three Container configurations, and the root
+// package.json backs each with a per-configuration `docker:build:*` script plus
+// an aggregate `docker:build` that chains all three. This block pins the shape
+// of the third leg (the Spa_Only_Container, Selector `microservice1`) and the
+// aggregate's chaining, without spawning docker or the emit script — it reads
+// the committed manifest and asserts nothing else.
+//
+// Each per-configuration script has the same two-step shape: run the emit
+// script with the leg's `MICROSERVICES` selector, then — joined by `&&`, so the
+// build runs only when emit exited 0 — `docker build` with that same selector
+// as the `--build-arg` and the leg's suffix as the image tag (R6.9). The
+// aggregate `docker:build` names all three `docker:build:*` scripts joined by
+// `&&`, so a non-zero exit from any leg stops the chain (R6.10).
+//
+// The `checkBuildOrderSource` case is the R7.9 guard: none of the scripts this
+// feature adds or changes derives a build order from the `workspaces` array, so
+// the production build-order-source check finds nothing over the real
+// Root_Manifest scripts. It reuses the exact `ScriptSource` shaping the
+// production effect shell (`rootManifestScripts()`) uses, so the check sees the
+// same input the `check:invariants` bin would.
+//
+// Validates: Requirements 6.9, 6.10, 7.9
+
+describe("the root docker:build scripts ship three Container configurations (R6.9, R6.10)", () => {
+  const scripts = manifest.scripts ?? {};
+
+  it("declares docker:build:microservice1 with the emit-then-build shape (R6.9)", () => {
+    const script = scripts["docker:build:microservice1"] ?? "";
+
+    // Two steps joined by `&&`: emit first, image build second, so the build
+    // runs only when the emit step exited 0.
+    const [emitStep, buildStep, ...rest] = script.split("&&").map((s) => s.trim());
+    expect(rest).toHaveLength(0);
+
+    // Step 1: the emit script, run with MICROSERVICES=microservice1.
+    expect(emitStep).toBe(
+      "MICROSERVICES=microservice1 sh scripts/emit-effective-dockerfile.sh",
+    );
+
+    // Step 2: `docker build`, passing microservice1 as the MICROSERVICES
+    // build-arg and tagging the image with the Spa_Only_Container suffix.
+    expect(buildStep).toBe(
+      "docker build --build-arg MICROSERVICES=microservice1 -t scaffold:microservice1 .",
+    );
+  });
+
+  it("preserves the generic and microservice1-microservice2 docker:build scripts unchanged", () => {
+    // The two pre-existing per-configuration scripts keep their exact shape;
+    // task 7.2 appended the third rather than rewriting these.
+    expect(scripts["docker:build:generic"]).toBe(
+      "MICROSERVICES='*' sh scripts/emit-effective-dockerfile.sh && docker build --build-arg MICROSERVICES='*' -t scaffold:generic .",
+    );
+    expect(scripts["docker:build:microservice1-microservice2"]).toBe(
+      "MICROSERVICES=microservice1,microservice2 sh scripts/emit-effective-dockerfile.sh && docker build --build-arg MICROSERVICES=microservice1,microservice2 -t scaffold:microservice1-microservice2 .",
+    );
+  });
+
+  it("the aggregate docker:build chains all three per-configuration scripts in order with && (R6.10)", () => {
+    const aggregate = scripts["docker:build"] ?? "";
+
+    // Split into the `&&`-joined segments so a non-zero exit from any leg stops
+    // the chain (the `&&` is what makes the aggregate fail-fast).
+    const segments = aggregate.split("&&").map((s) => s.trim());
+    expect(segments).toEqual([
+      "npm run docker:build:generic",
+      "npm run docker:build:microservice1-microservice2",
+      "npm run docker:build:microservice1",
+    ]);
+
+    // The new leg is last, so the existing two keep their positions.
+    expect(segments[segments.length - 1]).toBe(
+      "npm run docker:build:microservice1",
+    );
+  });
+});
+
+describe("no root script derives a build order from the workspaces array (R7.9)", () => {
+  it("checkBuildOrderSource over the real Root_Manifest scripts returns no finding", () => {
+    // Mirror the production effect shell's `rootManifestScripts()` shaping: one
+    // ScriptSource per string-valued root script, named exactly as the check's
+    // messages would name it. Feeding this to `checkBuildOrderSource` observes
+    // what the `check:invariants` bin sees for the Root_Manifest — none of the
+    // scripts this feature added or changed (the docker:build* trio) derives a
+    // build order from the `workspaces` array.
+    const scripts = manifest.scripts ?? {};
+    const scriptSources: ScriptSource[] = Object.entries(scripts)
+      .filter(([, value]) => typeof value === "string")
+      .map(([name, value]) => ({
+        source: `root package.json script "${name}"`,
+        text: value,
+      }));
+
+    expect(checkBuildOrderSource(scriptSources, [])).toEqual([]);
   });
 });

@@ -6,11 +6,13 @@
 // Common_Package, its category contract is a non-empty `scripts.build` alone —
 // it declares NO barrel (`main`/`types`), because a barrel would advertise an
 // API the import-discipline check forbids anyone from importing. The Demo_Spa
-// is a true sink: it declares no `@microservices`-scoped dependency of any
-// kind. This suite asserts that structural contract at the source-of-truth
-// level — the committed manifest and the committed `vite.config.ts` — in the
-// style of `common-package-conventions.test.ts`, rather than through the build
-// pipeline.
+// declares exactly one `@microservices`-scoped dependency —
+// `@microservices/extended-config`, the Common_Package the Payload_Preview
+// imports by package name — which makes it the worked example of a Spa_Package
+// consuming a Common_Package. This suite asserts that structural contract at
+// the source-of-truth level — the committed manifest and the committed
+// `vite.config.ts` — in the style of `common-package-conventions.test.ts`,
+// rather than through the build pipeline.
 //
 //   1. The Demo_Spa's manifest conventions: location at `packages/spa/demo`,
 //      an `@microservices`-scoped name mirroring its directory, `"type":
@@ -18,8 +20,11 @@
 //      contract) plus the other three standard scripts non-empty, NO `main`
 //      and NO `types` (no barrel), the chosen Spa_Resolution_Pair `exports`
 //      map `{ ".": "./dist/index.html" }`, the bundler pinned to a single
-//      exact version with none of the range operators, and no
-//      `@microservices`-scoped dependency in any dependency field.
+//      exact version with none of the range operators, and exactly one
+//      `@microservices`-scoped dependency —
+//      `@microservices/extended-config`, valued `*`, present in
+//      `dependencies` alone — whose declaration the `//exports` comment
+//      states.
 //   2. The raised Node floor: the root manifest's `engines.node` is
 //      `">=22.12.0"`, and every version its range admits satisfies the
 //      `engines.node` range the *installed* bundler declares — read from the
@@ -53,6 +58,7 @@ const bundlerPackage = "vite";
 
 interface Manifest {
   readonly name?: string;
+  readonly "//exports"?: string;
   readonly type?: string;
   readonly private?: boolean;
   readonly main?: string;
@@ -143,10 +149,14 @@ describe("packages/spa/demo manifest follows Spa_Package conventions", () => {
     }
   });
 
-  it("declares no @microservices-scoped dependency of any kind — a true sink", () => {
-    // The Demo_Spa is a true sink: it names no @microservices-scoped package in
-    // any dependency field. Asserted across every field, not just
-    // `dependencies`.
+  it("declares @microservices/extended-config as its only scoped dependency, in `dependencies` alone (R1.1, R1.2)", () => {
+    // The Demo_Spa is the first Spa_Package with an `@microservices`-scoped
+    // dependency of its own. Across every dependency field, the scoped-key set
+    // is exactly `["@microservices/extended-config"]`; it is valued `*` and
+    // present in `dependencies` alone — a `devDependencies` entry would be
+    // invisible to the Dependency_Resolver, which reads `dependencies` only.
+    // The Config_Package is reached only transitively, through the
+    // Extended_Config_Package.
     const raw = JSON.parse(
       readFileSync(resolve(repoRoot, spaRelDir, "package.json"), "utf8"),
     ) as Record<string, unknown>;
@@ -163,8 +173,53 @@ describe("packages/spa/demo manifest follows Spa_Package conventions", () => {
     );
     expect(
       scopedDeps,
-      `Demo_Spa must declare no @microservices-scoped dependency, found: ${JSON.stringify(scopedDeps)}`,
-    ).toEqual([]);
+      `Demo_Spa's scoped-key set across all dependency fields must be exactly ["@microservices/extended-config"], found: ${JSON.stringify(scopedDeps)}`,
+    ).toEqual(["@microservices/extended-config"]);
+
+    // The single scoped key is valued `*` and lives in `dependencies`.
+    expect(spaManifest.dependencies?.["@microservices/extended-config"]).toBe(
+      "*",
+    );
+    for (const field of [
+      "devDependencies",
+      "peerDependencies",
+      "optionalDependencies",
+    ] as const) {
+      const deps = (raw[field] as Record<string, string> | undefined) ?? {};
+      expect(
+        Object.prototype.hasOwnProperty.call(
+          deps,
+          "@microservices/extended-config",
+        ),
+        `@microservices/extended-config must not appear in ${field}`,
+      ).toBe(false);
+    }
+  });
+
+  it("explains the declared scoped dependency in the //exports comment, using none of R1.7's forbidden phrases (R1.7)", () => {
+    // The explanatory `//exports` comment must state that the Demo_Spa declares
+    // an `@microservices`-scoped dependency, and must make no statement that it
+    // declares none or that it is a dependency sink.
+    const comment = spaManifest["//exports"] ?? "";
+    expect(
+      typeof comment,
+      "Demo_Spa must carry a //exports explanatory comment",
+    ).toBe("string");
+
+    // States the dependency: names the scoped package it declares.
+    expect(comment).toContain("@microservices/extended-config");
+
+    // Makes none of the forbidden statements.
+    for (const forbidden of [
+      "true sink",
+      "dependency sink",
+      "declares no @microservices-scoped dependency",
+    ] as const) {
+      expect(
+        comment.toLowerCase().includes(forbidden.toLowerCase()),
+        `//exports comment must not contain the forbidden phrase '${forbidden}'`,
+      ).toBe(false);
+    }
   });
 
   it("is matched by exactly one workspaces entry (R6.17)", () => {

@@ -1,0 +1,548 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Add `@microservices/extended-config` to `packages/spa/demo/package.json` and rewrite the stale `//exports` comment": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309703884
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309712230
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309773314
+      }
+    ],
+    "1.2 Invert the \"true sink\" case in `packages/integration-tests/tests/spa-package-conventions.test.ts`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309703925
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309777660
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309862428
+      }
+    ],
+    "1.3 Update the Demo_Spa's expected specifiers in `packages/build-tools/tests/discovery-real-tree.test.ts`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309703952
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309779116
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309863571
+      }
+    ],
+    "2.1 Create `packages/spa/demo/src/payload-preview.ts`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309703981
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309779808
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309861460
+      }
+    ],
+    "2.2 Write unit tests in `packages/spa/demo/tests/payload-preview.test.ts`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704015
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309867765
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309951025
+      }
+    ],
+    "2.3 Write the round-trip property test in `packages/spa/demo/tests/payload-preview.property.test.ts`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704047
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309869018
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309952212
+      }
+    ],
+    "2.4 Write the metamorphic property test in the same property file": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704078
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309956261
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789310018126
+      }
+    ],
+    "2.5 Add the purity and determinism properties to the same property file": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704111
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789310036351
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789310134074
+      }
+    ],
+    "3. Checkpoint - the Demo_Spa's own suite is green": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704146
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312178706
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312190157
+      }
+    ],
+    "4.1 Add the Expected_Payload_Heading and Expected_Payload_Field to `packages/spa/demo/index.html`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704177
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309957308
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789310019171
+      }
+    ],
+    "4.2 Wire `fillExpectedPayload()` in `packages/spa/demo/src/main.ts`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704212
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789310037320
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789310135037
+      }
+    ],
+    "4.3 Extend `packages/spa/demo/tests/demo-page.test.ts` for the second `textarea`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704237
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789310189450
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311365553
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311526673
+      }
+    ],
+    "5.1 Extend `packages/integration-tests/tests/shared-package-staging.test.ts` with the required-versus-staged cases": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704312
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789310190891
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311366827
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311528085
+      }
+    ],
+    "5.2 Confirm the ordering and resolution property generators reach the `spa → common` shape": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704344
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789310192320
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311367808
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311529475
+      }
+    ],
+    "5.3 Confirm the staging, integrity, and invariant property generators": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704370
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789310193755
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311369193
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311531560
+      }
+    ],
+    "5.4 Create `packages/integration-tests/tests/spa-common-consumption.test.ts`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704403
+      },
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789310194629
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311370222
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311531763
+      }
+    ],
+    "5.5 Add the inlining assertions to `packages/integration-tests/tests/spa-bundle-output.test.ts`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704432
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311535796
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311659731
+      }
+    ],
+    "6. Checkpoint - the edge builds, orders, stages, and inlines": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704463
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312194462
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312592537
+      }
+    ],
+    "7.1 Add the third leg and the third prune step to `.github/workflows/release.yml`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704489
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311672271
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311762650
+      }
+    ],
+    "7.2 Add `docker:build:microservice1` to the root `package.json` and chain it into `docker:build`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704521
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311674997
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311763640
+      }
+    ],
+    "7.3 Update `packages/integration-tests/tests/release-workflow.test.ts` to three configurations": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704552
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311768386
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312008080
+      }
+    ],
+    "7.4 Add the root-script cases to `packages/integration-tests/tests/ci-wiring.test.ts`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704581
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311770435
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312009315
+      }
+    ],
+    "7.5 Add the single-identifier example to `packages/integration-tests/tests/effective-dockerfile.test.ts`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704649
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311770782
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312007200
+      }
+    ],
+    "7.6 Create `packages/integration-tests/tests/spa-only-container.test.ts`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704681
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311771805
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312005765
+      }
+    ],
+    "8.1 Update `README.md`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704712
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312015080
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312108610
+      }
+    ],
+    "8.2 Update `.kiro/steering/structure.md`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704748
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312016110
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312109576
+      }
+    ],
+    "8.3 Create `packages/integration-tests/tests/stale-documentation-guard.test.ts`": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704781
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312113497
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312167296
+      }
+    ],
+    "9. Final verification - run the full quality gate": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309704812
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312596023
+      },
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312600511
+      }
+    ],
+    "1. Declare the Demo_Spa's Common_Package dependency": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789309863642
+      }
+    ],
+    "2. Implement the Payload_Preview": [
+      {
+        "executionId": "3a02f607-a8fb-46f5-b066-52685b82f40c",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789310134153
+      }
+    ],
+    "4. Render and wire the Expected_Payload_Field": [
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311526742
+      }
+    ],
+    "5. Confirm the build order, the BUILD/STAGE split, and the invariants": [
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789311659769
+      }
+    ],
+    "7. Ship the Spa_Only_Container": [
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312009395
+      }
+    ],
+    "8. Document the pattern and the third configuration": [
+      {
+        "executionId": "fbcc9d4b-396b-4b68-89af-54cd464aba03",
+        "chatSessionId": "sess_4299cc4f-7e08-4fd3-b052-4de42bdaf5ed",
+        "timestamp": 1789312167372
+      }
+    ]
+  }
+}

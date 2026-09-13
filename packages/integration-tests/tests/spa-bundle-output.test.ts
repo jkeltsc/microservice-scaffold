@@ -26,13 +26,38 @@
 // asset references. So this is one execution asserting the shape of that one
 // output, matching the design's testing strategy for R6.6/R6.7.
 //
-// Validates: Requirements 6.6, 6.7
+// COMPILE-ORDER PREREQUISITE (spa-common-consumption feature, R5.6/R5.11)
+// ---------------------------------------------------------------------------
+// The Demo_Spa now imports `@microservices/extended-config` (through the
+// Payload_Preview), so its `vite build` reads that Common_Package's compiled
+// `dist/` — the Demo_Spa's build now has a compile-order prerequisite: the
+// Extended_Config_Package's compiled `dist/` must exist first. That prerequisite
+// is satisfied by the repository's root `pretest` ordered build (`npm test` runs
+// `node scripts/build.js` before Vitest), which compiles every Tsc_Project — the
+// Extended_Config_Package and its own `@microservices/config` prerequisite among
+// them — in Build_Sequence order before this suite's `vite build` runs.
+//
+// This suite therefore also carries the inlining observables for the
+// spa → common edge: R5.6 (the emitted bundle contains the Extended_Config_
+// Package's `extendedSetting` VALUE as a substring — imported here, never
+// restated as a literal) and R5.11 (no emitted file carries a residual
+// `@microservices/…` import specifier for either Common_Package, so the bundler
+// inlined them and nothing needs resolving at run time). Confirming both — the
+// presence of the inlined value and the absence of the unresolved reference —
+// proves the inlining from both directions with no runtime started.
+//
+// Validates: Requirements 6.6, 6.7, 5.6, 5.11
 
 import { beforeAll, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// The `extendedSetting` VALUE is imported from the package it belongs to, never
+// restated as a literal here (task 5.5): the assertion then tracks whatever the
+// Extended_Config_Package actually exports, and cannot drift from it.
+import { extendedConfig } from "@microservices/extended-config";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // tests/ -> integration-tests -> packages -> repo root
@@ -63,6 +88,24 @@ function extractReferences(html: string): string[] {
     }
   }
   return refs;
+}
+
+/**
+ * Every emitted file under `dir`, recursively, as absolute paths. This is the
+ * whole set of files the Demo_Spa's `dist/` holds — the surface R5.6 and R5.11
+ * quantify over ("at least 1 file" / "the files the `dist/` holds").
+ */
+function collectFiles(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectFiles(full));
+    } else if (entry.isFile()) {
+      files.push(full);
+    }
+  }
+  return files;
 }
 
 /** True when `ref` begins with a URL scheme (e.g. `http:`, `data:`) or `//`. */
@@ -178,5 +221,49 @@ describe("Demo_Spa bundle-output shape (R6.6, R6.7)", () => {
     const rel = relative(spaRoot, indexHtml);
     expect(rel).toBe("index.html");
     expect(join(spaRoot, rel)).toBe(indexHtml);
+  });
+
+  it("inlines the Extended_Config_Package's `extendedSetting` value into at least one emitted file (R5.6)", () => {
+    // The Payload_Preview embeds `buildExtendedConfigPayload(...)`'s output —
+    // whose `config.extendedSetting` is exactly this value — into the Demo_Page,
+    // and the bundler inlines the Common_Package rather than leaving a runtime
+    // import. So the emitted bundle must carry the VALUE as a substring of at
+    // least one file. The value is imported from the package (never restated
+    // here), so this tracks whatever the Extended_Config_Package exports.
+    const needle = extendedConfig.extendedSetting;
+    expect(needle.length, "extendedSetting value should be a non-empty string").toBeGreaterThan(0);
+
+    const files = collectFiles(spaRoot);
+    expect(files.length, "dist/ should hold at least one emitted file").toBeGreaterThan(0);
+
+    const carrier = files.find((file) => readFileSync(file, "utf8").includes(needle));
+    expect(
+      carrier,
+      `no emitted file under ${spaRoot} contains the extendedSetting value ${JSON.stringify(
+        needle,
+      )} as a substring — expected the bundler to inline @microservices/extended-config`,
+    ).toBeDefined();
+  });
+
+  it("leaves no residual @microservices import specifier for either Common_Package in any emitted file (R5.11)", () => {
+    // Nothing in the shipped bundle may need `@microservices/extended-config` or
+    // `@microservices/config` resolved at run time: the bundler inlined them, so
+    // no emitted file may carry a `from "@microservices/…"` or
+    // `import("@microservices/…")` specifier naming either Common_Package. A
+    // Container serving this Demo_Spa stages neither package, so a residual
+    // specifier would be an unresolvable dangling import.
+    const forbidden = [/\bfrom\s*["']@microservices\//, /\bimport\s*\(\s*["']@microservices\//];
+
+    for (const file of collectFiles(spaRoot)) {
+      const contents = readFileSync(file, "utf8");
+      for (const pattern of forbidden) {
+        expect(
+          pattern.test(contents),
+          `emitted file ${relative(spaRoot, file)} carries a residual @microservices import ` +
+            `specifier (matched ${pattern}) — the bundler must inline the Common_Packages so ` +
+            `nothing needs resolving at run time`,
+        ).toBe(false);
+      }
+    }
   });
 });

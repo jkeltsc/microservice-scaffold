@@ -114,6 +114,14 @@ function spa(dirName: string): ConsumerPackage {
   };
 }
 
+/** A required Spa_Package that declares the given Common_Package specifiers. */
+function spaWithCommons(
+  dirName: string,
+  dependencySpecifiers: readonly string[],
+): ConsumerPackage {
+  return { ...spa(dirName), dependencySpecifiers: [...dependencySpecifiers] };
+}
+
 /** A staged Microservice_Package landing under the workspace scope. */
 function scoped(entry: string): StagedPackage {
   return {
@@ -287,6 +295,160 @@ describe("Property 18: the Bundler_Build_Phase runs entirely after the Tsc_Build
         expect(invocations).toHaveLength(2);
         expect(staging.calls).toBe(0);
       }),
+      NUM_RUNS,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature: spa-common-consumption — a SPA with a Common_Package dependency
+// ---------------------------------------------------------------------------
+//
+// The `spa-common-consumption` feature makes the Demo_Spa depend on
+// `@microservices/extended-config`, which itself depends on
+// `@microservices/config`. In a build plan that reaches the Demo_Spa, the two
+// Common_Packages become `tsc --build` roots (they are Tsc_Projects the bundler
+// inlines) and the Demo_Spa a `plan.spaBuilds` member. `executeBuildPlan` reads
+// only `tscRoots`, `spaBuilds`, and `stage`, so a SPA "with a Common_Package
+// dependency" is modelled here as a plan whose `tscRoots` carries the SPA's
+// Common_Package directories and whose `spaBuilds` carries the SPA that names
+// them — the invocation order under test being exactly "compile the commons
+// (the single `tsc --build`), then bundle the SPA".
+//
+// This block pins Property 9 over that shape: the recorded invocation sequence
+// runs the single `tsc --build` — carrying the SPA's Common_Package roots —
+// strictly before the SPA's own `npm run build`, and stages only after both;
+// and BOTH failure injections abort before staging with the Image_Tree empty —
+// a non-zero `tsc --build` (the commons fail to compile) yields no bundler
+// invocation, and a non-zero SPA build yields no staging.
+//
+// Validates: Requirements R6.5, R6.9, R6.10
+
+/**
+ * A plan whose single SPA declares one or more Common_Packages, with those
+ * Common_Packages' directories present among the `tsc --build` roots (they are
+ * built before the bundler inlines them). Returns the SPA directory and the
+ * Common_Package root directories so the assertions can locate them.
+ */
+const spaWithCommonPlanArb: fc.Arbitrary<{
+  plan: BuildPlan;
+  spaDir: string;
+  commonRoots: readonly string[];
+}> = fc
+  .record({
+    spaName: fc
+      .string({ minLength: 1, maxLength: 8 })
+      .filter((s) => /^[a-z0-9-]+$/.test(s)),
+    commonNames: fc.uniqueArray(
+      fc.string({ minLength: 1, maxLength: 8 }).filter((s) => /^[a-z0-9-]+$/.test(s)),
+      { minLength: 1, maxLength: 3 },
+    ),
+  })
+  .filter(({ spaName, commonNames }) => !commonNames.includes(spaName))
+  .map(({ spaName, commonNames }) => {
+    const commonRoots = commonNames.map((n) => `packages/common/${n}`);
+    const commonSpecifiers = commonNames.map((n) => `@microservices/${n}`);
+    const theSpa = spaWithCommons(spaName, commonSpecifiers);
+    // The single `tsc --build` compiles contracts, the SPA's Common_Packages,
+    // the microservice, and the Overseer — the SPA is deliberately NOT a root.
+    const tscRoots = [
+      "packages/contracts",
+      ...commonRoots,
+      "packages/microservices/microservice1",
+      "packages/overseer",
+    ];
+    return {
+      plan: planWith([theSpa], tscRoots),
+      spaDir: theSpa.packageDir,
+      commonRoots,
+    };
+  });
+
+describe("Property 9: a SPA with Common_Package dependencies bundles only after its commons compile", () => {
+  it("runs the single tsc --build (carrying the SPA's Common_Package roots) before the SPA's npm run build, then stages once (R6.5)", () => {
+    fc.assert(
+      fc.property(spaWithCommonPlanArb, ({ plan, spaDir, commonRoots }) => {
+        const { run, invocations } = recordingRunner();
+        const staging = stagingSpy();
+
+        executeBuildPlan(plan, "/out", run, staging.stage);
+
+        // One tsc --build over the roots, and the SPA's Common_Packages are
+        // among those roots (built before the bundler inlines them).
+        const t = tscIndex(invocations);
+        expect(t).toBe(0);
+        for (const commonRoot of commonRoots) {
+          expect(invocations[0].args).toContain(commonRoot);
+        }
+
+        // Exactly one SPA build, in the SPA's own directory, strictly after the
+        // tsc --build.
+        const npm = invocations.filter((i) => i.command === "npm");
+        expect(npm).toHaveLength(1);
+        expect(npm[0].cwd).toBe(spaDir);
+        expect(spaIndices(invocations).every((idx) => idx > t)).toBe(true);
+
+        // Both phases done, so staging ran exactly once.
+        expect(staging.calls).toBe(1);
+      }),
+      NUM_RUNS,
+    );
+  });
+
+  it("a non-zero tsc --build (the SPA's commons fail to compile) runs no SPA build and stages nothing (R6.10)", () => {
+    fc.assert(
+      fc.property(
+        spaWithCommonPlanArb,
+        fc.integer({ min: 1, max: 255 }),
+        ({ plan }, exitCode) => {
+          const { run, invocations } = recordingRunner({
+            command: "npx",
+            exitCode,
+          });
+          const staging = stagingSpy();
+
+          expect(() =>
+            executeBuildPlan(plan, "/out", run, staging.stage),
+          ).toThrow(/\[image-tree\] "npx tsc --build.*" failed with exit code/);
+
+          // The compile of the SPA's Common_Packages failed, so the bundler
+          // never ran and nothing was staged.
+          expect(invocations).toHaveLength(1);
+          expect(invocations[0].command).toBe("npx");
+          expect(invocations.some((i) => i.command === "npm")).toBe(false);
+          expect(staging.calls).toBe(0);
+        },
+      ),
+      NUM_RUNS,
+    );
+  });
+
+  it("a non-zero SPA build (after its commons compiled) stages nothing (R6.9)", () => {
+    fc.assert(
+      fc.property(
+        spaWithCommonPlanArb,
+        fc.integer({ min: 1, max: 255 }),
+        ({ plan, spaDir }, exitCode) => {
+          const { run, invocations } = recordingRunner({
+            command: "npm",
+            exitCode,
+          });
+          const staging = stagingSpy();
+
+          expect(() =>
+            executeBuildPlan(plan, "/out", run, staging.stage),
+          ).toThrow(/\[image-tree\] "npm run build" failed with exit code/);
+
+          // The commons compiled (the tsc --build ran first and succeeded),
+          // then the SPA's own build failed in its directory, aborting before
+          // staging.
+          expect(invocations[0].command).toBe("npx");
+          expect(invocations).toHaveLength(2);
+          expect(invocations[1].command).toBe("npm");
+          expect(invocations[1].cwd).toBe(spaDir);
+          expect(staging.calls).toBe(0);
+        },
+      ),
       NUM_RUNS,
     );
   });

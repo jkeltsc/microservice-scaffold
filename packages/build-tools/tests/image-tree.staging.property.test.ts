@@ -239,3 +239,227 @@ describe("copyPackage stages exactly package.json plus dist/ (Property 20)", () 
     );
   });
 });
+
+// ===========================================================================
+// Feature: spa-common-consumption, Property 10: The STAGE set omits exactly what only a Spa_Package reaches
+//
+// Confirmation for task 5.3. Property 20 above pins the staging PRIMITIVE
+// (`copyPackage` moves exactly `package.json` + `dist/`, uniformly per
+// category). Property 10 is the complementary claim over the staging DECISION:
+// which packages the plan places in the STAGE set at all. The two are one
+// suite's two halves — "how a package is staged" and "which packages are
+// staged" — so the strict-subset shape the `spa-common-consumption` feature
+// makes reachable is confirmed here, driving a real staged-set assertion rather
+// than only the `copyPackage` walk.
+//
+// The shape: a `microservice → spa → common → common` chain in which the two
+// Common_Packages are reachable ONLY through the Spa_Package. The Dependency
+// _Resolver arrives at the Spa_Package and includes it, but does not expand it
+// (the SPA cut), so a Common_Package reached only that way is a member of the
+// Required_Dependencies (BUILD — the bundler needs its compiled `dist/`) yet
+// NOT of the Staged_Dependencies (STAGE — no runtime process reaches it after
+// inlining). The assertion runs ACROSS SELECTORS: the microservice alone, the
+// all-Selector, and a comma list, so the omission holds however the Selector is
+// spelled, not just for one value.
+//
+// The STAGE/BUILD sets are read off the ONE derivation, `buildPlanFrom`, over an
+// in-memory `Discovery` — no assembly, no filesystem — exactly as the sibling
+// integrity suite (`image-tree.integrity.property.test.ts`, Property 19) does.
+// This suite already imports nothing but `copyPackage`; the confirmation adds
+// the plan derivation and the framework/discovery helpers it needs, and changes
+// no file under `packages/build-tools/src/`.
+//
+// Validates: Requirements 5.3, 5.8, 5.9, 5.11
+
+import {
+  buildPlanFrom,
+  type BuildPlan,
+} from "../src/build-plan.js";
+import {
+  buildKindOf,
+  type ConsumerPackage,
+  type Discovery,
+} from "../src/discovery.js";
+import {
+  CONTRACTS,
+  NAMESPACE_CONTAINER,
+  OVERSEER,
+  WORKSPACE_SCOPE,
+  type ConsumerCategory,
+} from "../src/framework.js";
+import type { ReadDependencies } from "../src/required-dependencies.js";
+
+/** A discovered Consumer_Package placed in its category's Namespace_Container. */
+function consumerPackage(
+  category: ConsumerCategory,
+  dirName: string,
+  dependencySpecifiers: readonly string[],
+): ConsumerPackage {
+  return {
+    category,
+    dirName,
+    packageDir: `${NAMESPACE_CONTAINER[category]}/${dirName}`,
+    name: `${WORKSPACE_SCOPE}/${dirName}`,
+    dependencySpecifiers: [...dependencySpecifiers].sort(),
+    buildKind: buildKindOf(category),
+  };
+}
+
+/**
+ * The strict-subset chain, as data. Names mirror the committed repository's own
+ * `microservice1 → demo → extended-config → config` chain so the confirmation
+ * reads against the feature it confirms, without depending on the real tree.
+ */
+const CONFIG = consumerPackage("common", "config", []);
+const EXTENDED_CONFIG = consumerPackage("common", "extended-config", [
+  CONFIG.name,
+]);
+const DEMO = consumerPackage("spa", "demo", [EXTENDED_CONFIG.name]);
+const MICROSERVICE1 = consumerPackage("microservice", "microservice1", [
+  DEMO.name,
+]);
+// A second microservice reaching a Common_Package through NO Spa_Package, so a
+// comma-list Selector proves the "present when also reachable off-SPA" half.
+const MICROSERVICE2 = consumerPackage("microservice", "microservice2", [
+  CONFIG.name,
+]);
+
+const CHAIN_PACKAGES: readonly ConsumerPackage[] = [
+  CONFIG,
+  EXTENDED_CONFIG,
+  DEMO,
+  MICROSERVICE1,
+  MICROSERVICE2,
+];
+
+/** The `Discovery` the chain presents, each category sorted by directory name. */
+function chainDiscovery(): Discovery {
+  const of = (category: ConsumerCategory): readonly ConsumerPackage[] =>
+    CHAIN_PACKAGES.filter((pkg) => pkg.category === category).sort((a, b) =>
+      a.dirName < b.dirName ? -1 : a.dirName > b.dirName ? 1 : 0,
+    );
+  return {
+    byCategory: {
+      microservice: of("microservice"),
+      common: of("common"),
+      spa: of("spa"),
+    },
+    nameByDir: new Map(CHAIN_PACKAGES.map((pkg) => [pkg.packageDir, pkg.name])),
+    byName: new Map(CHAIN_PACKAGES.map((pkg) => [pkg.name, pkg])),
+  };
+}
+
+/** A reader over the chain's root consumers (the Overseer names only `contracts`). */
+const chainReader: ReadDependencies = (packageDir) => {
+  if (packageDir === OVERSEER.packageDir) return [CONTRACTS.name];
+  const microservice = CHAIN_PACKAGES.find(
+    (pkg) => pkg.packageDir === packageDir,
+  );
+  return microservice?.dependencySpecifiers ?? [];
+};
+
+function planFor(selector: string): BuildPlan {
+  return buildPlanFrom(selector, chainDiscovery(), chainReader);
+}
+
+/** Directory names of a plan's BUILD set. */
+function requiredDirs(plan: BuildPlan): string[] {
+  return plan.requiredDependencies.map((pkg) => pkg.dirName);
+}
+
+/** Directory names of a plan's STAGE set. */
+function stagedDirs(plan: BuildPlan): string[] {
+  return plan.stagedDependencies.map((pkg) => pkg.dirName);
+}
+
+describe("Property 10: the STAGE set omits exactly what only a Spa_Package reaches", () => {
+  it("stages the Spa_Package but neither Common_Package reached only through it (Selector microservice1)", () => {
+    const plan = planFor("microservice1");
+
+    // BUILD reaches the whole chain: both Common_Packages compile so the
+    // bundler can inline them.
+    expect([...requiredDirs(plan)].sort()).toEqual(
+      ["config", "demo", "extended-config"].sort(),
+    );
+    // STAGE holds the Spa_Package alone: `config` and `extended-config` are
+    // reachable ONLY through `demo`, so the SPA cut drops both.
+    expect(stagedDirs(plan)).toEqual(["demo"]);
+
+    // Stated as the property: STAGE is a strict subset of BUILD, and the missing
+    // members are exactly those with no non-SPA path from the roots.
+    const required = new Set(requiredDirs(plan));
+    const staged = new Set(stagedDirs(plan));
+    expect(staged.size).toBeLessThan(required.size);
+    for (const onlyViaSpa of ["config", "extended-config"]) {
+      expect(required.has(onlyViaSpa)).toBe(true);
+      expect(staged.has(onlyViaSpa)).toBe(false);
+    }
+  });
+
+  it("keeps STAGE a subsequence of BUILD across every Selector spelling", () => {
+    for (const selector of ["microservice1", "*", "microservice1,microservice2"]) {
+      const plan = planFor(selector);
+      const required = requiredDirs(plan);
+
+      // Subsequence: every staged member appears in BUILD, in the same relative
+      // order (R5.3's "subsequence of the Required_Dependencies").
+      let cursor = 0;
+      for (const dir of stagedDirs(plan)) {
+        const at = required.indexOf(dir, cursor);
+        expect(at, `staged "${dir}" not found in BUILD order for "${selector}"`)
+          .toBeGreaterThanOrEqual(0);
+        cursor = at + 1;
+      }
+    }
+  });
+
+  it("stages a Common_Package once a non-SPA path also reaches it (Selector microservice1,microservice2)", () => {
+    // microservice2 reaches `config` directly — no Spa_Package on that path — so
+    // `config` is now staged, while `extended-config` (still reachable only via
+    // `demo`) stays out. Reachability is a disjunction over paths, not a flag.
+    const plan = planFor("microservice1,microservice2");
+    const staged = new Set(stagedDirs(plan));
+
+    expect(new Set(requiredDirs(plan))).toEqual(
+      new Set(["config", "demo", "extended-config"]),
+    );
+    expect(staged.has("config")).toBe(true); // reached off-SPA via microservice2
+    expect(staged.has("demo")).toBe(true); // the Spa_Package itself ships
+    expect(staged.has("extended-config")).toBe(false); // only via the Spa_Package
+  });
+
+  it("stages both Common_Packages under the all-Selector, where microservice3 reaches them directly", () => {
+    // Add microservice3 → extended-config to the chain for this case only, so
+    // BOTH Common_Packages have a non-SPA path and the all-Selector stages all
+    // three consumer libraries (the committed `*` row of the design's table).
+    const microservice3 = consumerPackage("microservice", "microservice3", [
+      EXTENDED_CONFIG.name,
+    ]);
+    const packages = [...CHAIN_PACKAGES, microservice3];
+    const of = (category: ConsumerCategory): readonly ConsumerPackage[] =>
+      packages.filter((pkg) => pkg.category === category).sort((a, b) =>
+        a.dirName < b.dirName ? -1 : a.dirName > b.dirName ? 1 : 0,
+      );
+    const discovery: Discovery = {
+      byCategory: {
+        microservice: of("microservice"),
+        common: of("common"),
+        spa: of("spa"),
+      },
+      nameByDir: new Map(packages.map((pkg) => [pkg.packageDir, pkg.name])),
+      byName: new Map(packages.map((pkg) => [pkg.name, pkg])),
+    };
+    const reader: ReadDependencies = (packageDir) => {
+      if (packageDir === OVERSEER.packageDir) return [CONTRACTS.name];
+      return (
+        packages.find((pkg) => pkg.packageDir === packageDir)
+          ?.dependencySpecifiers ?? []
+      );
+    };
+
+    const plan = buildPlanFrom("*", discovery, reader);
+    expect([...plan.stagedDependencies.map((pkg) => pkg.dirName)].sort()).toEqual(
+      ["config", "demo", "extended-config"].sort(),
+    );
+  });
+});

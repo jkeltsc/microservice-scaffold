@@ -30,8 +30,13 @@ import { describe, expect, it } from "vitest";
 import * as fc from "fast-check";
 
 import {
+  checkBuildOrderSource,
   checkDependencyDirection,
   checkImportDiscipline,
+  checkWorkspaceCoverage,
+  type ScriptSource,
+  type WorkspaceEntry,
+  type WorkspacePackage,
 } from "../src/repo-invariants.js";
 import {
   buildKindOf,
@@ -1278,5 +1283,283 @@ describe("Property 30 (concrete): message shape and the documented non-reports",
     expect(
       check(file, [config.name, CONTRACTS_NAME, BUILD_TOOLS_NAME, "express"]),
     ).toEqual([]);
+  });
+});
+
+// ===========================================================================
+// Feature: spa-common-consumption, Property 14: Import discipline holds in both
+// directions across the Tsc/Bundler boundary
+//
+// Confirmation for task 5.3. Property 30 above establishes the Tsc → Spa
+// direction over generated layouts; this block pins both directions of the
+// Tsc/Bundler boundary to explicit named cases, with no seed:
+//
+//   - a `bundler-project` OWNER (a Spa_Package) importing a Common_Package by
+//     package name yields NO message — the Demo_Spa's own new edge, which must
+//     stay silent (R7.2). A Spa_Package's sources are outside the SPA rule,
+//     which is guarded by `owner.buildKind === "tsc-project"`;
+//   - a `tsc-project` OWNER naming a Spa_Package yields `[imports:spa]` in ALL
+//     THREE scanned specifier forms — a static `import … from`, a side-effect
+//     `import`, and a dynamic `import()` (R7.3).
+//
+// Changes no file under `packages/build-tools/src/`.
+//
+// Validates: Requirements 7.2, 7.3
+
+describe("Property 14 (concrete): import discipline across the Tsc/Bundler boundary", () => {
+  const demo = consumer("spa", "demo", `${SCOPE}/demo`);
+  const extendedConfig = consumer(
+    "common",
+    "extended-config",
+    `${SCOPE}/extended-config`,
+  );
+  const config = consumer("common", "config", `${SCOPE}/config`);
+  const microservice1 = consumer(
+    "microservice",
+    "microservice1",
+    `${SCOPE}/microservice1`,
+  );
+  const packages = [demo, extendedConfig, config, microservice1];
+  const discovery = discoveryOf(packages);
+
+  it("reports nothing for a Bundler_Project (Spa_Package) importing a Common_Package by name (R7.2)", () => {
+    // The Demo_Spa's own new edge: a bundler-project owner naming a
+    // Common_Package. The SPA rule does not range over it, and no other rule
+    // faults a downward by-name import, so the message list is empty.
+    const file = `${demo.packageDir}/src/payload-preview.ts`;
+    expect(
+      checkImportDiscipline(discovery, [file], () =>
+        renderSource([extendedConfig.name]),
+      ),
+    ).toEqual([]);
+    // ...including the two-link reach and a Framework_Singleton alongside it.
+    expect(
+      checkImportDiscipline(discovery, [file], () =>
+        renderSource([extendedConfig.name, config.name, CONTRACTS_NAME]),
+      ),
+    ).toEqual([]);
+  });
+
+  it("reports [imports:spa] for a Tsc_Project naming a Spa_Package in each of the three import forms (R7.3)", () => {
+    const file = `${microservice1.packageDir}/src/index.ts`;
+    const expected = `${SPA_PREFIX} "${file}" imports "${demo.name}", a Spa_Package; a Spa_Package exposes no importable API`;
+
+    // Static `import … from`.
+    expect(
+      checkImportDiscipline(discovery, [file], () =>
+        [`import widget from "${demo.name}";`, ""].join("\n"),
+      ),
+    ).toEqual([expected]);
+
+    // Side-effect `import`.
+    expect(
+      checkImportDiscipline(discovery, [file], () =>
+        [`import "${demo.name}";`, ""].join("\n"),
+      ),
+    ).toEqual([expected]);
+
+    // Dynamic `import()`.
+    expect(
+      checkImportDiscipline(discovery, [file], () =>
+        [`const m = await import("${demo.name}");`, ""].join("\n"),
+      ),
+    ).toEqual([expected]);
+  });
+
+  it("reports [imports:spa] for a Common_Package (also a Tsc_Project) naming a Spa_Package (R7.3)", () => {
+    // Symmetry: `tsc-project` is not just microservices. A Common_Package
+    // naming the Demo_Spa is faulted the same way.
+    const file = `${config.packageDir}/src/index.ts`;
+    expect(
+      checkImportDiscipline(discovery, [file], () =>
+        renderSource([demo.name]),
+      ),
+    ).toEqual([
+      `${SPA_PREFIX} "${file}" imports "${demo.name}", a Spa_Package; a Spa_Package exposes no importable API`,
+    ]);
+  });
+});
+
+// ===========================================================================
+// Feature: spa-common-consumption, Property 16: Every invariant finding of a
+// run is reported in that run
+//
+// Confirmation for task 5.3. `check-repo-invariants.test.ts` spawns the compiled
+// bin over one tree seeded with exactly one violation of each of the four
+// checks. Property 16 is the stronger, quantified claim: for a defect set
+// spanning ANY 1 to 4 of the invariants, one run reports every finding from
+// every violated invariant.
+//
+// "One run" is modelled the way the module composes it in `collectViolations`:
+// the four exported pure checks concatenated in their fixed order —
+// Workspace_Coverage, import discipline, dependency direction, build-order
+// source. Each defect is injected through that check's own inputs, and the
+// property asserts every expected finding appears in the concatenated list and
+// that the list is empty exactly when no defect was injected. Changes no file
+// under `packages/build-tools/src/`.
+//
+// Validates: Requirements 7.8
+
+describe("Property 16: every invariant finding of a run is reported in that run", () => {
+  const COVERAGE_PREFIX = "[workspaces:coverage]";
+  const ORDER_SOURCE_PREFIX = "[workspaces:order-source]";
+
+  /** The four invariants, as a defect axis to switch on and off independently. */
+  type Invariant = "coverage" | "imports" | "direction" | "order-source";
+  const INVARIANTS: readonly Invariant[] = [
+    "coverage",
+    "imports",
+    "direction",
+    "order-source",
+  ];
+
+  // A fixed clean layout the defects perturb. One Common_Package pointing
+  // downward, one Microservice_Package importing it legally.
+  const cfg = consumer("common", "cfg", `${SCOPE}/cfg`, [CONTRACTS_NAME]);
+  const alpha = consumer("microservice", "alpha", `${SCOPE}/alpha`, [
+    CONTRACTS_NAME,
+    cfg.name,
+  ]);
+  const beta = consumer("microservice", "beta", `${SCOPE}/beta`, [
+    CONTRACTS_NAME,
+  ]);
+
+  /** A workspace entry matching exactly one directory. */
+  function entry(pattern: string, index: number): WorkspaceEntry {
+    const dir = pattern.endsWith("/*")
+      ? undefined
+      : pattern;
+    return {
+      pattern,
+      index,
+      matches: dir === undefined ? [] : [dir],
+    };
+  }
+
+  /**
+   * One run over a chosen defect set: the four exported pure checks in the
+   * module's own composition order. Each defect toggles the inputs of exactly
+   * one check.
+   */
+  function runOver(active: ReadonlySet<Invariant>): {
+    messages: readonly string[];
+    expectedPrefixes: readonly string[];
+  } {
+    const packages = [
+      // (direction) The Common_Package points UP at a microservice when active.
+      consumer(
+        "common",
+        "cfg",
+        cfg.name,
+        active.has("direction") ? [CONTRACTS_NAME, alpha.name] : [CONTRACTS_NAME],
+      ),
+      alpha,
+      beta,
+    ];
+    const discovery = discoveryOf(packages);
+
+    // (coverage) Drop cfg's matching entry when active, leaving it matched by
+    // zero entries; otherwise every package is matched by exactly one.
+    const entries: WorkspaceEntry[] = [
+      entry("packages/microservices/alpha", 0),
+      entry("packages/microservices/beta", 1),
+      ...(active.has("coverage")
+        ? []
+        : [entry("packages/common/cfg", 2)]),
+    ];
+    const coveragePackages: WorkspacePackage[] = packages.map((pkg) => ({
+      packageDir: pkg.packageDir,
+      name: pkg.name,
+      dependencySpecifiers: pkg.dependencySpecifiers,
+    }));
+
+    // (imports) alpha's src/ imports beta by name when active.
+    const importFile = `${alpha.packageDir}/src/index.ts`;
+    const importSource = active.has("imports")
+      ? `import { thing } from "${beta.name}";\nexport const v = thing;\n`
+      : `import { value } from "${cfg.name}";\nexport const v = value;\n`;
+
+    // (order-source) a scripts/*.js source spawns a --workspaces build.
+    const scriptSources: ScriptSource[] = active.has("order-source")
+      ? [
+          {
+            source: "scripts/start.js",
+            text: `spawnSync("npm", ["run", "build", "--workspaces"]);`,
+          },
+        ]
+      : [{ source: "scripts/start.js", text: `spawnSync("node", ["x.js"]);` }];
+
+    const messages = [
+      ...checkWorkspaceCoverage(entries, coveragePackages),
+      ...checkImportDiscipline(discovery, [importFile], () => importSource),
+      ...checkDependencyDirection(discovery),
+      ...checkBuildOrderSource([], scriptSources),
+    ];
+
+    const prefixOfInvariant: Record<Invariant, string> = {
+      coverage: COVERAGE_PREFIX,
+      imports: PEER_PREFIX,
+      direction: DIRECTION_PREFIX,
+      "order-source": ORDER_SOURCE_PREFIX,
+    };
+    return {
+      messages,
+      expectedPrefixes: [...active].map((inv) => prefixOfInvariant[inv]),
+    };
+  }
+
+  it("reports every violated invariant's finding, for any defect set of size 1 to 4", () => {
+    fc.assert(
+      fc.property(
+        fc
+          .subarray([...INVARIANTS], { minLength: 1, maxLength: 4 })
+          .map((chosen) => new Set(chosen)),
+        (active) => {
+          const { messages, expectedPrefixes } = runOver(active);
+
+          // Every violated invariant contributes at least one finding, tagged
+          // with its own prefix.
+          for (const prefix of expectedPrefixes) {
+            expect(
+              messages.some((m) => m.startsWith(`${prefix} `)),
+              `expected a ${prefix} finding for active set ${[...active].join(",")}`,
+            ).toBe(true);
+          }
+          // No finding carries a prefix of an invariant that was NOT made to
+          // fail — the run reports exactly the violated set.
+          const allPrefixes = [
+            COVERAGE_PREFIX,
+            PEER_PREFIX,
+            DIRECTION_PREFIX,
+            ORDER_SOURCE_PREFIX,
+          ];
+          for (const prefix of allPrefixes) {
+            if (!expectedPrefixes.includes(prefix)) {
+              expect(messages.some((m) => m.startsWith(`${prefix} `))).toBe(
+                false,
+              );
+            }
+          }
+        },
+      ),
+      { numRuns: 200 },
+    );
+  });
+
+  it("reports nothing when no invariant is made to fail", () => {
+    const { messages } = runOver(new Set<Invariant>());
+    expect(messages).toEqual([]);
+  });
+
+  it("reports all four findings in one run when every invariant is violated", () => {
+    const { messages } = runOver(new Set(INVARIANTS));
+    for (const prefix of [
+      COVERAGE_PREFIX,
+      PEER_PREFIX,
+      DIRECTION_PREFIX,
+      ORDER_SOURCE_PREFIX,
+    ]) {
+      expect(messages.some((m) => m.startsWith(`${prefix} `))).toBe(true);
+    }
   });
 });

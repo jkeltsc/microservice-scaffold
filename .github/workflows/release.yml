@@ -1,7 +1,7 @@
 # Release_Pipeline for the Microservice Scaffold (Requirement 11).
 #
-# Builds both shipped Container configurations (Generic + Specific) on every
-# push to main, on semver tags, on pull requests targeting main, and on manual
+# Builds all three shipped Container configurations (Generic + Specific + Spa_Only)
+# on every push to main, on semver tags, on pull requests targeting main, and on manual
 # dispatch. Pull-request runs build but do not publish (R11.7); every other
 # trigger publishes to GHCR (R11.4/R11.5). Authentication uses the
 # workflow-provided GITHUB_TOKEN with the minimum permissions (R11.6).
@@ -44,7 +44,7 @@ jobs:
     # cancel the other, so both configurations are always attempted.
     strategy:
       fail-fast: false
-      # R6.5 / R11.3: the two shipped Container configurations.
+      # R6.5 / R11.3: the three shipped Container configurations.
       #
       # No toggle flags are carried per leg: the image is built from the
       # generated `Dockerfile`, which bakes `MICROSERVICE_<X>_ENABLED=enabled`
@@ -59,6 +59,9 @@ jobs:
           - variant: specific
             selector: "microservice1,microservice2"
             image_suffix: microservice1-microservice2
+          - variant: spa-only
+            selector: "microservice1"
+            image_suffix: microservice1
     steps:
       - name: Checkout
         continue-on-error: false
@@ -132,7 +135,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   # Prune old untagged GHCR versions after a successful publish. This repo
-  # publishes two image names (one per matrix leg suffix), so both are cleaned.
+  # publishes three image names (one per matrix leg suffix), so all three are cleaned.
   cleanup:
     needs: build-and-publish
     runs-on: ubuntu-latest
@@ -151,4 +154,11 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           package: ${{ github.event.repository.name }}-microservice1-microservice2
+          keep-n-untagged: 10
+
+      - name: Prune old GHCR versions (spa-only image)
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          package: ${{ github.event.repository.name }}-microservice1
           keep-n-untagged: 10

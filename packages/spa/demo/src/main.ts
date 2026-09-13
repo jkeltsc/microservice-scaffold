@@ -15,6 +15,7 @@ import {
   formatRequestLine,
   formatStatus,
 } from "./result-formatter.js";
+import { expectedPayloadText } from "./payload-preview.js";
 
 /**
  * The two Service_Buttons keyed by their `index.html` id, each mapped to the
@@ -28,6 +29,15 @@ const ENDPOINTS = {
   "call-microservice2": "/microservice2/config",
   "call-microservice3": "/microservice3/config",
 } as const;
+
+/**
+ * The Microservice3 identity the Expected_Payload_Field previews. These two literals
+ * live here, beside the ENDPOINTS map they correspond to, because `main.ts` is already
+ * the module that owns the page's Microservice3-specific facts; the Payload_Preview
+ * takes them as arguments and knows neither (R3.1).
+ */
+const MICROSERVICE3_NAME = "microservice3";
+const MICROSERVICE3_PATH = "/microservice3";
 
 /** The HTTP method every Service_Button request uses (R9.9, R9.10). */
 const METHOD = "GET";
@@ -194,4 +204,28 @@ function describeTransportFailure(error: unknown): string {
   return error instanceof Error ? error.message : "";
 }
 
+/**
+ * Fill the Expected_Payload_Field, once, at load (R2.8).
+ *
+ * This has its OWN element lookup and its OWN guard, deliberately kept out of
+ * `wireDemoPage`'s combined `instanceof` guard. That separation is the whole of R2.14:
+ * were the field folded into that guard, a document missing it would make the guard
+ * fail and BOTH Service_Buttons stop working. Kept apart, an absent field means this
+ * function returns and the buttons are wired and behave exactly as they do when the
+ * field is present, with no uncaught error — the same early-return pattern
+ * `wireDemoPage` already uses, applied to one element instead of five.
+ *
+ * The field is written exactly once, in this one statement. Nothing in
+ * `handleActivation` touches it, which is what makes R2.10, R2.11, and R2.15 hold for
+ * any number of activations and any settlement outcome: there is no second writer.
+ */
+function fillExpectedPayload(): void {
+  const field = document.getElementById("expected-microservice3");
+  if (!(field instanceof HTMLTextAreaElement)) {
+    return;
+  }
+  field.value = expectedPayloadText(MICROSERVICE3_NAME, MICROSERVICE3_PATH);
+}
+
+fillExpectedPayload();
 wireDemoPage();

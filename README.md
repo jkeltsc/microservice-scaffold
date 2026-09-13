@@ -127,6 +127,19 @@ Adding a common package and wiring up one consumer is a bounded change: create t
 
 A `spa` package is a bundler-built frontend that lives under `packages/spa/<name>/`, inside the `spa` namespace container. It is discovered by location, and its category contract is a non-empty `scripts.build` (its own bundler build, e.g. Vite) rather than a barrel — a `spa` package declares no `main` and no `types`. `packages/spa/demo` (`@microservices/demo`) is the first member: the demo page `microservice1` serves at its mount root `/`. A microservice depends on a `spa` package only for staging — the microservice serves the SPA's bundled output; it never imports the SPA's code.
 
+#### A `spa` package may consume a common package by name
+
+A `spa` package reuses shared code the same way a microservice does: it declares a common package as a key of the `dependencies` object of its own `package.json` and imports it through the specifier `@microservices/<name>` — never by a relative path into that common package's `src/` or `dist/`. The worked example is `packages/spa/demo`, which declares `@microservices/extended-config` in its `dependencies` and imports it by that package name; because `@microservices/extended-config` in turn depends on `@microservices/config`, the demo reaches the base config transitively without declaring it.
+
+Adding a common package dependency to a `spa` package needs no change to `Dockerfile.template`, none to the Exclusion_List in `scripts/emit-effective-dockerfile.sh`, and none to the build system — resolution already walks `@microservices`-scoped specifiers through the `spa` category, and staging already treats a `spa` package as a leaf.
+
+##### Compiled and inlined, but not staged
+
+A common package reachable only through a `spa` package sits on two different sides of the BUILD/STAGE distinction, and both halves are true at once:
+
+- **It is a Required_Dependency (the BUILD set).** Dependency resolution walks the `spa` package's `@microservices`-scoped specifiers, so the common package is discovered, ordered ahead of the `spa` package, and compiled by the `tsc --build` pass before the Bundler_Build_Phase begins. The bundler then reads that compiled `dist/` and inlines the code into the `spa` package's self-contained bundle.
+- **It is not a Staged_Dependency (the STAGE set).** Resolution arrives at the `spa` package and includes it, but does not expand it, so a common package reached *only* by way of a `spa` package is left out of the Image_Tree. Its code is already inlined into the bundle; no runtime process in the image can reach its `dist/`, so staging it would ship dead bytes and break minimality-by-construction.
+
 A microservice serving a SPA must **compile and start with that SPA's bundle absent**. It compiles without the Spa_Root because it never statically imports the SPA — it resolves the bundle at run time (see below) — which is exactly what lets a `spa` package build in a trailing phase after the single `tsc --build` pass rather than as one of its roots: no TypeScript project ever reads a `spa` package's output. It starts without the Spa_Root too: while the bundle is missing, `microservice1` answers a GET or HEAD at its mount root `/` with `503` and a body naming the resolved Spa_Root and the build command that produces it, then serves the page on the next request once the bundle appears — no restart (see [The demo page and its bundled output](#the-demo-page-and-its-bundled-output)).
 
 #### Locating a SPA's build output
@@ -152,6 +165,10 @@ docker build --build-arg MICROSERVICES='*' -t scaffold:generic .
 # Specific (subset)
 MICROSERVICES=microservice1,microservice2 sh scripts/emit-effective-dockerfile.sh
 docker build --build-arg MICROSERVICES=microservice1,microservice2 -t scaffold:specific .
+
+# Spa-only (microservice1)
+MICROSERVICES=microservice1 sh scripts/emit-effective-dockerfile.sh
+docker build --build-arg MICROSERVICES=microservice1 -t scaffold:microservice1 .
 ```
 
 `emit-effective-dockerfile.sh` bakes per-microservice runtime toggle defaults into the image so each selected service is enabled out of the box.
@@ -160,6 +177,7 @@ Each configuration stages only the packages its selector justifies, so specific 
 
 - **Generic (`*`)** stages the common packages `config` and `extended-config` and the `spa` package `demo` (alongside every microservice).
 - **Specific (`microservice1,microservice2`)** stages the common package `config` and the `spa` package `demo`, and does **not** stage `extended-config` — nothing in that selector reaches it, since only `microservice3` consumes `@microservices/extended-config`.
+- **Spa-only (`microservice1`)**, published under the image-name suffix `microservice1`, stages the `spa` package `demo` and **neither** common package — `demo`'s dependencies on `config` and `extended-config` are compiled and inlined into its bundle, so nothing at runtime reaches their `dist/`.
 
 A consequence to expect from the specific image: the demo page is served (`microservice1` is selected), but `microservice3` is not in it. Activating the `Microservice 3` button on the demo page shows `404` in the status field alongside the requested path in the request field — `microservice3` is not among that configuration's selected microservices, so the path falls inside the subtree `microservice1` owns at `/`, and `microservice1` answers it `404`.
 
@@ -196,7 +214,7 @@ Copy `.env.example` to `.env` and adjust. See `.env.example` for all available v
 | `packages/contracts` | Framework package: shared TypeScript types (request handler contract, exported module shape). |
 | `packages/build-tools` | Registry generator and container image-tree assembler (CLI-only). |
 | `packages/common/*` | Consumer-written common packages: `config` (consumed by `microservice2`) and `extended-config` (consumed by `microservice3`, and itself consuming `config`). |
-| `packages/spa/*` | Bundler-built frontends: `demo`, the demo page `microservice1` serves at `/`. |
+| `packages/spa/*` | Bundler-built frontends: `demo`, the demo page `microservice1` serves at `/`; `demo` consumes `@microservices/extended-config`. |
 | `packages/microservices/*` | Individual microservice modules. Each exports a `path` and a `router`. |
 | `packages/overseer` | The routing frontend — mounts enabled microservice routers and serves HTTP. |
 | `packages/integration-tests` | Cross-package integration test suites. |

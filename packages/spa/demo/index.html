@@ -48,6 +48,29 @@
       -->
       <p><label for="body">Response body</label></p>
       <textarea id="body" rows="16" cols="72" readonly></textarea>
+
+      <!--
+        The Expected_Payload_Field: one further readonly `textarea` AFTER the Body_Field
+        (R2.4). Its heading is a `label` carrying `for`, not an `h2` — one element then
+        serves both purposes: the small visible heading above the field, and the field's
+        programmatically associated accessible name. That mirrors the Body_Field's own
+        `<p><label for="body">` treatment exactly, so the new field is indistinguishable in
+        structure from the ones above it (R2.5, R2.7).
+
+        `readonly` and NOT `disabled`, for the same reason as the Body_Field: the field stays
+        focusable, keyboard reachable, scrollable, and selectable, so a reader can select the
+        expected payload and compare it with the Body_Field character for character (R2.2,
+        R2.3). `readonly` is also what makes R2.15 structural — a keystroke or a paste
+        directed at the focused field cannot change its value.
+
+        It ships EMPTY: `main.ts` sets its value at load from the Payload_Preview (R2.8), so
+        the expected values are never restated as literal markup (R2.9).
+
+        No `aria-live`, here or anywhere in this document (R2.13): the field's content never
+        changes after load, so there is nothing to announce.
+      -->
+      <p><label for="expected-microservice3">microservice 3 should yield:</label></p>
+      <textarea id="expected-microservice3" rows="16" cols="72" readonly></textarea>
     </main>
     <script type="module" src="./src/main.ts"></script>
   </body>

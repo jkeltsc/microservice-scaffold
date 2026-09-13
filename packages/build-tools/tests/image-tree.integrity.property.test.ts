@@ -1003,3 +1003,113 @@ describe("Property 22: the Integrity_Assertion is sound and complete over the en
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Property 13 (concrete): the two integrity directions over the committed
+// spa-common-consumption shape, with no seed
+// ---------------------------------------------------------------------------
+//
+// Confirmation for task 5.3. Property 22 above establishes both integrity
+// directions over generated layouts, and its final case reaches the
+// `microservice → spa → common` strict-subset shape through `arbStrictSubsetCase`.
+// This block pins the same two directions to the feature's OWN concrete chain —
+// `microservice1 → demo → extended-config → config` — so the requirement's
+// worked example reproduces with no fast-check seed:
+//
+//   - an unstaged-but-present entry (a Common_Package reached ONLY through the
+//     Demo_Spa, built but not staged, leaking into the tree) registers as
+//     `[image-tree:unjustified]` (R5.12);
+//   - a staged-but-absent entry (the Demo_Spa itself, which IS staged, missing
+//     from the tree) registers as `[image-tree:missing]` (R5.5, R5.12);
+//   - the exact justified tree passes (R5.5).
+//
+// It reads the STAGE/BUILD split off `buildPlanFrom` via the module's own
+// `planOf`, and it changes no file under `packages/build-tools/src/`.
+//
+// Validates: Requirements 5.5, 5.12
+
+describe("Property 13 (concrete): integrity over the microservice1 → demo → extended-config → config chain", () => {
+  const CONCRETE_OUT = "/out";
+
+  /** The committed Spa_Only_Container chain as a Layout for `planOf`. */
+  const chainLayout: Layout = {
+    libraries: [
+      consumerPackage("common", "config", []),
+      consumerPackage("common", "extended-config", [
+        `${WORKSPACE_SCOPE}/config`,
+      ]),
+      consumerPackage("spa", "demo", [`${WORKSPACE_SCOPE}/extended-config`]),
+    ],
+    microservices: [
+      consumerPackage("microservice", "microservice1", [
+        `${WORKSPACE_SCOPE}/demo`,
+      ]),
+    ],
+    overseerDeps: [CONTRACTS.name],
+  };
+  const SELECTOR = "microservice1";
+
+  it("stages the Demo_Spa but neither Common_Package reached only through it", () => {
+    const plan = planOf(chainLayout, SELECTOR);
+    const required = new Set(
+      plan.requiredDependencies.map((pkg) => pkg.dirName),
+    );
+    const staged = new Set(plan.stagedDependencies.map((pkg) => pkg.dirName));
+
+    expect(required).toEqual(new Set(["config", "extended-config", "demo"]));
+    expect(staged).toEqual(new Set(["demo"]));
+  });
+
+  it("passes on the exact justified tree", () => {
+    const plan = planOf(chainLayout, SELECTOR);
+    const justified = [...justifiedScopeEntries(chainLayout, SELECTOR)];
+    const lister = listerReturning(CONCRETE_OUT, justified);
+
+    expect(() =>
+      assertImageTreeIntegrity(CONCRETE_OUT, plan, lister),
+    ).not.toThrow();
+  });
+
+  it("reports [image-tree:unjustified] when a built-but-unstaged Common_Package leaks in", () => {
+    const plan = planOf(chainLayout, SELECTOR);
+    const justified = [...justifiedScopeEntries(chainLayout, SELECTOR)];
+    // `extended-config` is BUILT (the bundler needs its dist/) but NOT STAGED:
+    // present under the scope, it is unjustified.
+    const lister = listerReturning(CONCRETE_OUT, [
+      ...justified,
+      "extended-config",
+    ]);
+
+    expect(() =>
+      assertImageTreeIntegrity(CONCRETE_OUT, plan, lister),
+    ).toThrowError(/^\[image-tree:unjustified\]/);
+    let message = "";
+    try {
+      assertImageTreeIntegrity(CONCRETE_OUT, plan, lister);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain(`"extended-config"`);
+  });
+
+  it("reports [image-tree:missing] when the staged Demo_Spa is absent from the tree", () => {
+    const plan = planOf(chainLayout, SELECTOR);
+    const justified = [...justifiedScopeEntries(chainLayout, SELECTOR)];
+    // Drop `demo` — a genuinely staged member — from the enumerated tree.
+    const lister = listerReturning(
+      CONCRETE_OUT,
+      justified.filter((entry) => entry !== "demo"),
+    );
+
+    expect(() =>
+      assertImageTreeIntegrity(CONCRETE_OUT, plan, lister),
+    ).toThrowError(/^\[image-tree:missing\]/);
+    let message = "";
+    try {
+      assertImageTreeIntegrity(CONCRETE_OUT, plan, lister);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain(`"demo"`);
+  });
+});

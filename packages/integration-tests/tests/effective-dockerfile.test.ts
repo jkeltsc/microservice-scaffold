@@ -215,6 +215,29 @@ describe("emit-effective-dockerfile.sh output structure", () => {
     }
   });
 
+  // R6.11: the Spa_Only_Container's single-identifier selector. The pinning
+  // table above already proves this run's baked identifiers EQUAL what
+  // resolveSelected("microservice1", ...) returns; this case nails the concrete
+  // R6.11 criterion directly — the generated Dockerfile holds EXACTLY one
+  // ENV MICROSERVICE_<X>_ENABLED=enabled line, and that one names
+  // MICROSERVICE_MICROSERVICE1_ENABLED (no microservice2/microservice3 toggle).
+  // Validates: Requirements R6.11
+  it("bakes exactly one toggle line for the single-identifier selector microservice1", () => {
+    const result = emit("microservice1");
+    expect(result.status, `stderr: ${result.stderr}`).toBe(0);
+
+    const toggleLines = result.out
+      .split("\n")
+      .filter((line) =>
+        /^ENV MICROSERVICE_[A-Z0-9_]+_ENABLED=enabled$/.test(line),
+      );
+
+    expect(toggleLines).toEqual(["ENV MICROSERVICE_MICROSERVICE1_ENABLED=enabled"]);
+    // No toggle line for any other identifier.
+    expect(result.out).not.toContain("MICROSERVICE_MICROSERVICE2_ENABLED");
+    expect(result.out).not.toContain("MICROSERVICE_MICROSERVICE3_ENABLED");
+  });
+
   it("emits an auto-generated header naming the selector", () => {
     const selector = "microservice1,microservice2";
     const { out, stdout } = emit(selector);

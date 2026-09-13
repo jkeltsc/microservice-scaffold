@@ -583,15 +583,30 @@ const arbLayoutAndSelector: fc.Arbitrary<{
 
 /**
  * A layout and Selector whose Required_Dependencies is guaranteed to hold at least
- * one Spa_Package: one Spa library is picked, the first Microservice_Package is
- * pointed at it, and that microservice is the Selector. Without this the Spa
- * clauses of Properties 16 and 18 would only be exercised on the runs where a
- * Spa member happened to be reachable.
+ * one Spa_Package **that itself declares a Common_Package dependency** — the
+ * `spa → common` shape the `spa-common-consumption` feature makes real (the
+ * Demo_Spa depending on `@microservices/extended-config`). One Spa library is
+ * picked, the first Microservice_Package is pointed at it, and that microservice
+ * is the Selector.
+ *
+ * The chosen Spa is guaranteed to carry a Common_Package dependency: a fresh
+ * Common_Package (`spa-lib`) is synthesised depending only on `contracts` (a
+ * Framework_Singleton, resolved and not followed, so it adds no edge that could
+ * reach another library), added to the libraries ahead of the Spa, and named by
+ * the chosen Spa. Synthesising it rather than reusing an existing common keeps
+ * the base DAG intact — the new common depends on nothing generated — and makes
+ * the `spa → common` edge present in every run of this case rather than only
+ * when the random layout happened to hand the Spa a common of its own.
+ *
+ * Without this the Spa clauses of Properties 15/16 (and, via
+ * `spa-build-sequencing.property.test.ts`, Property 18) would exercise a Spa
+ * that is a Required_Dependency but pulls no Common_Package in behind it.
  */
 const arbRequiredSpaCase: fc.Arbitrary<{
   layout: Layout;
   selector: string;
   spaDirName: string;
+  spaCommonDirName: string;
 }> = arbLayout
   .filter((layout) => layout.libraries.some((pkg) => pkg.category === "spa"))
   .chain((layout) =>
@@ -602,17 +617,53 @@ const arbRequiredSpaCase: fc.Arbitrary<{
           .map((pkg) => pkg.dirName),
       )
       .map((spaDirName) => {
-        const spa = layout.libraries.find((pkg) => pkg.dirName === spaDirName)!;
+        // A Common_Package the chosen Spa will depend on. Its directory name is
+        // kept clear of every generated library and every Framework_Singleton so
+        // it resolves to exactly this synthesised package.
+        const existingDirNames = new Set([
+          ...layout.libraries.map((pkg) => pkg.dirName),
+          ...layout.microservices.map((pkg) => pkg.dirName),
+          ...FRAMEWORK_DIR_NAMES,
+        ]);
+        let spaCommonDirName = "spa-lib";
+        while (existingDirNames.has(spaCommonDirName)) {
+          spaCommonDirName = `${spaCommonDirName}x`;
+        }
+        const spaCommon = consumerPackage("common", spaCommonDirName, [
+          CONTRACTS.name,
+        ]);
+
         const entryPoint = layout.microservices[0];
         return {
           layout: {
             ...layout,
+            // The synthesised Common_Package goes first, so a topological order
+            // can place it ahead of the Spa that declares it.
+            libraries: [
+              spaCommon,
+              ...layout.libraries.map((pkg) =>
+                pkg.dirName === spaDirName
+                  ? {
+                      ...pkg,
+                      dependencySpecifiers: [
+                        ...new Set([
+                          ...pkg.dependencySpecifiers,
+                          spaCommon.name,
+                        ]),
+                      ].sort(),
+                    }
+                  : pkg,
+              ),
+            ],
             microservices: layout.microservices.map((pkg) =>
               pkg.packageDir === entryPoint.packageDir
                 ? {
                     ...pkg,
                     dependencySpecifiers: [
-                      ...new Set([...pkg.dependencySpecifiers, spa.name]),
+                      ...new Set([
+                        ...pkg.dependencySpecifiers,
+                        `${WORKSPACE_SCOPE}/${spaDirName}`,
+                      ]),
                     ].sort(),
                   }
                 : pkg,
@@ -620,6 +671,7 @@ const arbRequiredSpaCase: fc.Arbitrary<{
           },
           selector: entryPoint.dirName,
           spaDirName,
+          spaCommonDirName,
         };
       }),
   );
@@ -1012,20 +1064,35 @@ describe("Property 16: the tsc --build roots equal the Selector-justified Tsc_Pr
     );
   });
 
-  it("omits a Spa_Package even when the Required_Dependencies holds it", () => {
+  it("omits a Spa_Package even when the Required_Dependencies holds it, and makes its own Common_Package a root ahead of it", () => {
     fc.assert(
-      fc.property(arbRequiredSpaCase, ({ layout, selector, spaDirName }) => {
-        const plan = planOf(layout, selector);
-        const spaDir = `${NAMESPACE_CONTAINER.spa}/${spaDirName}`;
+      fc.property(
+        arbRequiredSpaCase,
+        ({ layout, selector, spaDirName, spaCommonDirName }) => {
+          const plan = planOf(layout, selector);
+          const spaDir = `${NAMESPACE_CONTAINER.spa}/${spaDirName}`;
+          const spaCommonDir = `${NAMESPACE_CONTAINER.common}/${spaCommonDirName}`;
 
-        // The generator guarantees the interesting case: the Spa_Package IS a
-        // required dependency, and still never a `tsc --build` root (R6.3, R13.4).
-        expect(
-          plan.requiredDependencies.map((pkg) => pkg.packageDir),
-        ).toContain(spaDir);
-        expect(plan.tscRoots).not.toContain(spaDir);
-        expect(plan.tscRoots).toEqual(referenceTscRoots(layout, selector));
-      }),
+          // The generator guarantees the interesting case: the Spa_Package IS a
+          // required dependency, and still never a `tsc --build` root (R6.3, R13.4).
+          const requiredDirs = plan.requiredDependencies.map(
+            (pkg) => pkg.packageDir,
+          );
+          expect(requiredDirs).toContain(spaDir);
+          expect(plan.tscRoots).not.toContain(spaDir);
+          expect(plan.tscRoots).toEqual(referenceTscRoots(layout, selector));
+
+          // The `spa → common` shape (spa-common-consumption, R4.1/R4.3): the
+          // Spa_Package's own Common_Package is pulled into the BUILD set through
+          // the Spa, is a `tsc --build` root (a Tsc_Project), and — required
+          // order being topological — precedes the Spa_Package that declares it.
+          expect(requiredDirs).toContain(spaCommonDir);
+          expect(plan.tscRoots).toContain(spaCommonDir);
+          expect(requiredDirs.indexOf(spaCommonDir)).toBeLessThan(
+            requiredDirs.indexOf(spaDir),
+          );
+        },
+      ),
       { numRuns: 200 },
     );
   });

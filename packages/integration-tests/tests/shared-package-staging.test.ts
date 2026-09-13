@@ -6,14 +6,22 @@
 // resolver order, Build_Kind, plan membership) for the same selectors.
 //
 // The staged-set claims (design "Worked staged sets" table; contracts is always
-// staged on Framework_Singleton grounds and NEVER counted as a Common_Package):
+// staged on Framework_Singleton grounds and NEVER counted as a Common_Package).
 //
-//   Selector                    Staged Common set        Staged Spa set
-//   microservice1               {}                       {demo}
-//   microservice2               {config}                 {}
-//   microservice3               {config, extended-config}{}
-//   microservice2,microservice3 {config, extended-config}{}
-//   *                           {config, extended-config}{demo}
+// A Required column now sits beside the Staged columns because the BUILD set and
+// the STAGE set are NO LONGER EQUAL for `microservice1`: the Demo_Spa reaches
+// `config` and `extended-config` transitively, so both COMPILE (Required) but
+// NEITHER STAGES — only the Demo_Spa itself ships, its libraries inlined into its
+// bundle. Group 1's staged expectations below are therefore unchanged ON PURPOSE,
+// not by oversight: staging is exactly what does not move when a Common_Package is
+// reached only through a Spa_Package (the design's Recorded decision, in table form).
+//
+//   Selector                    Required (Common+Spa)     Staged Common set        Staged Spa set
+//   microservice1               {config, ext-config, demo}{}                       {demo}
+//   microservice2               {config}                  {config}                 {}
+//   microservice3               {config, extended-config} {config, extended-config}{}
+//   microservice2,microservice3 {config, extended-config} {config, extended-config}{}
+//   *                           {config, ext-config, demo}{config, extended-config}{demo}
 //
 // "The staged Common_Package set" means config/extended-config only — the count
 // excludes the Framework_Singleton `contracts`, the selected microservices, and
@@ -352,6 +360,62 @@ describe("Resolver order and plan membership (R5.5, R6.8–R6.11)", () => {
     expect(commonMembers.indexOf("config")).toBeLessThan(
       commonMembers.indexOf("extended-config"),
     );
+  });
+
+  it("microservice1 requires [config, extended-config, demo] in resolver order but stages only [demo] (R4.1, R4.2, R5.3)", () => {
+    const plan = planFor("microservice1");
+
+    // The BUILD set reaches both Common_Packages transitively through the
+    // Demo_Spa (config only via extended-config), plus the Demo_Spa itself.
+    const requiredDirs = plan.requiredDependencies.map(
+      (pkg: ConsumerPackage) => pkg.dirName,
+    );
+    expect(requiredDirs).toEqual(["config", "extended-config", "demo"]);
+    // Resolver order: config before extended-config before demo.
+    expect(requiredDirs.indexOf("config")).toBeLessThan(
+      requiredDirs.indexOf("extended-config"),
+    );
+    expect(requiredDirs.indexOf("extended-config")).toBeLessThan(
+      requiredDirs.indexOf("demo"),
+    );
+
+    // The STAGE set omits both Common_Packages — only the Demo_Spa ships, its
+    // libraries inlined into its bundle. This is the BUILD/STAGE asymmetry.
+    const stagedDirs = plan.stagedDependencies.map(
+      (pkg: ConsumerPackage) => pkg.dirName,
+    );
+    expect(stagedDirs).toEqual(["demo"]);
+  });
+
+  it("stages the design's staged-dirName list for every Selector row, derived from the plan with no assembly (R5.3, R5.8, R5.9)", () => {
+    // The design's "Required_Dependencies and Staged_Dependencies by Selector"
+    // table (Data Models), STAGE column, dirNames only. contracts is a
+    // Framework_Singleton and never a member of stagedDependencies.
+    const STAGED_BY_SELECTOR: ReadonlyArray<{
+      selector: string;
+      staged: string[];
+    }> = [
+      { selector: "microservice1", staged: ["demo"] },
+      { selector: "microservice2", staged: ["config"] },
+      { selector: "microservice3", staged: ["config", "extended-config"] },
+      { selector: "microservice1,microservice2", staged: ["config", "demo"] },
+      {
+        selector: "microservice2,microservice3",
+        staged: ["config", "extended-config"],
+      },
+      { selector: "*", staged: ["config", "extended-config", "demo"] },
+    ];
+
+    for (const { selector, staged } of STAGED_BY_SELECTOR) {
+      const plan = planFor(selector);
+      const stagedDirs = plan.stagedDependencies.map(
+        (pkg: ConsumerPackage) => pkg.dirName,
+      );
+      expect(
+        stagedDirs,
+        `staged dirNames for selector ${selector}`,
+      ).toEqual(staged);
+    }
   });
 
   it("discovery classifies demo as a Bundler_Project (R6.8)", () => {

@@ -17,7 +17,7 @@
 //   packages/microservices/microservice3  microservice  @microservices/microservice3  tsc-project     [contracts, extended-config]
 //   packages/common/config                common        @microservices/config         tsc-project     [contracts]
 //   packages/common/extended-config       common        @microservices/extended-config tsc-project    [config]
-//   packages/spa/demo                      spa           @microservices/demo           bundler-project []
+//   packages/spa/demo                      spa           @microservices/demo           bundler-project [extended-config]
 //
 // Two negatives the table calls out explicitly are asserted directly:
 //   - No framework directory (contracts, overseer, build-tools,
@@ -31,8 +31,10 @@
 //     overseer, also asserted absent below.)
 //   - `packages/spa/` contributes exactly one row, the first Spa_Package
 //     `@microservices/demo`: a Bundler_Project (buildKind `bundler-project`)
-//     that declares no `@microservices`-scoped dependency, so its
-//     dependencySpecifiers are empty — a true sink.
+//     that declares one `@microservices`-scoped dependency,
+//     `@microservices/extended-config`, so its dependencySpecifiers hold
+//     exactly that one specifier — the Config_Package is reached only
+//     transitively through it.
 //
 // `discoverPackages()` resolves the Namespace_Containers as repo-relative
 // paths, so the test runs with the repository root as cwd regardless of whether
@@ -128,9 +130,10 @@ const EXPECTED_ROWS: readonly ExpectedRow[] = [
     // a Spa_Package is a Bundler_Project — built by its own `npm run build`,
     // never a `tsc --build` root
     buildKind: "bundler-project",
-    // declares no @microservices-scoped dependency at all: the Demo_Spa is a
-    // true sink
-    dependencySpecifiers: [],
+    // declares one @microservices-scoped dependency,
+    // @microservices/extended-config; the base Config_Package is reached only
+    // transitively through it, so discovery records just this one specifier
+    dependencySpecifiers: [EXTENDED_CONFIG],
   },
 ];
 
@@ -181,7 +184,7 @@ describe("discoverPackages() over the committed repository (Data Models table)",
         packageDir: `${NAMESPACE_CONTAINER.spa}/demo`,
         name: DEMO,
         buildKind: "bundler-project",
-        dependencySpecifiers: [],
+        dependencySpecifiers: [EXTENDED_CONFIG],
       },
     ]);
   });

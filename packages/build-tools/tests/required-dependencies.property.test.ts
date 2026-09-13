@@ -6,6 +6,8 @@
 // Feature: package-categories, Property 28: A forbidden inbound edge into a Spa_Package fails, naming the declarer and the remedy
 // Feature: package-categories, Property 29: A Microservice_Package is never a dependency target, whatever the declarer
 // Feature: package-categories, Property 31: The Staged_Dependencies equal the SPA-cut reachability oracle
+// Feature: spa-common-consumption, Property 5: A Spa_Package's Common_Packages are reached and ordered ahead of it
+// Feature: spa-common-consumption, Property 11: An unresolvable dependency specifier fails the resolve before any build
 //
 // Every property is exercised through `requiredDependencies(selected, discovery,
 // readDependencies)` — the pure Dependency_Resolver — over generated in-memory
@@ -1615,5 +1617,124 @@ describe("Property 31: the Staged_Dependencies equal the SPA-cut reachability or
       }),
       { numRuns: 200 },
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Feature: spa-common-consumption — the newly reachable spa → common shapes
+// ---------------------------------------------------------------------------
+//
+// The `spa-common-consumption` feature makes the Demo_Spa the first Spa_Package
+// with an `@microservices`-scoped dependency of its own. Two input shapes it
+// makes real were reachable only by generator happenstance before; the blocks
+// below pin them explicitly so Properties 5 and 11 exercise them with no seed.
+//
+//   - Property 5 (R4.1, R4.2): the two-link transitive reach
+//     `microservice → spa → common → common`, where a Bundler_Project pulls a
+//     Common_Package into the Required_Dependencies and that Common_Package
+//     pulls a second one in after it. Each package of the chain must be a
+//     Required_Dependency, and each must appear strictly before every package
+//     that declares it — so both Common_Packages precede the Spa_Package, and
+//     the deeper Common_Package precedes the one that declares it.
+//   - Property 11 (R4.11): a Spa_Package declaring an `@microservices`-scoped
+//     specifier matching no discovered package and no Framework_Singleton fails
+//     the resolve with `[shared:unresolved]` naming that Spa_Package's directory
+//     and the dangling specifier. `arbDanglingCase` above can reach a Spa
+//     declarer only by chance (its `arbDeclarer` picks any library); the block
+//     below fixes the declarer to a Spa_Package.
+
+describe("Feature: spa-common-consumption, Property 5: a Spa_Package's Common_Packages are reached and ordered ahead of it", () => {
+  // The chain, mirroring the Demo_Spa's real edge:
+  //   entry (microservice) → frontend (spa) → shell (common) → base (common)
+  // `base` depends only on `contracts` (resolved, not followed), so the ONLY
+  // path to it runs through the Spa_Package and the deeper Common_Package.
+  const base = consumerPackage("common", "base", `${WORKSPACE_SCOPE}/base`, [
+    CONTRACTS.name,
+  ]);
+  const shell = consumerPackage("common", "shell", `${WORKSPACE_SCOPE}/shell`, [
+    base.name,
+  ]);
+  const frontend = consumerPackage(
+    "spa",
+    "frontend",
+    `${WORKSPACE_SCOPE}/frontend`,
+    [shell.name],
+  );
+  const entry = consumerPackage(
+    "microservice",
+    "entry",
+    `${WORKSPACE_SCOPE}/entry`,
+    [frontend.name],
+  );
+  const layout: Layout = {
+    libraries: [base, shell, frontend],
+    microservices: [entry],
+    overseerDeps: [CONTRACTS.name],
+  };
+
+  it("includes every package of the microservice → spa → common → common chain in the Required_Dependencies", () => {
+    const required = requiredOf(layout, ["entry"]);
+    const names = new Set(required.map((pkg) => pkg.name));
+
+    // The two-link transitive reach lands both Common_Packages and the
+    // Spa_Package in the BUILD set (R4.1).
+    expect(names).toEqual(new Set([base.name, shell.name, frontend.name]));
+  });
+
+  it("orders each member strictly before every package that declares it", () => {
+    const required = requiredOf(layout, ["entry"]);
+    const position = new Map(required.map((pkg, i) => [pkg.name, i]));
+
+    // base ahead of shell (shell declares base), and shell ahead of frontend
+    // (frontend declares shell): both Common_Packages precede the Spa_Package,
+    // the deeper Common_Package precedes the one declaring it (R4.2).
+    expect(position.get(base.name)!).toBeLessThan(position.get(shell.name)!);
+    expect(position.get(shell.name)!).toBeLessThan(
+      position.get(frontend.name)!,
+    );
+
+    // Stated as the general edge check too, so the ordering claim is read off
+    // the declared edges rather than the hand-picked pair above.
+    for (const pkg of required) {
+      for (const specifier of pkg.dependencySpecifiers) {
+        if (!position.has(specifier)) continue;
+        expect(position.get(specifier)!).toBeLessThan(position.get(pkg.name)!);
+      }
+    }
+  });
+});
+
+describe("Feature: spa-common-consumption, Property 11: a Spa_Package declaring a dangling specifier fails the resolve", () => {
+  // A reachable Spa_Package that names an `@microservices` specifier matching no
+  // discovered package and no Framework_Singleton. The microservice reaches the
+  // Spa_Package, so the resolver walks into it and fails on its dangling edge.
+  const dangling = `${WORKSPACE_SCOPE}/nonexistent-lib`;
+  const frontend = consumerPackage(
+    "spa",
+    "frontend",
+    `${WORKSPACE_SCOPE}/frontend`,
+    [dangling],
+  );
+  const entry = consumerPackage(
+    "microservice",
+    "entry",
+    `${WORKSPACE_SCOPE}/entry`,
+    [frontend.name],
+  );
+  const layout: Layout = {
+    libraries: [frontend],
+    microservices: [entry],
+    overseerDeps: [CONTRACTS.name],
+  };
+
+  it("throws [shared:unresolved] naming the Spa_Package directory and the specifier", () => {
+    const message = messageOf(() => requiredOf(layout, ["entry"]));
+
+    // R4.11 / R13.11: the failure names the Spa_Package's directory and the
+    // dangling specifier, byte for byte, and is raised before any build.
+    expect(message).toBe(
+      `[shared:unresolved] "${frontend.packageDir}" depends on unknown ${WORKSPACE_SCOPE} package(s): "${dangling}"`,
+    );
+    expect(frontend.packageDir).toBe(`${NAMESPACE_CONTAINER.spa}/frontend`);
   });
 });

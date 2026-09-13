@@ -27,6 +27,13 @@
 // (whichever way its endpoints appear), and the Spa_Package is nonetheless a
 // Required_Dependency, in the stage set, and in `plan.spaBuilds`.
 //
+// Feature: spa-common-consumption, Property 8: Every Common_Package precedes
+// every Spa_Package in every produced order. `arbSpaEdgeCase` now also plants a
+// `spa → common` edge — a statement-7 member declaring a statement-3 member,
+// the shape the Demo_Spa's dependency on `@microservices/extended-config` makes
+// real — so Property 7's layouts exercise the crossing edge and confirm the
+// Common_Package is ordered ahead of the Spa_Package that declares it.
+//
 // Validates: Requirements 2.4, 2.5, 2.6, 2.11, 2.14, 3.15
 
 import { describe, expect, it } from "vitest";
@@ -205,29 +212,46 @@ const arbLayout: fc.Arbitrary<Layout> = fc
  * with the Spa_Package REACHABLE (so it becomes a required dependency): one Spa
  * package, one microservice pointed at it, the Overseer optionally also pointed
  * at it, and that microservice as the Selector.
+ *
+ * The Spa_Package additionally declares a Common_Package of its own — the
+ * `spa → common` edge the `spa-common-consumption` feature makes real (the
+ * Demo_Spa depending on `@microservices/extended-config`). This is the
+ * statement-7-member-declares-a-statement-3-member shape Property 8 turns on:
+ * the Spa is a Build_Sequence statement-7 member and the Common_Package a
+ * statement-3 member, so the edge crosses from statement 7 back to statement 3.
+ * The Common_Package declares nothing generated, so the graph stays a DAG and
+ * every edge resolves.
  */
 const arbSpaEdgeCase: fc.Arbitrary<{
   layout: Layout;
   selector: string;
   spaDirName: string;
+  commonDirName: string;
   edge: "microservice" | "overseer";
 }> = fc
   .record({
     serviceName: arbDirName,
     spaName: arbDirName,
+    commonName: arbDirName,
     edge: fc.constantFrom<"microservice" | "overseer">(
       "microservice",
       "overseer",
     ),
   })
   .filter(
-    ({ serviceName, spaName }) =>
-      serviceName !== spaName &&
-      !FRAMEWORK_DIR_NAMES.includes(serviceName) &&
-      !FRAMEWORK_DIR_NAMES.includes(spaName),
+    ({ serviceName, spaName, commonName }) =>
+      new Set([serviceName, spaName, commonName]).size === 3 &&
+      ![serviceName, spaName, commonName].some((n) =>
+        FRAMEWORK_DIR_NAMES.includes(n),
+      ),
   )
-  .map(({ serviceName, spaName, edge }) => {
-    const spa = consumerPackage("spa", spaName, []);
+  .map(({ serviceName, spaName, commonName, edge }) => {
+    // The Common_Package the Spa depends on (statement 3); it names nothing, so
+    // it is a leaf of the graph.
+    const common = consumerPackage("common", commonName, []);
+    // The Spa_Package (statement 7) declares the Common_Package — the crossing
+    // edge from statement 7 back to statement 3.
+    const spa = consumerPackage("spa", spaName, [common.name]);
     // The microservice always reaches the spa when the edge is microservice→spa;
     // when the edge is overseer→spa the microservice reaches it too (so it is a
     // required dependency of the selected microservice OR the Overseer), keeping
@@ -238,7 +262,7 @@ const arbSpaEdgeCase: fc.Arbitrary<{
       edge === "overseer" ? [CONTRACTS.name, spa.name] : [CONTRACTS.name];
 
     const layout: Layout = {
-      commons: [],
+      commons: [common],
       microservices: [service],
       spas: [spa],
       frameworkDeps: {
@@ -248,7 +272,13 @@ const arbSpaEdgeCase: fc.Arbitrary<{
         [INTEGRATION_TESTS.packageDir]: [],
       },
     };
-    return { layout, selector: serviceName, spaDirName: spaName, edge };
+    return {
+      layout,
+      selector: serviceName,
+      spaDirName: spaName,
+      commonDirName: commonName,
+      edge,
+    };
   });
 
 const NUM_RUNS = { numRuns: 200 } as const;
@@ -413,6 +443,46 @@ describe("Property 7: a Spa_Package is never a Compile_Time_Prerequisite", () =>
         // workspaceBuildOrder (which runs the throwing pass) succeeds too.
         expect(() => workspaceBuildOrder(nodes)).not.toThrow();
       }),
+      NUM_RUNS,
+    );
+  });
+
+  it("orders the Common_Package a statement-7 Spa_Package declares ahead of it, with the Spa still no prerequisite (spa → common edge)", () => {
+    fc.assert(
+      fc.property(
+        arbSpaEdgeCase,
+        ({ layout, selector, spaDirName, commonDirName }) => {
+          const spaDir = `${NAMESPACE_CONTAINER.spa}/${spaDirName}`;
+          const commonDir = `${NAMESPACE_CONTAINER.common}/${commonDirName}`;
+
+          // The Workspace_Build_Order places the statement-3 Common_Package
+          // before the statement-7 Spa_Package that declares it — the crossing
+          // edge is honoured because the two sit in different statements, and
+          // statement 3 unconditionally precedes statement 7.
+          const nodes = workspaceNodesFrom(
+            discoveryOf(layout),
+            readerFor(layout),
+          );
+          const order = workspaceBuildOrder(nodes).map((n) => n.packageDir);
+          expect(order.indexOf(commonDir)).toBeLessThan(order.indexOf(spaDir));
+
+          // The edge from the Spa to the Common_Package produces no prerequisite
+          // naming the Spa, and the Verification_Pass stays silent (2.6).
+          const edges = prerequisiteEdges(nodes, [selector]);
+          expect(edges.some((e) => e.prerequisite === spaDir)).toBe(false);
+          expect(() => workspaceBuildOrder(nodes)).not.toThrow();
+
+          // The Common_Package is a `tsc --build` root and the Spa is not: the
+          // Spa's own Common_Package compiles before the Bundler_Build_Phase.
+          const plan = buildPlanFrom(
+            selector,
+            discoveryOf(layout),
+            readerFor(layout),
+          );
+          expect(plan.tscRoots).toContain(commonDir);
+          expect(plan.tscRoots).not.toContain(spaDir);
+        },
+      ),
       NUM_RUNS,
     );
   });
