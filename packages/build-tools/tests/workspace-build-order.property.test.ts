@@ -1,6 +1,6 @@
 // Feature: unified-build-order, Property 5: repeated and permuted derivations agree, over no metadata beyond category, directory, name, and declared specifiers
 //
-// The one property that pins `workspaceBuildOrder(nodes)` — the platform-derived
+// The one property that pins `workspaceBuildOrder(CONTEXT, nodes)` — the platform-derived
 // Workspace_Build_Order — against an INDEPENDENTLY written Build_Sequence oracle.
 //
 // The oracle used to be the lexicographically-least topological order over
@@ -62,16 +62,26 @@ import {
   workspaceBuildOrder,
   type WorkspaceNode,
 } from "../src/workspace-build-order.js";
-import {
-  BUILD_TOOLS,
-  CONTRACTS,
-  FRAMEWORK_SINGLETONS,
-  INTEGRATION_TESTS,
-  NAMESPACE_CONTAINER,
-  OVERSEER,
-  WORKSPACE_SCOPE,
-  type ConsumerCategory,
-} from "../src/framework.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
+import { type ConsumerCategory } from "../src/framework.js";
+
+/** Default-config context threaded into the Workspace_Build_Order derivation;
+ *  scope and roots equal the pre-context baseline, so the order is unchanged. */
+const CONTEXT = projectContext(defaultEffectiveConfig());
+
+// Scope, per-category roots, and the four Framework_Singletons (each with its
+// scope-composed name) come from the run's context, not from framework.ts's
+// scope-free surface (R3.7).
+const WORKSPACE_SCOPE = CONTEXT.config.scope;
+const NAMESPACE_CONTAINER = CONTEXT.roots;
+const FRAMEWORK_SINGLETONS = CONTEXT.framework.all;
+const {
+  contracts: CONTRACTS,
+  overseer: OVERSEER,
+  buildTools: BUILD_TOOLS,
+  integrationTests: INTEGRATION_TESTS,
+} = CONTEXT.framework;
 
 // ---------------------------------------------------------------------------
 // Framework tier as data, so the oracle never touches production lookups
@@ -368,7 +378,7 @@ describe("the Workspace_Build_Order equals the Build_Sequence oracle", () => {
   it("contains every workspace package exactly once and nothing else (R12.1)", () => {
     fc.assert(
       fc.property(arbNodeSet, (nodes) => {
-        const order = workspaceBuildOrder(nodes);
+        const order = workspaceBuildOrder(CONTEXT, nodes);
 
         expect([...order].map((n) => n.packageDir).sort()).toEqual(
           [...nodes].map((n) => n.packageDir).sort(),
@@ -388,7 +398,7 @@ describe("the Workspace_Build_Order equals the Build_Sequence oracle", () => {
   it("equals the seven-statement Build_Sequence oracle element for element (2.1)", () => {
     fc.assert(
       fc.property(arbNodeSet, (nodes) => {
-        const order = workspaceBuildOrder(nodes);
+        const order = workspaceBuildOrder(CONTEXT, nodes);
         const oracle = referenceOrder(nodes);
 
         // The full claim: the order is exactly the seven statements of 2.1,
@@ -405,7 +415,7 @@ describe("the Workspace_Build_Order equals the Build_Sequence oracle", () => {
   it("places each package after every one of its Compile_Time_Prerequisites, honoured by the pass not the sort (2.1, 2.8)", () => {
     fc.assert(
       fc.property(arbNodeSet, (nodes) => {
-        const order = workspaceBuildOrder(nodes);
+        const order = workspaceBuildOrder(CONTEXT, nodes);
         const names = declaredNames(nodes);
         const nameToDir = new Map(nodes.map((n) => [n.name, n.packageDir]));
         const spaNames = new Set(
@@ -448,19 +458,19 @@ describe("the Workspace_Build_Order equals the Build_Sequence oracle", () => {
           fc.tuple(fc.constant(nodes), arbPermuted(nodes), arbPermuted(nodes)),
         ),
         ([nodes, permA, permB]) => {
-          const base = workspaceBuildOrder(nodes).map((n) => n.packageDir);
+          const base = workspaceBuildOrder(CONTEXT, nodes).map((n) => n.packageDir);
 
           expect(
-            workspaceBuildOrder(nodes).map((n) => n.packageDir),
+            workspaceBuildOrder(CONTEXT, nodes).map((n) => n.packageDir),
           ).toEqual(base);
 
           // Presentation order carries no meaning: two independent permutations
           // of the same node set yield the same order.
           expect(
-            workspaceBuildOrder(permA).map((n) => n.packageDir),
+            workspaceBuildOrder(CONTEXT, permA).map((n) => n.packageDir),
           ).toEqual(base);
           expect(
-            workspaceBuildOrder(permB).map((n) => n.packageDir),
+            workspaceBuildOrder(CONTEXT, permB).map((n) => n.packageDir),
           ).toEqual(base);
         },
       ),
@@ -504,7 +514,7 @@ describe("the within-statement tiebreak governs same-statement pairs only (2.3, 
             ),
           ];
 
-          const order = workspaceBuildOrder(nodes);
+          const order = workspaceBuildOrder(CONTEXT, nodes);
           const microserviceDirsInOrder = order
             .filter((n) => n.tier === "microservice")
             .map((n) => n.packageDir);
@@ -537,7 +547,7 @@ describe("the within-statement tiebreak governs same-statement pairs only (2.3, 
             ),
           ];
 
-          const order = workspaceBuildOrder(nodes);
+          const order = workspaceBuildOrder(CONTEXT, nodes);
           const spaDirsInOrder = order
             .filter((n) => n.tier === "spa")
             .map((n) => n.packageDir);
@@ -568,7 +578,7 @@ describe("the within-statement tiebreak governs same-statement pairs only (2.3, 
             ),
           ];
 
-          const order = workspaceBuildOrder(nodes);
+          const order = workspaceBuildOrder(CONTEXT, nodes);
           const index = new Map(order.map((n, i) => [n.packageDir, i]));
 
           const commonDirPath = `${NAMESPACE_CONTAINER.common}/${commonDir}`;
@@ -612,7 +622,7 @@ describe("the within-statement tiebreak governs same-statement pairs only (2.3, 
           );
 
           const nodes = [...frameworkNodes(new Map()), dep, declarer];
-          const order = workspaceBuildOrder(nodes);
+          const order = workspaceBuildOrder(CONTEXT, nodes);
           const index = new Map(order.map((n, i) => [n.packageDir, i]));
 
           expect(index.get(dep.packageDir)!).toBeLessThan(
@@ -667,7 +677,7 @@ describe("a cycle among the Common_Packages fails naming exactly the participant
 
           let thrown: unknown;
           try {
-            workspaceBuildOrder(nodes);
+            workspaceBuildOrder(CONTEXT, nodes);
           } catch (error) {
             thrown = error;
           }

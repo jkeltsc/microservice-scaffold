@@ -34,6 +34,8 @@ import * as fc from "fast-check";
 
 import { discoverPackages } from "../src/discovery.js";
 import { generateRegistry } from "../src/generate-registry.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
 import { resolveSelected } from "../src/selector.js";
 
 /** The well-known output path the generator writes and the Overseer imports. */
@@ -50,7 +52,9 @@ const REGISTRY_PATH = fileURLToPath(
  * generator's own output path it is cwd-relative, so this suite runs from the
  * repo root as it already did.
  */
-const directories = discoverPackages().byCategory.microservice.map(
+const CONTEXT = projectContext(defaultEffectiveConfig());
+
+const directories = discoverPackages(CONTEXT).byCategory.microservice.map(
   (pkg) => pkg.dirName,
 );
 
@@ -114,10 +118,10 @@ describe("Property 10: Common_Startup yields one registry for both entry points 
 
     fc.assert(
       fc.property(arbResolvableSelector, (selector) => {
-        generateRegistry(selector);
+        generateRegistry(CONTEXT, selector);
         const first = readFileSync(REGISTRY_PATH, "utf8");
 
-        generateRegistry(selector);
+        generateRegistry(CONTEXT, selector);
         const second = readFileSync(REGISTRY_PATH, "utf8");
 
         // Byte-identical content: the two entry points cannot drift.

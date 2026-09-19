@@ -43,6 +43,8 @@ import * as fc from "fast-check";
 
 import type { ReadDependencies } from "../src/required-dependencies.js";
 import { buildPlanFrom } from "../src/build-plan.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
 import {
   buildKindOf,
   type ConsumerPackage,
@@ -52,14 +54,19 @@ import {
   workspaceBuildOrder,
   workspaceNodesFrom,
 } from "../src/workspace-build-order.js";
-import {
-  CONTRACTS,
-  FRAMEWORK_SINGLETONS,
-  NAMESPACE_CONTAINER,
-  OVERSEER,
-  WORKSPACE_SCOPE,
-  type ConsumerCategory,
-} from "../src/framework.js";
+
+import { type ConsumerCategory } from "../src/framework.js";
+
+/** Default-config context; scope and roots equal the pre-context baseline. */
+const CONTEXT = projectContext(defaultEffectiveConfig());
+
+// Scope, per-category roots, and the four Framework_Singletons (each with its
+// scope-composed name) come from the run's context, not from framework.ts's
+// scope-free surface (R3.7).
+const WORKSPACE_SCOPE = CONTEXT.config.scope;
+const NAMESPACE_CONTAINER = CONTEXT.roots;
+const FRAMEWORK_SINGLETONS = CONTEXT.framework.all;
+const { contracts: CONTRACTS, overseer: OVERSEER } = CONTEXT.framework;
 
 // ---------------------------------------------------------------------------
 // In-memory layout model (shared shape with build-plan.property.test.ts)
@@ -465,8 +472,12 @@ const committedTreeLayout: Layout = {
 
 /** The Workspace_Build_Order over a layout, as the CLI shell would derive it. */
 function workspaceOrderOf(layout: Layout): readonly string[] {
-  const nodes = workspaceNodesFrom(discoveryOf(layout), readerFor(layout));
-  return workspaceBuildOrder(nodes).map((node) => node.packageDir);
+  const nodes = workspaceNodesFrom(
+    CONTEXT,
+    discoveryOf(layout),
+    readerFor(layout),
+  );
+  return workspaceBuildOrder(CONTEXT, nodes).map((node) => node.packageDir);
 }
 
 /** The Tsc_Root_Order for a layout and a raw Selector value. */
@@ -474,7 +485,8 @@ function tscRootsOf(
   layout: Layout,
   selector: string | undefined,
 ): readonly string[] {
-  return buildPlanFrom(selector, discoveryOf(layout), readerFor(layout)).tscRoots;
+  return buildPlanFrom(CONTEXT, selector, discoveryOf(layout), readerFor(layout))
+    .tscRoots;
 }
 
 /**

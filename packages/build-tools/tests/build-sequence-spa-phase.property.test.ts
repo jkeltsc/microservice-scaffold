@@ -54,21 +54,30 @@ import {
   executeBuildPlan,
   type CommandRunner,
 } from "../src/image-tree.js";
-import {
-  BUILD_TOOLS,
-  CONTRACTS,
-  FRAMEWORK_SINGLETONS,
-  INTEGRATION_TESTS,
-  NAMESPACE_CONTAINER,
-  OVERSEER,
-  WORKSPACE_SCOPE,
-  type ConsumerCategory,
-} from "../src/framework.js";
+import { type ConsumerCategory } from "../src/framework.js";
 import type { ReadDependencies } from "../src/required-dependencies.js";
 import {
   workspaceBuildOrder,
   workspaceNodesFrom,
 } from "../src/workspace-build-order.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
+
+/** The per-run context threaded through the build-sequence primitives (task 5.3). */
+const CONTEXT = projectContext(defaultEffectiveConfig());
+
+// Scope, per-category roots, and the four Framework_Singletons (each with its
+// scope-composed name) come from the run's context, not from framework.ts's
+// scope-free surface (R3.7).
+const WORKSPACE_SCOPE = CONTEXT.config.scope;
+const NAMESPACE_CONTAINER = CONTEXT.roots;
+const FRAMEWORK_SINGLETONS = CONTEXT.framework.all;
+const {
+  contracts: CONTRACTS,
+  overseer: OVERSEER,
+  buildTools: BUILD_TOOLS,
+  integrationTests: INTEGRATION_TESTS,
+} = CONTEXT.framework;
 
 /** Framework directory names as data, so no generator collides with one. */
 const FRAMEWORK_DIR_NAMES: readonly string[] = FRAMEWORK_SINGLETONS.map(
@@ -318,8 +327,12 @@ describe("Property 6: every Spa_Package follows every Tsc_Project, on both paths
   it("places no Tsc_Project after any Spa_Package in the Workspace_Build_Order", () => {
     fc.assert(
       fc.property(arbLayout, (layout) => {
-        const nodes = workspaceNodesFrom(discoveryOf(layout), readerFor(layout));
-        const order = workspaceBuildOrder(nodes).map((n) => n.packageDir);
+        const nodes = workspaceNodesFrom(
+          CONTEXT,
+          discoveryOf(layout),
+          readerFor(layout),
+        );
+        const order = workspaceBuildOrder(CONTEXT, nodes).map((n) => n.packageDir);
 
         const spaDirs = new Set(layout.spas.map((pkg) => pkg.packageDir));
         // Every non-Spa workspace node is a Tsc_Project (the four singletons,
@@ -356,6 +369,7 @@ describe("Property 6: every Spa_Package follows every Tsc_Project, on both paths
         ];
         for (const selector of selectors) {
           const tscRoots = buildPlanFrom(
+            CONTEXT,
             selector,
             discoveryOf(layout),
             readerFor(layout),
@@ -373,6 +387,7 @@ describe("Property 6: every Spa_Package follows every Tsc_Project, on both paths
     fc.assert(
       fc.property(arbLayout, (layout) => {
         const plan = buildPlanFrom(
+          CONTEXT,
           "*",
           discoveryOf(layout),
           readerFor(layout),
@@ -417,9 +432,13 @@ describe("Property 7: a Spa_Package is never a Compile_Time_Prerequisite", () =>
   it("produces no prerequisite edge whose prerequisite is the Spa_Package, and the pass reports no violation for the legal edge", () => {
     fc.assert(
       fc.property(arbSpaEdgeCase, ({ layout, selector, spaDirName }) => {
-        const nodes = workspaceNodesFrom(discoveryOf(layout), readerFor(layout));
+        const nodes = workspaceNodesFrom(
+          CONTEXT,
+          discoveryOf(layout),
+          readerFor(layout),
+        );
         const selected = [selector];
-        const edges = prerequisiteEdges(nodes, selected);
+        const edges = prerequisiteEdges(CONTEXT, nodes, selected);
 
         const spaDir = `${NAMESPACE_CONTAINER.spa}/${spaDirName}`;
         // No edge names the Spa_Package as a prerequisite (2.6): the declared
@@ -431,17 +450,17 @@ describe("Property 7: a Spa_Package is never a Compile_Time_Prerequisite", () =>
         // Spa edge produces no violation whichever way its endpoints fall (the
         // Spa follows every Tsc_Project as statement 7, so even a positional
         // check has nothing to complain about).
-        const order = buildSequence({
+        const order = buildSequence(CONTEXT, {
           common: layout.commons,
           microservices: layout.microservices.map((pkg) => pkg.dirName),
           spa: layout.spas,
           buildTools: true,
           testOnly: true,
         });
-        expect(verifyBuildOrder(order, edges)).toEqual([]);
+        expect(verifyBuildOrder(CONTEXT, order, edges)).toEqual([]);
 
         // workspaceBuildOrder (which runs the throwing pass) succeeds too.
-        expect(() => workspaceBuildOrder(nodes)).not.toThrow();
+        expect(() => workspaceBuildOrder(CONTEXT, nodes)).not.toThrow();
       }),
       NUM_RUNS,
     );
@@ -460,21 +479,23 @@ describe("Property 7: a Spa_Package is never a Compile_Time_Prerequisite", () =>
           // edge is honoured because the two sit in different statements, and
           // statement 3 unconditionally precedes statement 7.
           const nodes = workspaceNodesFrom(
+            CONTEXT,
             discoveryOf(layout),
             readerFor(layout),
           );
-          const order = workspaceBuildOrder(nodes).map((n) => n.packageDir);
+          const order = workspaceBuildOrder(CONTEXT, nodes).map((n) => n.packageDir);
           expect(order.indexOf(commonDir)).toBeLessThan(order.indexOf(spaDir));
 
           // The edge from the Spa to the Common_Package produces no prerequisite
           // naming the Spa, and the Verification_Pass stays silent (2.6).
-          const edges = prerequisiteEdges(nodes, [selector]);
+          const edges = prerequisiteEdges(CONTEXT, nodes, [selector]);
           expect(edges.some((e) => e.prerequisite === spaDir)).toBe(false);
-          expect(() => workspaceBuildOrder(nodes)).not.toThrow();
+          expect(() => workspaceBuildOrder(CONTEXT, nodes)).not.toThrow();
 
           // The Common_Package is a `tsc --build` root and the Spa is not: the
           // Spa's own Common_Package compiles before the Bundler_Build_Phase.
           const plan = buildPlanFrom(
+            CONTEXT,
             selector,
             discoveryOf(layout),
             readerFor(layout),
@@ -491,6 +512,7 @@ describe("Property 7: a Spa_Package is never a Compile_Time_Prerequisite", () =>
     fc.assert(
       fc.property(arbSpaEdgeCase, ({ layout, selector, spaDirName }) => {
         const plan = buildPlanFrom(
+          CONTEXT,
           selector,
           discoveryOf(layout),
           readerFor(layout),
@@ -517,10 +539,11 @@ describe("Property 7: a Spa_Package is never a Compile_Time_Prerequisite", () =>
 
         // Sanity: the Spa is not a prerequisite even under the plan's Selector.
         const nodes = workspaceNodesFrom(
+          CONTEXT,
           discoveryOf(layout),
           readerFor(layout),
         );
-        const edges = prerequisiteEdges(nodes, plan.selected);
+        const edges = prerequisiteEdges(CONTEXT, nodes, plan.selected);
         expect(edges.some((e) => e.prerequisite === spaDir)).toBe(false);
       }),
       NUM_RUNS,

@@ -24,17 +24,27 @@ import { describe, expect, it } from "vitest";
 
 import type { ConsumerPackage } from "../src/discovery.js";
 import {
-  BUILD_TOOLS,
-  CONTRACTS,
-  INTEGRATION_TESTS,
-  NAMESPACE_CONTAINER,
-  OVERSEER,
-} from "../src/framework.js";
-import {
   buildSequence,
   type SequenceMembership,
   type SequencedPackage,
 } from "../src/build-sequence.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
+
+/** The per-run context every example threads through `buildSequence` (task 5.3).
+ *  Its default scope and roots keep the pinned names byte-identical to baseline. */
+const CONTEXT = projectContext(defaultEffectiveConfig());
+
+// Per-category roots and the four Framework_Singletons (each with its
+// scope-composed name) come from the run's context, not from framework.ts's
+// scope-free surface (R3.7).
+const NAMESPACE_CONTAINER = CONTEXT.roots;
+const {
+  contracts: CONTRACTS,
+  overseer: OVERSEER,
+  buildTools: BUILD_TOOLS,
+  integrationTests: INTEGRATION_TESTS,
+} = CONTEXT.framework;
 
 /** The two real Common_Packages, as `discoverPackages` would report them:
  *  `extended-config` declares the single scoped specifier `@microservices/config`
@@ -88,7 +98,7 @@ function at(
 
 describe("buildSequence: statement 1 — contracts, always first", () => {
   it("emits contracts at statement 1 as the first entry, for every membership", () => {
-    const order = buildSequence(EMPTY_MEMBERSHIP);
+    const order = buildSequence(CONTEXT, EMPTY_MEMBERSHIP);
 
     expect(order[0]).toEqual(entryOf(CONTRACTS, 1));
     // Statement 5 (Overseer) is unconditional too, so the barest membership is
@@ -99,7 +109,10 @@ describe("buildSequence: statement 1 — contracts, always first", () => {
 
 describe("buildSequence: statement 2 — build-tools, gated on membership.buildTools", () => {
   it("emits build-tools at statement 2 when buildTools is true", () => {
-    const order = buildSequence({ ...EMPTY_MEMBERSHIP, buildTools: true });
+    const order = buildSequence(CONTEXT, {
+      ...EMPTY_MEMBERSHIP,
+      buildTools: true,
+    });
 
     expect(at(order, BUILD_TOOLS.packageDir)).toEqual(entryOf(BUILD_TOOLS, 2));
     // Immediately after contracts, before the Overseer.
@@ -111,7 +124,10 @@ describe("buildSequence: statement 2 — build-tools, gated on membership.buildT
   });
 
   it("omits build-tools entirely when buildTools is false", () => {
-    const order = buildSequence({ ...EMPTY_MEMBERSHIP, buildTools: false });
+    const order = buildSequence(CONTEXT, {
+      ...EMPTY_MEMBERSHIP,
+      buildTools: false,
+    });
 
     expect(at(order, BUILD_TOOLS.packageDir)).toBeUndefined();
     expect(order.some((entry) => entry.statement === 2)).toBe(false);
@@ -123,7 +139,7 @@ describe("buildSequence: statement 3 — Common_Packages in calculated order", (
     // Feed the two members in the order that would trip a naive pass — the
     // dependent first — so a passing result can only come from the declared edge
     // extended-config → @microservices/config, not from input order.
-    const order = buildSequence({
+    const order = buildSequence(CONTEXT, {
       ...EMPTY_MEMBERSHIP,
       common: [EXTENDED_CONFIG, CONFIG],
     });
@@ -155,7 +171,7 @@ describe("buildSequence: statement 3 — Common_Packages in calculated order", (
 
 describe("buildSequence: statement 5 — the Overseer, always after every microservice", () => {
   it("emits the Overseer at statement 5 after every statement-4 microservice", () => {
-    const order = buildSequence({
+    const order = buildSequence(CONTEXT, {
       ...EMPTY_MEMBERSHIP,
       microservices: ["microservice1", "microservice2"],
     });
@@ -180,7 +196,10 @@ describe("buildSequence: statement 5 — the Overseer, always after every micros
 
 describe("buildSequence: statement 6 — integration-tests, gated on membership.testOnly", () => {
   it("emits integration-tests at statement 6 when testOnly is true", () => {
-    const order = buildSequence({ ...EMPTY_MEMBERSHIP, testOnly: true });
+    const order = buildSequence(CONTEXT, {
+      ...EMPTY_MEMBERSHIP,
+      testOnly: true,
+    });
 
     expect(at(order, INTEGRATION_TESTS.packageDir)).toEqual(
       entryOf(INTEGRATION_TESTS, 6),
@@ -194,7 +213,10 @@ describe("buildSequence: statement 6 — integration-tests, gated on membership.
   });
 
   it("omits integration-tests entirely when testOnly is false", () => {
-    const order = buildSequence({ ...EMPTY_MEMBERSHIP, testOnly: false });
+    const order = buildSequence(CONTEXT, {
+      ...EMPTY_MEMBERSHIP,
+      testOnly: false,
+    });
 
     expect(at(order, INTEGRATION_TESTS.packageDir)).toBeUndefined();
     expect(order.some((entry) => entry.statement === 6)).toBe(false);
@@ -203,7 +225,7 @@ describe("buildSequence: statement 6 — integration-tests, gated on membership.
 
 describe("buildSequence: statement 7 — the trailing Spa_Package phase", () => {
   it("emits no statement-7 entry when membership.spa is empty", () => {
-    const order = buildSequence({ ...EMPTY_MEMBERSHIP, spa: [] });
+    const order = buildSequence(CONTEXT, { ...EMPTY_MEMBERSHIP, spa: [] });
 
     expect(order.some((entry) => entry.statement === 7)).toBe(false);
   });
@@ -218,7 +240,7 @@ describe("buildSequence: statement 7 — the trailing Spa_Package phase", () => 
       buildKind: "bundler-project",
     };
 
-    const order = buildSequence({
+    const order = buildSequence(CONTEXT, {
       ...EMPTY_MEMBERSHIP,
       buildTools: true,
       testOnly: true,

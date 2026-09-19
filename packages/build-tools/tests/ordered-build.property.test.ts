@@ -40,6 +40,11 @@ import {
   type CommandRunner,
   type WorkspaceNode,
 } from "../src/workspace-build-order.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
+
+/** Default-config context threaded into the Workspace_Build_Order derivation. */
+const CONTEXT = projectContext(defaultEffectiveConfig());
 
 /** One recorded runner invocation, captured before any status is returned. */
 interface Invocation {
@@ -181,7 +186,7 @@ describe("Property 9: the ordered build invokes each package's own build once, i
   it("an all-zero run invokes every package exactly once, in the Workspace_Build_Order, as `npm run build --workspace <name>`, with every Spa_Package after every Tsc_Project (2.4, 3.14)", () => {
     fc.assert(
       fc.property(nodeSetArb, (nodes) => {
-        const order = workspaceBuildOrder(nodes);
+        const order = workspaceBuildOrder(CONTEXT, nodes);
         const { run, invocations } = recordingRunner();
 
         runOrderedBuild(order, run);
@@ -233,7 +238,7 @@ describe("Property 9: the ordered build invokes each package's own build once, i
         fc.integer({ min: 1, max: 255 }),
         fc.nat(),
         (nodes, status, pick) => {
-          const order = workspaceBuildOrder(nodes);
+          const order = workspaceBuildOrder(CONTEXT, nodes);
           const failIndex = pick % order.length;
           const failNode = order[failIndex];
 

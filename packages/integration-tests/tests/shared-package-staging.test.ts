@@ -65,10 +65,15 @@ import {
   discoverPackages,
   type ConsumerPackage,
 } from "@microservices/build-tools/dist/discovery.js";
+import { defaultEffectiveConfig } from "@microservices/build-tools/dist/project-config.js";
+import { projectContext } from "@microservices/build-tools/dist/project-context.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // tests/ -> integration-tests -> packages -> repo root
 const repoRoot = resolve(__dirname, "..", "..", "..");
+
+/** Default-config context threaded innermost-first (task 5.1). */
+const discoveryContext = projectContext(defaultEffectiveConfig());
 
 /** Real assembly runs a full `tsc --build` (+ vite build); give each case room. */
 const ASSEMBLE_TIMEOUT_MS = 240_000;
@@ -103,7 +108,15 @@ function withRepoRootAndSelector<T>(selector: string, fn: () => T): T {
 /** Assemble the image tree for `selector` into a fresh temp outDir. */
 function assemble(selector: string): { outDir: string } {
   const outDir = mkdtempSync(join(tmpdir(), "shared-package-staging-"));
-  withRepoRootAndSelector(selector, () => buildImageTree(outDir));
+  // `buildImageTree` is now the plan executor; the CLI's orchestration is
+  // replicated here (the CLI exits the process on a Config_Diagnostic). This
+  // suite only asserts the staged scope layout, which the plan alone determines,
+  // so it derives the plan and executes it — no registry regeneration, so it
+  // writes nothing into the checked-out tree.
+  withRepoRootAndSelector(selector, () => {
+    const plan = buildPlan(discoveryContext, selector);
+    buildImageTree(discoveryContext, plan, outDir);
+  });
   return { outDir };
 }
 
@@ -347,7 +360,9 @@ describe("Spa_Package staging (R6.12, R6.13, R8.7)", () => {
 describe("Resolver order and plan membership (R5.5, R6.8–R6.11)", () => {
   /** The BuildPlan for `selector`, derived over the real tree. */
   function planFor(selector: string) {
-    return withRepoRootAndSelector(selector, () => buildPlan(selector));
+    return withRepoRootAndSelector(selector, () =>
+      buildPlan(discoveryContext, selector),
+    );
   }
 
   it("microservice3 Required_Dependencies' Common members are exactly [config, extended-config] with config at the lower index (R5.5)", () => {
@@ -419,7 +434,9 @@ describe("Resolver order and plan membership (R5.5, R6.8–R6.11)", () => {
   });
 
   it("discovery classifies demo as a Bundler_Project (R6.8)", () => {
-    const discovery = withRepoRootAndSelector("*", () => discoverPackages());
+    const discovery = withRepoRootAndSelector("*", () =>
+      discoverPackages(discoveryContext),
+    );
     const demo = discovery.byCategory.spa.find((pkg) => pkg.dirName === "demo");
     expect(demo, "demo should be discovered under the spa category").toBeDefined();
     expect(demo?.buildKind).toBe("bundler-project");

@@ -35,14 +35,18 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
-  SCOPE_DIR,
   type BuildPlan,
   type StagedPackage,
 } from "../src/build-plan.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
 import {
   assertImageTreeIntegrity,
   listScopedEntries,
 } from "../src/image-tree.js";
+
+/** The Image_Tree scope directory, derived from the default-config context. */
+const SCOPE_DIR = projectContext(defaultEffectiveConfig()).scopeDir;
 
 /** A staged package landing at `node_modules/@microservices/<entry>`. */
 function scoped(

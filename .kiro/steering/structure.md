@@ -11,12 +11,12 @@ Every workspace package under `packages/` belongs to exactly one **Package_Categ
   - `packages/overseer/` — the routing frontend application
   - `packages/build-tools/` — registry generator, dependency resolver, image-tree assembler
   - `packages/integration-tests/` — cross-package integration test suite
-- **Consumer_Category** — a kind of package a *user of this template* writes. The Build_System discovers these **by location**: each consumer package is a direct subdirectory of the one **Namespace_Container** that names its category. A Namespace_Container is not itself a package and declares no `package.json`. There are exactly three:
-  - **microservice** → `packages/microservices/`
-  - **common** → `packages/common/`
-  - **spa** → `packages/spa/`
+- **Consumer_Category** — a kind of package a *user of this template* writes. The Build_System discovers these **by location**: **the members of a Consumer_Category are the direct subdirectories of that category's configured Discovery_Root** — the path declared for that category under `roots` in `scaffold.config.json` (see `tech.md`). A Discovery_Root is not itself a package and declares no `package.json`. There are exactly three categories, each with a **Root_Default** a project uses when it declares none:
+  - **microservice** → default `packages/microservices/`
+  - **common** → default `packages/common/`
+  - **spa** → default `packages/spa/`
 
-Only these seven entries — the four Framework_Singleton directories and the three Namespace_Container directories — sit directly under `packages/`, and nothing else. No Build_System check validates this; it is a convention that code review upholds. A direct subdirectory of `packages/` that is neither a Framework_Singleton nor a Namespace_Container has no category, and that is not an error — the build ignores it and exits zero.
+The layout below is the **result of those three defaults**, not a fixed path: a project that declares a different root for a category discovers that category's members under the declared directory instead. This repository declares no `scaffold.config.json`, so it takes all three defaults, and the four Framework_Singleton directories plus the three default Discovery_Root directories are the only direct children of `packages/`, with nothing else. No Build_System check validates *that* set; it is a convention code review upholds. A direct subdirectory of `packages/` that is neither a Framework_Singleton nor a configured Discovery_Root has no category, and that is not an error — the build ignores it and exits zero.
 
 ## Layout
 
@@ -46,7 +46,11 @@ Only these seven entries — the four Framework_Singleton directories and the th
       └─ microservice3/
 ```
 
-The four Framework_Singletons and the three Namespace_Containers are the only direct children of `packages/`. Category members live *inside* their Namespace_Container: a microservice at `packages/microservices/<identifier>/`, a common library at `packages/common/<name>/`, a SPA at `packages/spa/<name>/`. A directory two or more levels below a Namespace_Container (for example a SPA source folder kept inside a microservice) is private content of its nearest enclosing member, never a discovered package of its own.
+Under the default roots, the four Framework_Singletons and the three Discovery_Root directories are the only direct children of `packages/`. Category members live *inside* their category's configured Discovery_Root: at the defaults, a microservice at `packages/microservices/<identifier>/`, a common library at `packages/common/<name>/`, a SPA at `packages/spa/<name>/`. A directory two or more levels below a Discovery_Root (for example a SPA source folder kept inside a microservice) is private content of its nearest enclosing member, never a discovered package of its own.
+
+### Relocating a Discovery_Root
+
+A project may point a category's Discovery_Root elsewhere — say `microservice` at `packages/services` — by declaring it under `roots` in `scaffold.config.json`. **Relocating a root requires updating the root `package.json` `workspaces` array in the same change** so its globs cover the new location, because npm reads `workspaces` statically — before any repository code, and therefore before the Build_System reads the config — to discover the workspaces and create the scoped symlinks. If the `workspaces` array is not updated to match the configured roots, `check:invariants` reports the Workspace_Coverage mismatch. The `workspaces` array declares *membership* only; its order is load-bearing for nothing (see `tech.md`).
 
 ## Package conventions
 
@@ -118,12 +122,12 @@ A **Common_Package** is a consumer-written leaf library whose public API is impo
 
 A microservice that consumes a Common_Package declares it in its own `package.json` `dependencies` by the `@microservices/<name>` package name and imports it only by that name.
 
-Discovery is by location, not registration: the registry generator scans only `packages/microservices/`, so a Common_Package is never discovered as a microservice and never appears in the generated Microservice_Registry. The image pipeline stages it like any other consumer package (see "Container image contents").
+Discovery is by location, not registration: the registry generator scans only the configured microservice Discovery_Root (the common root is a different configured location), so a Common_Package is never discovered as a microservice and never appears in the generated Microservice_Registry. The image pipeline stages it like any other consumer package (see "Container image contents").
 
 ## Microservice_Namespace
 
-- `packages/microservices/` is the Microservice_Namespace: the single filesystem location the Build_System scans to discover microservices.
-- Each direct subdirectory of `packages/microservices/` is a candidate microservice.
+- The **configured microservice Discovery_Root** (default `packages/microservices/`) is the single filesystem location the Build_System scans to discover microservices.
+- Each direct subdirectory of that root is a candidate microservice.
 - The directory name of a microservice package IS its Microservice_Identifier. This is the sole definition of the identifier — nothing else declares one, so there is no consistency rule to enforce.
 
 ## Microservice package conventions
@@ -149,7 +153,7 @@ As a consequence, a microservice mounted at `/` owns the whole origin, so the Ov
 
 ## Build-time registry
 
-- `packages/build-tools/` owns the registry generator. It reads the `MICROSERVICES` build variable (`*` for all discovered candidates, or a comma-separated list of identifiers), lists the subdirectories of `packages/microservices/` without inspecting their contents, and emits a generated TypeScript manifest that statically imports the selected microservices. A subdirectory that is not a usable microservice module fails the subsequent `tsc` build rather than being detected during discovery.
+- `packages/build-tools/` owns the registry generator. It reads the `MICROSERVICES` build variable (`*` for all discovered candidates, or a comma-separated list of identifiers), lists the subdirectories of the configured microservice Discovery_Root (default `packages/microservices/`) without inspecting their contents, and emits a generated TypeScript manifest that statically imports the selected microservices. A subdirectory that is not a usable microservice module fails the subsequent `tsc` build rather than being detected during discovery.
 - The generated manifest is written to a well-known location consumed by the Overseer at build time.
 
 ## Framework_Singletons and `contracts`
@@ -173,7 +177,9 @@ As a consequence, a microservice mounted at `/` owns the whole origin, so the Ov
 
 ## Naming
 
-- Package names use kebab-case and mirror the directory name. Common and spa package names must mirror their directory as `@microservices/<dirName>` exactly (a mismatch fails discovery).
+- **A Consumer_Package's package name is the Configured_Scope followed by `/` and its own directory name** — at the default scope, a package in directory `config` is named `@microservices/config`. Common and spa package names must mirror their directory this way exactly (a mismatch fails discovery); a project with a different Configured_Scope composes the same names under that scope instead.
+- **The four Framework_Singleton directories stay fixed** — `contracts`, `overseer`, `build-tools`, `integration-tests`, always directly under `packages/` — **while their package names follow the Configured_Scope**, composed the same way as a Consumer_Package's: the scope followed by `/` and the fixed directory name.
+- Package names use kebab-case and mirror the directory name.
 - Microservice identifiers are the directory names under `packages/microservices/`, and MUST be lowercase and alphanumeric. Nothing in the toolchain validates this — the identifier is not a declared value anywhere, so the convention is enforced by review. A name that uppercases into an invalid shell variable would break its `MICROSERVICE_<IDENTIFIER>_ENABLED` toggle.
 - Microservice paths are HTTP paths starting with `/` and are declared by each microservice module.
 
@@ -187,10 +193,14 @@ As a consequence, a microservice mounted at `/` owns the whole origin, so the Ov
 - **Repo-level scripts** that must run before anything is installed, or that wrap npm lifecycle commands: `scripts/`.
 - **Spec documents:** `.kiro/specs/<feature-name>/`.
 - **Project-wide conventions like these:** `.kiro/steering/`.
-- **New test-only package** (a package under `packages/` with no production code shipped in the Container image, e.g. a sibling of `integration-tests`): `scripts/emit-effective-dockerfile.sh` discovers workspace manifests by glob-style listing (`packages/*/package.json`, `packages/microservices/*/package.json`, `packages/common/*/package.json`, `packages/spa/*/package.json`) and emits a manifest `COPY` line for every workspace it finds. To keep a test-only top-level package out of the generated `Dockerfile`, add its directory name to the Exclusion_List (`EXCLUDE_TOPLEVEL`) in the emit script.
+- **New test-only package** (a package under `packages/` with no production code shipped in the Container image, e.g. a sibling of `integration-tests`): `scripts/emit-effective-dockerfile.sh` discovers workspace manifests by glob-style listing — the top-level `packages/*/package.json` plus one glob per configured Discovery_Root (`<microservice-root>/*/package.json`, `<common-root>/*/package.json`, `<spa-root>/*/package.json`) — and emits a manifest `COPY` line for every workspace it finds. To keep a test-only top-level package out of the generated `Dockerfile`, add its directory name to the by-name portion of the Exclusion_List in the emit script (the same portion that carries `integration-tests`).
 
 ## The Exclusion_List
 
-The emit script drops exactly **four** top-level `packages/<name>` entries from its top-level scan, so that no Namespace_Container and no test-only package contributes a `COPY` line: `integration-tests`, `microservices`, `common`, and `spa`. The three Namespace_Container names are excluded at the *top level* only — their *members* (each microservice, each common package, each spa package) are always emitted through the container globs, because those members ship.
+**The emit script derives both its manifest `COPY` globs and its Exclusion_List from the configured Discovery_Roots** rather than from three hard-coded literals. It reads the three roots from `scaffold.config.json` (falling back to the defaults when none is declared) and emits a `COPY` line for every manifest under each configured root as well as for the top-level Framework_Singletons — so relocating a root moves the emitted globs with it, needing no edit to the emit script or to `Dockerfile.template`.
 
-A Common_Package and a Spa_Package are **never** added to the Exclusion_List: they ship into images, so they must contribute a `COPY` line. The list is only for the three Namespace_Container directory names and for genuinely test-only top-level packages (such as `integration-tests`) whose code must never ship in an image. Nothing auto-detects a test-only package — the exclusion is by name.
+The Exclusion_List is the set of top-level `packages/<name>` entries that contribute no `COPY` line, and it too is derived from the configured roots: it is **the first path segment of each configured Discovery_Root that is itself a top-level `packages/<name>` entry** (at the defaults, `microservices`, `common`, and `spa`), **plus the by-name `integration-tests`**. A configured root's top-level container is excluded at the *top level* only — its *members* (each microservice, common package, and spa package) are always emitted through the per-root globs, because those members ship.
+
+A genuinely test-only top-level package (such as `integration-tests`) is still excluded **by name**: nothing auto-detects a test-only package. A Common_Package and a Spa_Package are **never** added to the Exclusion_List — they ship into images, so they must contribute a `COPY` line.
+
+**The Configured_Scope is not among the values the emit script reads.** The emit script reads only the three `roots` — never `scope` — and never carries the scope into the generated `Dockerfile`; the scope reaches a container build through the `WORKSPACE_SCOPE` build argument instead (see `tech.md`).

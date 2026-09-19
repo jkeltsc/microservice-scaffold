@@ -55,21 +55,31 @@ import type { ReadDependencies } from "../src/required-dependencies.js";
 import { projectListFrom } from "../src/dev-supervisor.js";
 import { buildPlanFrom } from "../src/build-plan.js";
 import { resolveSelected } from "../src/selector.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
 import {
   buildKindOf,
   type ConsumerPackage,
   type Discovery,
 } from "../src/discovery.js";
-import {
-  BUILD_TOOLS,
-  CONTRACTS,
-  FRAMEWORK_SINGLETONS,
-  INTEGRATION_TESTS,
-  NAMESPACE_CONTAINER,
-  OVERSEER,
-  WORKSPACE_SCOPE,
-  type ConsumerCategory,
-} from "../src/framework.js";
+
+import { type ConsumerCategory } from "../src/framework.js";
+
+/** Default-config context; scope and roots equal the pre-context baseline. */
+const CONTEXT = projectContext(defaultEffectiveConfig());
+
+// Scope, per-category roots, and the four Framework_Singletons (each with its
+// scope-composed name) come from the run's context, not from framework.ts's
+// scope-free surface (R3.7).
+const WORKSPACE_SCOPE = CONTEXT.config.scope;
+const NAMESPACE_CONTAINER = CONTEXT.roots;
+const FRAMEWORK_SINGLETONS = CONTEXT.framework.all;
+const {
+  contracts: CONTRACTS,
+  overseer: OVERSEER,
+  buildTools: BUILD_TOOLS,
+  integrationTests: INTEGRATION_TESTS,
+} = CONTEXT.framework;
 
 /** Framework directory names as data, so no generator collides with one. */
 const FRAMEWORK_DIR_NAMES: readonly string[] = FRAMEWORK_SINGLETONS.map(
@@ -161,7 +171,12 @@ function listOf(
   layout: Layout,
   selector: string | undefined,
 ): readonly string[] {
-  return projectListFrom(selector, discoveryOf(layout), readerFor(layout));
+  return projectListFrom(
+    CONTEXT,
+    selector,
+    discoveryOf(layout),
+    readerFor(layout),
+  );
 }
 
 /**
@@ -176,7 +191,7 @@ function selectedOf(
   layout: Layout,
   selector: string | undefined,
 ): readonly string[] {
-  return buildPlanFrom(selector, discoveryOf(layout), readerFor(layout))
+  return buildPlanFrom(CONTEXT, selector, discoveryOf(layout), readerFor(layout))
     .selected;
 }
 

@@ -34,21 +34,29 @@ import * as fc from "fast-check";
 import {
   ALWAYS_STAGED_SCOPED_ENTRIES,
   CONSUMER_CATEGORIES,
-  FRAMEWORK_SINGLETONS,
-  NAMESPACE_CONTAINER,
   OVERSEER,
   PACKAGES_DIR,
-  WORKSPACE_SCOPE,
   type ConsumerCategory,
 } from "../src/framework.js";
 import {
   discoverPackagesFrom,
-  type ContainerEntry,
+  type RootEntry,
   type Discovery,
-  type ListContainer,
+  type ListRoot,
   type PackageManifest,
   type ReadManifest,
 } from "../src/discovery.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
+
+/** Default-config context; the scope and per-category roots come from it, and
+ *  the four Framework_Singletons (with their scope-composed names) too. The
+ *  former framework.ts shims are re-derived here so downstream usages are
+ *  unchanged. */
+const discoveryContext = projectContext(defaultEffectiveConfig());
+const WORKSPACE_SCOPE = discoveryContext.config.scope;
+const NAMESPACE_CONTAINER = discoveryContext.roots;
+const FRAMEWORK_SINGLETONS = discoveryContext.framework.all;
 
 // ---------------------------------------------------------------------------
 // In-memory layout model
@@ -76,14 +84,14 @@ interface PackageSpec {
  */
 interface Layout {
   readonly packages: readonly PackageSpec[];
-  readonly noise: Readonly<Record<ConsumerCategory, readonly ContainerEntry[]>>;
+  readonly noise: Readonly<Record<ConsumerCategory, readonly RootEntry[]>>;
   readonly absent: readonly ConsumerCategory[];
   /** The Overseer's `@microservices`-scoped specifiers. */
   readonly overseerDeps: readonly string[];
 }
 
 /** Non-package entries a container may hold: files, and dot-prefixed names. */
-const NOISE_ENTRIES: readonly ContainerEntry[] = [
+const NOISE_ENTRIES: readonly RootEntry[] = [
   { name: "README.md", isDirectory: false },
   { name: "tsconfig.json", isDirectory: false },
   { name: ".DS_Store", isDirectory: false },
@@ -124,7 +132,7 @@ function categoryOfContainer(
  * Entries are handed back in *descending* name order so that any ordering in
  * the result is discovery's own doing and not the lister's.
  */
-function listerFor(layout: Layout, asked: string[]): ListContainer {
+function listerFor(layout: Layout, asked: string[]): ListRoot {
   return (containerDir) => {
     asked.push(containerDir);
     const category = categoryOfContainer(containerDir);
@@ -185,7 +193,7 @@ function referenceMembers(
       members[category] = [];
       continue;
     }
-    const entries: ContainerEntry[] = [
+    const entries: RootEntry[] = [
       ...layout.packages
         .filter((pkg) => pkg.category === category)
         .map((pkg) => ({ name: pkg.dirName, isDirectory: true })),
@@ -343,7 +351,7 @@ interface Plan {
   readonly categories: readonly ConsumerCategory[];
   readonly depSeeds: readonly (readonly number[])[];
   readonly frameworkDep: readonly boolean[];
-  readonly noiseSeeds: readonly (readonly ContainerEntry[])[];
+  readonly noiseSeeds: readonly (readonly RootEntry[])[];
   readonly absent: readonly ConsumerCategory[];
   readonly overseerDepSeeds: readonly number[];
   readonly selectorAll: boolean;
@@ -453,7 +461,7 @@ function layoutOf(plan: Plan): { layout: Layout; selectedDirs: string[] } {
     });
   }
 
-  const noise: Partial<Record<ConsumerCategory, readonly ContainerEntry[]>> =
+  const noise: Partial<Record<ConsumerCategory, readonly RootEntry[]>> =
     {};
   for (const [index, category] of CONSUMER_CATEGORIES.entries()) {
     noise[category] = plan.noiseSeeds[index];
@@ -487,7 +495,7 @@ function layoutOf(plan: Plan): { layout: Layout; selectedDirs: string[] } {
   return {
     layout: {
       packages,
-      noise: noise as Record<ConsumerCategory, readonly ContainerEntry[]>,
+      noise: noise as Record<ConsumerCategory, readonly RootEntry[]>,
       absent: plan.absent,
       overseerDeps: [...overseerDeps],
     },
@@ -599,6 +607,7 @@ function discover(layout: Layout): {
   const asked: string[] = [];
   const read: string[] = [];
   const discovery = discoverPackagesFrom(
+    discoveryContext,
     listerFor(layout, asked),
     readerFor(layout, read),
   );

@@ -44,10 +44,18 @@ import {
   type Discovery,
 } from "../src/discovery.js";
 import { type ConsumerCategory } from "../src/framework.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
 
 // ---------------------------------------------------------------------------
 // The literals the requirements name
 // ---------------------------------------------------------------------------
+
+/** Default-config context: scope `@microservices`, the three Root_Defaults.
+ *  The threaded seams (`checkImportDiscipline`, `checkDependencyDirection`) take
+ *  it as their first argument; these claims are scope-invariant, so the default
+ *  context reproduces the constants below by construction. */
+const CONTEXT = projectContext(defaultEffectiveConfig());
 
 const SCOPE = "@microservices";
 const OVERSEER_NAME = `${SCOPE}/overseer`;
@@ -558,7 +566,7 @@ describe("Property 25: import discipline is enforced over every Consumer_Package
   it("reports no message exactly when every import is legal", () => {
     fc.assert(
       fc.property(arbImportModel, (model) => {
-        const messages = checkImportDiscipline(
+        const messages = checkImportDiscipline(CONTEXT, 
           discoveryOf(model.packages),
           model.files.map((file) => file.path),
           readerFor(model),
@@ -573,7 +581,7 @@ describe("Property 25: import discipline is enforced over every Consumer_Package
   it("reports one message per offending specifier, naming the file and the specifier", () => {
     fc.assert(
       fc.property(arbImportModel, (model) => {
-        const messages = checkImportDiscipline(
+        const messages = checkImportDiscipline(CONTEXT, 
           discoveryOf(model.packages),
           model.files.map((file) => file.path),
           readerFor(model),
@@ -594,7 +602,7 @@ describe("Property 25: import discipline is enforced over every Consumer_Package
       fc.property(arbImportModel, (model) => {
         const asked: string[] = [];
         const paths = model.files.map((file) => file.path);
-        const messages = checkImportDiscipline(
+        const messages = checkImportDiscipline(CONTEXT, 
           discoveryOf(model.packages),
           paths,
           readerFor(model, asked),
@@ -630,8 +638,8 @@ describe("Property 25: import discipline is enforced over every Consumer_Package
           const discovery = discoveryOf(model.packages);
 
           expect(
-            checkImportDiscipline(discovery, rotated, readerFor(model)),
-          ).toEqual(checkImportDiscipline(discovery, paths, readerFor(model)));
+            checkImportDiscipline(CONTEXT, discovery, rotated, readerFor(model)),
+          ).toEqual(checkImportDiscipline(CONTEXT, discovery, paths, readerFor(model)));
         },
       ),
       { numRuns: 200 },
@@ -663,7 +671,7 @@ describe("Property 25 (concrete): message shapes and scanner edges", () => {
     file: string,
     specifiers: readonly string[],
   ): readonly string[] {
-    return checkImportDiscipline(discovery, [file], () =>
+    return checkImportDiscipline(CONTEXT, discovery, [file], () =>
       renderSource(specifiers),
     );
   }
@@ -734,7 +742,7 @@ describe("Property 25 (concrete): message shapes and scanner edges", () => {
     ].join("\n");
 
     expect(
-      checkImportDiscipline(discovery, [ms1File], () => source),
+      checkImportDiscipline(CONTEXT, discovery, [ms1File], () => source),
     ).toHaveLength(1);
   });
 
@@ -750,7 +758,7 @@ describe("Property 25 (concrete): message shapes and scanner edges", () => {
       "",
     ].join("\n");
 
-    expect(checkImportDiscipline(discovery, [ms1File], () => source)).toEqual(
+    expect(checkImportDiscipline(CONTEXT, discovery, [ms1File], () => source)).toEqual(
       [],
     );
   });
@@ -853,7 +861,7 @@ describe("Property 26: a Common_Package's declared dependencies point downward o
   it("reports no message exactly when every Common_Package is a leaf library", () => {
     fc.assert(
       fc.property(arbDependencyModel, (packages) => {
-        const messages = checkDependencyDirection(discoveryOf(packages));
+        const messages = checkDependencyDirection(CONTEXT, discoveryOf(packages));
 
         expect(messages.length === 0).toBe(
           directionOracle(packages).length === 0,
@@ -866,7 +874,7 @@ describe("Property 26: a Common_Package's declared dependencies point downward o
   it("reports one message per offending specifier, naming the package and the specifier", () => {
     fc.assert(
       fc.property(arbDependencyModel, (packages) => {
-        const messages = checkDependencyDirection(discoveryOf(packages));
+        const messages = checkDependencyDirection(CONTEXT, discoveryOf(packages));
         const violations = directionOracle(packages);
 
         expect(messages.length).toBe(violations.length);
@@ -888,7 +896,7 @@ describe("Property 26: a Common_Package's declared dependencies point downward o
     fc.assert(
       fc.property(arbDependencyModel, (packages) => {
         const before = JSON.stringify(packages);
-        checkDependencyDirection(discoveryOf(packages));
+        checkDependencyDirection(CONTEXT, discoveryOf(packages));
         expect(JSON.stringify(packages)).toBe(before);
       }),
       { numRuns: 200 },
@@ -922,7 +930,7 @@ describe("Property 26 (concrete): message shape and the permitted set", () => {
 
   it("accepts third-party packages, other Common_Packages, and Framework_Singletons (R8.9)", () => {
     expect(
-      checkDependencyDirection(
+      checkDependencyDirection(CONTEXT, 
         discoveryOf(
           withConfigDeps([
             CONTRACTS_NAME,
@@ -938,7 +946,7 @@ describe("Property 26 (concrete): message shape and the permitted set", () => {
 
   it("names the Common_Package and the specifier for a Microservice_Package dependency", () => {
     expect(
-      checkDependencyDirection(
+      checkDependencyDirection(CONTEXT, 
         discoveryOf(withConfigDeps([microservice1.name])),
       ),
     ).toEqual([
@@ -948,7 +956,7 @@ describe("Property 26 (concrete): message shape and the permitted set", () => {
 
   it("names the Common_Package and the specifier for an Overseer dependency", () => {
     expect(
-      checkDependencyDirection(discoveryOf(withConfigDeps([OVERSEER_NAME]))),
+      checkDependencyDirection(CONTEXT, discoveryOf(withConfigDeps([OVERSEER_NAME]))),
     ).toEqual([
       `${DIRECTION_PREFIX} Common_Package "packages/common/config" depends on "${OVERSEER_NAME}"; a Common_Package must point downward only`,
     ]);
@@ -956,7 +964,7 @@ describe("Property 26 (concrete): message shape and the permitted set", () => {
 
   it("does not report a Spa_Package dependency, which the check deliberately omits", () => {
     expect(
-      checkDependencyDirection(discoveryOf(withConfigDeps([spa1.name]))),
+      checkDependencyDirection(CONTEXT, discoveryOf(withConfigDeps([spa1.name]))),
     ).toEqual([]);
   });
 
@@ -971,7 +979,7 @@ describe("Property 26 (concrete): message shape and the permitted set", () => {
       ]),
     ];
 
-    expect(checkDependencyDirection(discoveryOf(packages))).toEqual([]);
+    expect(checkDependencyDirection(CONTEXT, discoveryOf(packages))).toEqual([]);
   });
 });
 
@@ -1181,7 +1189,7 @@ describe("Property 30: no Tsc_Project source imports a Spa_Package", () => {
   it("reports no message exactly when no source names a Spa_Package", () => {
     fc.assert(
       fc.property(arbProperty30Model, (model) => {
-        const messages = checkImportDiscipline(
+        const messages = checkImportDiscipline(CONTEXT, 
           discoveryOf(model.packages),
           model.files.map((file) => file.path),
           property30Reader(model),
@@ -1196,7 +1204,7 @@ describe("Property 30: no Tsc_Project source imports a Spa_Package", () => {
   it("reports one [imports:spa] message per offending specifier, naming the file and the specifier", () => {
     fc.assert(
       fc.property(arbProperty30Model, (model) => {
-        const messages = checkImportDiscipline(
+        const messages = checkImportDiscipline(CONTEXT, 
           discoveryOf(model.packages),
           model.files.map((file) => file.path),
           property30Reader(model),
@@ -1237,7 +1245,7 @@ describe("Property 30 (concrete): message shape and the documented non-reports",
 
   /** Run the check over a single synthesized file, with no decoy resolve/comment lines. */
   function check(file: string, specifiers: readonly string[]): readonly string[] {
-    return checkImportDiscipline(discovery, [file], () =>
+    return checkImportDiscipline(CONTEXT, discovery, [file], () =>
       renderSource(specifiers),
     );
   }
@@ -1275,7 +1283,7 @@ describe("Property 30 (concrete): message shape and the documented non-reports",
       `import { thing } from "./thing.js";`,
       "",
     ].join("\n");
-    expect(checkImportDiscipline(discovery, [file], () => source)).toEqual([]);
+    expect(checkImportDiscipline(CONTEXT, discovery, [file], () => source)).toEqual([]);
   });
 
   it("accepts legal by-name imports (Common_Package, Framework_Singleton, third-party)", () => {
@@ -1328,13 +1336,13 @@ describe("Property 14 (concrete): import discipline across the Tsc/Bundler bound
     // faults a downward by-name import, so the message list is empty.
     const file = `${demo.packageDir}/src/payload-preview.ts`;
     expect(
-      checkImportDiscipline(discovery, [file], () =>
+      checkImportDiscipline(CONTEXT, discovery, [file], () =>
         renderSource([extendedConfig.name]),
       ),
     ).toEqual([]);
     // ...including the two-link reach and a Framework_Singleton alongside it.
     expect(
-      checkImportDiscipline(discovery, [file], () =>
+      checkImportDiscipline(CONTEXT, discovery, [file], () =>
         renderSource([extendedConfig.name, config.name, CONTRACTS_NAME]),
       ),
     ).toEqual([]);
@@ -1346,21 +1354,21 @@ describe("Property 14 (concrete): import discipline across the Tsc/Bundler bound
 
     // Static `import … from`.
     expect(
-      checkImportDiscipline(discovery, [file], () =>
+      checkImportDiscipline(CONTEXT, discovery, [file], () =>
         [`import widget from "${demo.name}";`, ""].join("\n"),
       ),
     ).toEqual([expected]);
 
     // Side-effect `import`.
     expect(
-      checkImportDiscipline(discovery, [file], () =>
+      checkImportDiscipline(CONTEXT, discovery, [file], () =>
         [`import "${demo.name}";`, ""].join("\n"),
       ),
     ).toEqual([expected]);
 
     // Dynamic `import()`.
     expect(
-      checkImportDiscipline(discovery, [file], () =>
+      checkImportDiscipline(CONTEXT, discovery, [file], () =>
         [`const m = await import("${demo.name}");`, ""].join("\n"),
       ),
     ).toEqual([expected]);
@@ -1371,7 +1379,7 @@ describe("Property 14 (concrete): import discipline across the Tsc/Bundler bound
     // naming the Demo_Spa is faulted the same way.
     const file = `${config.packageDir}/src/index.ts`;
     expect(
-      checkImportDiscipline(discovery, [file], () =>
+      checkImportDiscipline(CONTEXT, discovery, [file], () =>
         renderSource([demo.name]),
       ),
     ).toEqual([
@@ -1491,8 +1499,8 @@ describe("Property 16: every invariant finding of a run is reported in that run"
 
     const messages = [
       ...checkWorkspaceCoverage(entries, coveragePackages),
-      ...checkImportDiscipline(discovery, [importFile], () => importSource),
-      ...checkDependencyDirection(discovery),
+      ...checkImportDiscipline(CONTEXT, discovery, [importFile], () => importSource),
+      ...checkDependencyDirection(CONTEXT, discovery),
       ...checkBuildOrderSource([], scriptSources),
     ];
 

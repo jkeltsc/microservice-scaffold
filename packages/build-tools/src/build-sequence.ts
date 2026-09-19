@@ -23,14 +23,7 @@
 // (Requirements 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.13, 2.14, 3.12, 3.14.)
 
 import type { ConsumerPackage } from "./discovery.js";
-import {
-  BUILD_TOOLS,
-  CONTRACTS,
-  INTEGRATION_TESTS,
-  NAMESPACE_CONTAINER,
-  OVERSEER,
-  WORKSPACE_SCOPE,
-} from "./framework.js";
+import type { ProjectContext } from "./project-context.js";
 import {
   compareCodePoints,
   findCyclePath,
@@ -71,12 +64,16 @@ export interface SequencedPackage {
  * The path {@link findCyclePath} returns is closed, so a self-dependency reads
  * `"a" -> "a"` and a two-node cycle `"a" -> "b" -> "a"`.
  *
+ * @param context the per-run context; its `config.scope` names the workspace.
  * @param participants the cycle in traversal order, closed by its entry point.
  */
-function cycleError(participants: readonly string[]): Error {
+function cycleError(
+  context: ProjectContext,
+  participants: readonly string[],
+): Error {
   const path = participants.map((name) => `"${name}"`).join(" -> ");
   return new Error(
-    `[build-order:cycle] the ${WORKSPACE_SCOPE} workspace dependency graph contains a cycle: ${path}`,
+    `[build-order:cycle] the ${context.config.scope} workspace dependency graph contains a cycle: ${path}`,
   );
 }
 
@@ -92,16 +89,18 @@ function cycleError(participants: readonly string[]): Error {
  * rewrites `workspaceBuildOrder` over the primitive; this module is its single
  * home meanwhile.
  *
+ * @param context the per-run context; its `config.scope` names the packages.
  * @param consumer the repo-relative directory of the declaring package.
  * @param unresolved deduplicated and sorted by the caller.
  */
 export function unresolvedSpecifierError(
+  context: ProjectContext,
   consumer: string,
   unresolved: readonly string[],
 ): Error {
   const named = unresolved.map((name) => `"${name}"`).join(", ");
   return new Error(
-    `[shared:unresolved] "${consumer}" depends on unknown ${WORKSPACE_SCOPE} package(s): ${named}`,
+    `[shared:unresolved] "${consumer}" depends on unknown ${context.config.scope} package(s): ${named}`,
   );
 }
 
@@ -127,6 +126,7 @@ export function unresolvedSpecifierError(
  *   byte-identical from `workspace-build-order.ts` (3.14).
  */
 function commonOrder(
+  context: ProjectContext,
   common: readonly ConsumerPackage[],
 ): readonly ConsumerPackage[] {
   const names = new Set(common.map((pkg) => pkg.name));
@@ -138,7 +138,10 @@ function commonOrder(
   if (cycle !== undefined) {
     // Report directories, not declared names, as every build-order failure does.
     const dirByName = new Map(common.map((pkg) => [pkg.name, pkg.packageDir]));
-    throw cycleError(cycle.map((name) => dirByName.get(name) ?? name));
+    throw cycleError(
+      context,
+      cycle.map((name) => dirByName.get(name) ?? name),
+    );
   }
 
   return leastTopologicalOrder(common, keyOf, dependenciesOf, (a, b) =>
@@ -159,32 +162,38 @@ function commonOrder(
  * Consults no per-package position metadata (2.2): statements 1, 2, 5 and 6 name
  * their framework members through framework.ts's exported records.
  *
+ * @param context the per-run context; supplies the four Framework_Singleton
+ *   records, the microservice Discovery_Root, and every scoped name (R1.9, R10.7,
+ *   R10.8).
  * @throws `[build-order:cycle]` when statement 3's calculated order cannot be
  *   computed, with the existing wording (3.14).
  */
 export function buildSequence(
+  context: ProjectContext,
   membership: SequenceMembership,
 ): readonly SequencedPackage[] {
+  const { contracts, buildTools, overseer, integrationTests } =
+    context.framework;
   const sequenced: SequencedPackage[] = [];
 
   // Statement 1 — contracts, always first.
   sequenced.push({
-    packageDir: CONTRACTS.packageDir,
-    name: CONTRACTS.name,
+    packageDir: contracts.packageDir,
+    name: contracts.name,
     statement: 1,
   });
 
   // Statement 2 — build-tools, when this membership includes it.
   if (membership.buildTools) {
     sequenced.push({
-      packageDir: BUILD_TOOLS.packageDir,
-      name: BUILD_TOOLS.name,
+      packageDir: buildTools.packageDir,
+      name: buildTools.name,
       statement: 2,
     });
   }
 
   // Statement 3 — the Common_Packages, in calculated order.
-  for (const pkg of commonOrder(membership.common)) {
+  for (const pkg of commonOrder(context, membership.common)) {
     sequenced.push({
       packageDir: pkg.packageDir,
       name: pkg.name,
@@ -194,30 +203,30 @@ export function buildSequence(
 
   // Statement 4 — the microservices, in ascending packageDir order (2.3, D1).
   const microservicePackageDir = (identifier: string): string =>
-    `${NAMESPACE_CONTAINER.microservice}/${identifier}`;
+    `${context.roots.microservice}/${identifier}`;
   const microservices = [...membership.microservices].sort((a, b) =>
     compareCodePoints(microservicePackageDir(a), microservicePackageDir(b)),
   );
   for (const identifier of microservices) {
     sequenced.push({
       packageDir: microservicePackageDir(identifier),
-      name: `${WORKSPACE_SCOPE}/${identifier}`,
+      name: context.scopedName(identifier),
       statement: 4,
     });
   }
 
   // Statement 5 — the Overseer, after every microservice.
   sequenced.push({
-    packageDir: OVERSEER.packageDir,
-    name: OVERSEER.name,
+    packageDir: overseer.packageDir,
+    name: overseer.name,
     statement: 5,
   });
 
   // Statement 6 — the test-only Framework_Singletons, when included.
   if (membership.testOnly) {
     sequenced.push({
-      packageDir: INTEGRATION_TESTS.packageDir,
-      name: INTEGRATION_TESTS.name,
+      packageDir: integrationTests.packageDir,
+      name: integrationTests.name,
       statement: 6,
     });
   }
@@ -274,10 +283,12 @@ export function declaredNames(
  *
  * Exported for `workspace-build-order.ts`'s use until Task 4.1 (see above).
  *
+ * @param context the per-run context; its `specifierPrefix` is the scope filter.
  * @throws `[shared:unresolved]` for an `@microservices`-scoped specifier matching
  *   no declared package name.
  */
 export function dependencyKeysOf(
+  context: ProjectContext,
   node: WorkspaceNode,
   names: ReadonlySet<string>,
 ): readonly string[] {
@@ -287,7 +298,7 @@ export function dependencyKeysOf(
   for (const specifier of node.dependencySpecifiers) {
     // Both suppliers already filter by scope; the guard keeps the rule true of
     // this function on its own account (R3.10).
-    if (!specifier.startsWith(`${WORKSPACE_SCOPE}/`)) {
+    if (!specifier.startsWith(context.specifierPrefix)) {
       continue;
     }
     if (names.has(specifier)) {
@@ -299,6 +310,7 @@ export function dependencyKeysOf(
 
   if (unresolved.length > 0) {
     throw unresolvedSpecifierError(
+      context,
       node.packageDir,
       [...new Set(unresolved)].sort(),
     );
@@ -326,6 +338,8 @@ export function dependencyKeysOf(
  * anyway. No manifest gains such a dependency as part of this fix, and the
  * resolver keeps rejecting one (3.12) — so the edge exists only in this graph.
  *
+ * @param context the per-run context; supplies the microservice Discovery_Root
+ *   and the Overseer's package directory for the synthesised edges (R10.8).
  * @param nodes every workspace package, as `workspaceNodesFrom` collects them.
  * @param selectedMicroservices the identifiers the Selector resolved to; each
  *   becomes the prerequisite of an `Overseer →` edge.
@@ -333,6 +347,7 @@ export function dependencyKeysOf(
  *   matching no declared package name (3.14).
  */
 export function prerequisiteEdges(
+  context: ProjectContext,
   nodes: readonly WorkspaceNode[],
   selectedMicroservices: readonly string[],
 ): readonly PrerequisiteEdge[] {
@@ -350,7 +365,7 @@ export function prerequisiteEdges(
   // specifier is resolved once, here, so `[shared:unresolved]` is raised once per
   // offending consumer (D3).
   for (const node of nodes) {
-    for (const specifier of dependencyKeysOf(node, names)) {
+    for (const specifier of dependencyKeysOf(context, node, names)) {
       if (spaNames.has(specifier)) {
         continue;
       }
@@ -366,8 +381,8 @@ export function prerequisiteEdges(
   // edge, matching the solution builder treating a repeated root as a no-op.
   for (const identifier of new Set(selectedMicroservices)) {
     edges.push({
-      prerequisite: `${NAMESPACE_CONTAINER.microservice}/${identifier}`,
-      dependent: OVERSEER.packageDir,
+      prerequisite: `${context.roots.microservice}/${identifier}`,
+      dependent: context.framework.overseer.packageDir,
     });
   }
 
@@ -437,6 +452,8 @@ function divergenceViolation(earlier: string, later: string): string {
  * tag (two clause shapes); divergence uses `[build-order:divergence]`. No new tag
  * replaces or narrows `[shared:unresolved]` or `[build-order:cycle]`.
  *
+ * @param context the per-run context; its `config.scope` names the workspace in
+ *   the `[build-order:cycle]` message the cycle check raises (R10.8).
  * @param order the produced order, as {@link buildSequence} returned it.
  * @param edges the Prerequisite_Graph, from {@link prerequisiteEdges}.
  * @param counterpart the other path's order for the same state and Selector, for
@@ -445,6 +462,7 @@ function divergenceViolation(earlier: string, later: string): string {
  *   further findings, exactly as the pre-fix derivation did.
  */
 export function verifyBuildOrder(
+  context: ProjectContext,
   order: readonly SequencedPackage[],
   edges: readonly PrerequisiteEdge[],
   counterpart?: readonly SequencedPackage[],
@@ -464,7 +482,7 @@ export function verifyBuildOrder(
   if (cycle !== undefined) {
     // Byte-identical wording with statement 3's Common_Package cycle, so a cycle
     // reported here and one reported by the calculated sort are indistinguishable.
-    throw cycleError(cycle);
+    throw cycleError(context, cycle);
   }
 
   const messages: string[] = [];
@@ -545,15 +563,17 @@ function divergenceMessages(
  * and raises the first finding when the order is unsound, so no `build` script is
  * spawned over a bad order. The cycle check inside already throws directly.
  *
+ * @param context the per-run context, forwarded to {@link verifyBuildOrder}.
  * @throws an `Error` carrying every finding of the run, or the `[build-order:cycle]`
  *   error the pass raised, when the order is not sound.
  */
 export function assertBuildOrder(
+  context: ProjectContext,
   order: readonly SequencedPackage[],
   edges: readonly PrerequisiteEdge[],
   counterpart?: readonly SequencedPackage[],
 ): void {
-  const findings = verifyBuildOrder(order, edges, counterpart);
+  const findings = verifyBuildOrder(context, order, edges, counterpart);
   if (findings.length > 0) {
     throw new Error(findings.join("\n"));
   }

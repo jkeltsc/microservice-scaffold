@@ -1,4 +1,4 @@
 #!/usr/bin/env node
-import { buildImageTree } from "../image-tree.js";
+import { runImageTreeCli } from "../image-tree.js";
 
-buildImageTree();
+runImageTreeCli();

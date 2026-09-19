@@ -340,15 +340,27 @@ describe("the ci quality gate is unchanged and adds no dev typecheck script (R9.
 });
 
 describe("no new production dependency, and any new devDependency is pinned (R9.7, R9.8)", () => {
-  it("build-tools depends only on @microservices/contracts and adds no devDependency", () => {
+  it("build-tools depends only on @microservices/contracts, and its one devDependency (typescript) is pinned to the root", () => {
     const manifest = readRepoJson<{
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
     }>("packages/build-tools/package.json");
-    // The supervisor uses the TypeScript compiler API, but typescript is a root
-    // devDependency already, so build-tools gains no dependency of its own.
+    // The local-dev-supervisor uses the TypeScript compiler API through the
+    // root devDependency and adds no production dependency (R9.7/R9.8). The
+    // config-driven-discovery Tsconfig_Verifier (task 9.1) now also runs the
+    // compiler API in `check:invariants`, so build-tools declares `typescript`
+    // as its own devDependency — never a production dependency, so it stays out
+    // of the image's `npm ci --omit=dev` tree — pinned to the root's version.
     expect(manifest.dependencies).toEqual({ "@microservices/contracts": "*" });
-    expect(manifest.devDependencies ?? {}).toEqual({});
+
+    const root = readRepoJson<{ devDependencies?: Record<string, string> }>(
+      "package.json",
+    );
+    const rootTypescript = (root.devDependencies ?? {}).typescript;
+    expect(rootTypescript).toBeTruthy();
+    expect(manifest.devDependencies ?? {}).toEqual({
+      typescript: rootTypescript,
+    });
   });
 
   it("the root manifest gains no production dependency (it has no dependencies block)", () => {

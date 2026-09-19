@@ -40,6 +40,8 @@ import * as fc from "fast-check";
 
 import { buildPlan } from "@microservices/build-tools/dist/build-plan.js";
 import { discoverPackages } from "@microservices/build-tools/dist/discovery.js";
+import { defaultEffectiveConfig } from "@microservices/build-tools/dist/project-config.js";
+import { projectContext } from "@microservices/build-tools/dist/project-context.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // tests/ -> integration-tests -> packages -> repo root
@@ -50,8 +52,9 @@ const repoRoot = resolve(__dirname, "..", "..", "..");
  * from the committed tree, so the generator quantifies over exactly the
  * selectors `resolveSelected` accepts.
  */
-const MICROSERVICE_IDENTIFIERS: readonly string[] =
-  discoverPackages().byCategory.microservice.map((pkg) => pkg.dirName);
+const MICROSERVICE_IDENTIFIERS: readonly string[] = discoverPackages(
+  projectContext(defaultEffectiveConfig()),
+).byCategory.microservice.map((pkg) => pkg.dirName);
 
 /**
  * A stable, element-identical fingerprint of a Consumer_Package list: its
@@ -105,12 +108,13 @@ describe("Dependency_Resolver determinism (R5.10, Property 7)", () => {
         arbSelector,
         fc.integer({ min: 2, max: 20 }),
         (selector, repeats) => {
-          const first = buildPlan(selector);
+          const context = projectContext(defaultEffectiveConfig());
+          const first = buildPlan(context, selector);
           const firstRequired = fingerprint(first.requiredDependencies);
           const firstStaged = fingerprint(first.stagedDependencies);
 
           for (let run = 1; run < repeats; run++) {
-            const next = buildPlan(selector);
+            const next = buildPlan(context, selector);
             expect(fingerprint(next.requiredDependencies)).toEqual(
               firstRequired,
             );

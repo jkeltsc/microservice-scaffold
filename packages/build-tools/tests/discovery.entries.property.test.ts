@@ -32,19 +32,26 @@ import * as fc from "fast-check";
 
 import {
   CONSUMER_CATEGORIES,
-  NAMESPACE_CONTAINER,
-  WORKSPACE_SCOPE,
   type ConsumerCategory,
 } from "../src/framework.js";
 import {
   discoverPackagesFrom,
-  type ContainerEntry,
+  type RootEntry,
   type Discovery,
-  type ListContainer,
+  type ListRoot,
   type ManifestRead,
   type PackageManifest,
   type ReadManifest,
 } from "../src/discovery.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
+
+/** Default-config context; the per-category roots and the scope come from it.
+ *  The former framework.ts shims are re-derived here so downstream usages are
+ *  unchanged. */
+const discoveryContext = projectContext(defaultEffectiveConfig());
+const WORKSPACE_SCOPE = discoveryContext.config.scope;
+const NAMESPACE_CONTAINER = discoveryContext.roots;
 
 // ---------------------------------------------------------------------------
 // The oracle: the qualifying-entry rule and the code-point order
@@ -155,7 +162,7 @@ function manifestFor(
 }
 
 interface Fake {
-  readonly listContainer: ListContainer;
+  readonly listContainer: ListRoot;
   readonly readManifest: ReadManifest;
   /** Every directory the lister was asked about, in call order. */
   readonly listed: string[];
@@ -178,16 +185,16 @@ interface Fake {
  */
 function fakeFor(
   layout: Layout,
-  order: (entries: readonly ContainerEntry[]) => readonly ContainerEntry[] = (
+  order: (entries: readonly RootEntry[]) => readonly RootEntry[] = (
     entries,
   ) => entries,
 ): Fake {
-  const entriesByDir = new Map<string, ContainerEntry[]>();
+  const entriesByDir = new Map<string, RootEntry[]>();
   const manifestByDir = new Map<string, PackageManifest>();
   const deepDirs: DeepDir[] = [];
   const qualifyingDirs: string[] = [];
 
-  const addEntry = (parentDir: string, entry: ContainerEntry): void => {
+  const addEntry = (parentDir: string, entry: RootEntry): void => {
     const siblings = entriesByDir.get(parentDir);
     if (siblings === undefined) {
       entriesByDir.set(parentDir, [entry]);
@@ -239,7 +246,7 @@ function fakeFor(
   const listed: string[] = [];
   const read: string[] = [];
 
-  const listContainer: ListContainer = (containerDir) => {
+  const listContainer: ListRoot = (containerDir) => {
     listed.push(containerDir);
     const entries = entriesByDir.get(containerDir);
     return entries === undefined ? undefined : order(entries);
@@ -381,6 +388,7 @@ describe("Property 3: discovery enumerates exactly the qualifying direct entries
       fc.property(arbLayout, (layout) => {
         const fake = fakeFor(layout);
         const discovery = discoverPackagesFrom(
+          discoveryContext,
           fake.listContainer,
           fake.readManifest,
         );
@@ -433,6 +441,7 @@ describe("Property 3: discovery enumerates exactly the qualifying direct entries
       fc.property(arbLayout, (layout) => {
         const fake = fakeFor(layout);
         const discovery = discoverPackagesFrom(
+          discoveryContext,
           fake.listContainer,
           fake.readManifest,
         );
@@ -489,14 +498,17 @@ describe("Property 3: discovery enumerates exactly the qualifying direct entries
         );
 
         const first = discoverPackagesFrom(
+          discoveryContext,
           asListed.listContainer,
           asListed.readManifest,
         );
         const second = discoverPackagesFrom(
+          discoveryContext,
           asListed.listContainer,
           asListed.readManifest,
         );
         const shuffled = discoverPackagesFrom(
+          discoveryContext,
           shuffledFake.listContainer,
           shuffledFake.readManifest,
         );
@@ -526,7 +538,11 @@ describe("Property 3 (concrete): the qualifying-entry rule", () => {
 
   function discover(layout: Layout): Discovery {
     const fake = fakeFor(layout);
-    return discoverPackagesFrom(fake.listContainer, fake.readManifest);
+    return discoverPackagesFrom(
+      discoveryContext,
+      fake.listContainer,
+      fake.readManifest,
+    );
   }
 
   it("treats a microservice's own src/ and dist/ subtrees as private content", () => {

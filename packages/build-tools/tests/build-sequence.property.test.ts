@@ -57,21 +57,31 @@ import {
   buildSequence,
   type SequencedPackage,
 } from "../src/build-sequence.js";
-import {
-  BUILD_TOOLS,
-  CONTRACTS,
-  FRAMEWORK_SINGLETONS,
-  INTEGRATION_TESTS,
-  NAMESPACE_CONTAINER,
-  OVERSEER,
-  WORKSPACE_SCOPE,
-  type ConsumerCategory,
-} from "../src/framework.js";
+import { type ConsumerCategory } from "../src/framework.js";
 import type { ReadDependencies } from "../src/required-dependencies.js";
 import {
   workspaceBuildOrder,
   workspaceNodesFrom,
 } from "../src/workspace-build-order.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
+
+/** The per-run context threaded through the build-sequence primitives (task 5.3).
+ *  Default scope and roots keep every produced order byte-identical to baseline. */
+const CONTEXT = projectContext(defaultEffectiveConfig());
+
+// Scope, per-category roots, and the four Framework_Singletons (each with its
+// scope-composed name) come from the run's context, not from framework.ts's
+// scope-free surface (R3.7).
+const WORKSPACE_SCOPE = CONTEXT.config.scope;
+const NAMESPACE_CONTAINER = CONTEXT.roots;
+const FRAMEWORK_SINGLETONS = CONTEXT.framework.all;
+const {
+  contracts: CONTRACTS,
+  overseer: OVERSEER,
+  buildTools: BUILD_TOOLS,
+  integrationTests: INTEGRATION_TESTS,
+} = CONTEXT.framework;
 
 /** Framework directory names as data, so no generator collides with one. */
 const FRAMEWORK_DIR_NAMES: readonly string[] = FRAMEWORK_SINGLETONS.map(
@@ -173,8 +183,12 @@ function discoveredIdentifiers(layout: Layout): readonly string[] {
 
 /** The Workspace_Build_Order as repo-relative directories, in produced order. */
 function workspaceOrderOf(layout: Layout): readonly string[] {
-  const nodes = workspaceNodesFrom(discoveryOf(layout), readerFor(layout));
-  return workspaceBuildOrder(nodes).map((node) => node.packageDir);
+  const nodes = workspaceNodesFrom(
+    CONTEXT,
+    discoveryOf(layout),
+    readerFor(layout),
+  );
+  return workspaceBuildOrder(CONTEXT, nodes).map((node) => node.packageDir);
 }
 
 /** The Tsc_Root_Order for a raw Selector value, as repo-relative directories. */
@@ -182,7 +196,7 @@ function tscRootsOf(
   layout: Layout,
   selector: string | undefined,
 ): readonly string[] {
-  return buildPlanFrom(selector, discoveryOf(layout), readerFor(layout))
+  return buildPlanFrom(CONTEXT, selector, discoveryOf(layout), readerFor(layout))
     .tscRoots;
 }
 
@@ -419,14 +433,24 @@ describe("Property 3: the Workspace_Build_Order and the Tsc_Root_Order agree on 
 
         // The divergence check itself: build the two SequencedPackage orders the
         // pass compares and confirm it finds no divergence over the shared pairs.
-        const nodes = workspaceNodesFrom(discoveryOf(layout), readerFor(layout));
+        const nodes = workspaceNodesFrom(
+          CONTEXT,
+          discoveryOf(layout),
+          readerFor(layout),
+        );
         const fullOrder = orderForWorkspace(layout);
         const scopedOrder = orderForTscRoots(layout, selector);
         const edges = prerequisiteEdges(
+          CONTEXT,
           nodes,
           referenceSelected(selector, discoveredIdentifiers(layout)),
         );
-        const messages = verifyBuildOrder(scopedOrder, edges, fullOrder);
+        const messages = verifyBuildOrder(
+          CONTEXT,
+          scopedOrder,
+          edges,
+          fullOrder,
+        );
         expect(
           messages.filter((m) => m.includes("[build-order:divergence]")),
         ).toEqual([]);
@@ -564,8 +588,10 @@ describe("Property 5: determinism, and independence of presentation order", () =
         (layout, seed) => {
           const membership = fullMembership(layout);
           const permutedMembership = fullMembership(permuteLayout(layout, seed));
-          const base = buildSequence(membership).map((p) => p.packageDir);
-          const permuted = buildSequence(permutedMembership).map(
+          const base = buildSequence(CONTEXT, membership).map(
+            (p) => p.packageDir,
+          );
+          const permuted = buildSequence(CONTEXT, permutedMembership).map(
             (p) => p.packageDir,
           );
           expect(permuted).toEqual(base);
@@ -643,7 +669,7 @@ function fullMembership(layout: Layout): {
 
 /** The full-workspace produced order as SequencedPackages (for the pass). */
 function orderForWorkspace(layout: Layout): readonly SequencedPackage[] {
-  return buildSequence(fullMembership(layout));
+  return buildSequence(CONTEXT, fullMembership(layout));
 }
 
 /** The Selector-scoped produced order as SequencedPackages (for the pass). */
@@ -657,7 +683,7 @@ function orderForTscRoots(
   // the Tsc_Root_Order actually holds. Derive from the real plan so the pass's
   // counterpart matches production exactly.
   const tscRoots = new Set(tscRootsOf(layout, selector));
-  return buildSequence({
+  return buildSequence(CONTEXT, {
     common: layout.commons.filter((pkg) => tscRoots.has(pkg.packageDir)),
     microservices: layout.microservices
       .filter((pkg) => selectedSet.has(pkg.dirName))

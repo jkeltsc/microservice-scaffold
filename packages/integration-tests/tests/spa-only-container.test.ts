@@ -75,6 +75,8 @@ import {
   type CommandRunner,
 } from "@microservices/build-tools/dist/image-tree.js";
 import type { BuildPlan } from "@microservices/build-tools/dist/build-plan.js";
+import { defaultEffectiveConfig } from "@microservices/build-tools/dist/project-config.js";
+import { projectContext } from "@microservices/build-tools/dist/project-context.js";
 
 import { buildApp, makeRegistry, makeToggleMap } from "./helpers.js";
 
@@ -154,7 +156,7 @@ beforeAll(() => {
   events = [];
 
   withRepoRootAndSelector(SELECTOR, () => {
-    plan = buildPlan(SELECTOR);
+    plan = buildPlan(projectContext(defaultEffectiveConfig()), SELECTOR);
 
     // A recording runner that DELEGATES to the real `run`, so a real
     // `tsc --build` and a real `vite build` actually execute (the roots' `dist/`

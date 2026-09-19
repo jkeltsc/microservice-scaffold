@@ -1,0 +1,65 @@
+[
+  {
+    "category": "common",
+    "dirName": "config",
+    "packageDir": "packages/common/config",
+    "name": "@microservices/config",
+    "buildKind": "tsc-project",
+    "dependencySpecifiers": [
+      "@microservices/contracts"
+    ]
+  },
+  {
+    "category": "common",
+    "dirName": "extended-config",
+    "packageDir": "packages/common/extended-config",
+    "name": "@microservices/extended-config",
+    "buildKind": "tsc-project",
+    "dependencySpecifiers": [
+      "@microservices/config"
+    ]
+  },
+  {
+    "category": "microservice",
+    "dirName": "microservice1",
+    "packageDir": "packages/microservices/microservice1",
+    "name": "@microservices/microservice1",
+    "buildKind": "tsc-project",
+    "dependencySpecifiers": [
+      "@microservices/contracts",
+      "@microservices/demo"
+    ]
+  },
+  {
+    "category": "microservice",
+    "dirName": "microservice2",
+    "packageDir": "packages/microservices/microservice2",
+    "name": "@microservices/microservice2",
+    "buildKind": "tsc-project",
+    "dependencySpecifiers": [
+      "@microservices/config",
+      "@microservices/contracts"
+    ]
+  },
+  {
+    "category": "microservice",
+    "dirName": "microservice3",
+    "packageDir": "packages/microservices/microservice3",
+    "name": "@microservices/microservice3",
+    "buildKind": "tsc-project",
+    "dependencySpecifiers": [
+      "@microservices/contracts",
+      "@microservices/extended-config"
+    ]
+  },
+  {
+    "category": "spa",
+    "dirName": "demo",
+    "packageDir": "packages/spa/demo",
+    "name": "@microservices/demo",
+    "buildKind": "bundler-project",
+    "dependencySpecifiers": [
+      "@microservices/extended-config"
+    ]
+  }
+]

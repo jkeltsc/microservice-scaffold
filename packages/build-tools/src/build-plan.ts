@@ -22,25 +22,13 @@ import {
 } from "./build-sequence.js";
 import type { ConsumerPackage, Discovery } from "./discovery.js";
 import { discoverPackages, readDependencySpecifiers } from "./discovery.js";
+import type { FrameworkSingleton, ProjectContext } from "./project-context.js";
 import {
   resolveDependencySets,
   type ReadDependencies,
 } from "./required-dependencies.js";
-import {
-  FRAMEWORK_SINGLETONS,
-  NAMESPACE_CONTAINER,
-  WORKSPACE_SCOPE,
-  type FrameworkSingleton,
-} from "./framework.js";
 import { resolveSelected } from "./selector.js";
 import { workspaceNodesFrom } from "./workspace-build-order.js";
-
-/**
- * The Image_Tree directory holding the workspace scope's real package
- * directories. Exported so the Integrity_Assertion (image-tree.ts) enumerates
- * the same directory this module targets (R10.5).
- */
-export const SCOPE_DIR = `node_modules/${WORKSPACE_SCOPE}`;
 
 /** One package to stage, and why it is justified. */
 export interface StagedPackage {
@@ -83,36 +71,43 @@ export interface BuildPlan {
 }
 
 /** The repo-relative directory of the microservice with this identifier. */
-function microserviceDir(identifier: string): string {
-  return `${NAMESPACE_CONTAINER.microservice}/${identifier}`;
+function microserviceDir(context: ProjectContext, identifier: string): string {
+  return `${context.roots.microservice}/${identifier}`;
 }
 
 /**
  * The Framework_Singletons that ship under the workspace scope whatever the
  * build includes — today exactly `contracts` (R5.6, R5.10). Filtered on what
- * each record in framework.ts declares, so this module names no singleton.
+ * each record the context carries declares, so this module names no singleton.
  */
-const ALWAYS_STAGED_SCOPED: readonly FrameworkSingleton[] =
-  FRAMEWORK_SINGLETONS.filter(
+function alwaysStagedScoped(
+  context: ProjectContext,
+): readonly FrameworkSingleton[] {
+  return context.framework.all.filter(
     (entry) => entry.staging === "scoped-node-modules",
   );
+}
 
 /**
  * The Framework_Singletons that ship at their own package directory — today
  * exactly the Overseer, which the container entrypoint invokes by path.
  */
-const ALWAYS_STAGED_AT_PACKAGE_DIR: readonly FrameworkSingleton[] =
-  FRAMEWORK_SINGLETONS.filter((entry) => entry.staging === "package-dir");
+function alwaysStagedAtPackageDir(
+  context: ProjectContext,
+): readonly FrameworkSingleton[] {
+  return context.framework.all.filter((entry) => entry.staging === "package-dir");
+}
 
 /** A package landing at `node_modules/@microservices/<entry>` as a real directory. */
 function scopedStage(
+  context: ProjectContext,
   sourceDir: string,
   entry: string,
   justification: StagedPackage["justification"],
 ): StagedPackage {
   return {
     sourceDir,
-    targetDir: `${SCOPE_DIR}/${entry}`,
+    targetDir: `${context.scopeDir}/${entry}`,
     scopedEntry: entry,
     justification,
   };
@@ -129,24 +124,31 @@ function scopedStage(
  * group that justifies it — minimality needs no prune step (R7.6).
  */
 function stageOf(
+  context: ProjectContext,
   selected: readonly string[],
   staged: readonly ConsumerPackage[],
 ): readonly StagedPackage[] {
   return [
-    ...ALWAYS_STAGED_SCOPED.map((entry) =>
-      scopedStage(entry.packageDir, entry.dirName, "framework-singleton"),
+    ...alwaysStagedScoped(context).map((entry) =>
+      scopedStage(
+        context,
+        entry.packageDir,
+        entry.dirName,
+        "framework-singleton",
+      ),
     ),
     ...staged.map((pkg) =>
-      scopedStage(pkg.packageDir, pkg.dirName, "required-dependency"),
+      scopedStage(context, pkg.packageDir, pkg.dirName, "required-dependency"),
     ),
     ...selected.map((identifier) =>
       scopedStage(
-        microserviceDir(identifier),
+        context,
+        microserviceDir(context, identifier),
         identifier,
         "selected-microservice",
       ),
     ),
-    ...ALWAYS_STAGED_AT_PACKAGE_DIR.map((entry) => ({
+    ...alwaysStagedAtPackageDir(context).map((entry) => ({
       sourceDir: entry.packageDir,
       targetDir: entry.packageDir,
       scopedEntry: undefined,
@@ -165,6 +167,7 @@ function stageOf(
  * `resolveDependencySets` call, so the two cannot disagree about which packages
  * were reached (R13.1, R13.2, R13.9).
  *
+ * @param context the per-run derivation of this run's Effective_Config (R1.9).
  * @param selector the raw MICROSERVICES value; `undefined` means all.
  * @param discovery one discovery run's result.
  * @param readDependencies reads the root consumers' Dependency_Specifiers.
@@ -172,6 +175,7 @@ function stageOf(
  *   `[deps:peer]`, `[deps:cycle]`.
  */
 export function buildPlanFrom(
+  context: ProjectContext,
   selector: string | undefined,
   discovery: Discovery,
   readDependencies: ReadDependencies,
@@ -181,6 +185,7 @@ export function buildPlanFrom(
     discovery.byCategory.microservice.map((pkg) => pkg.dirName),
   );
   const { required, staged } = resolveDependencySets(
+    context,
     selected,
     discovery,
     readDependencies,
@@ -198,7 +203,7 @@ export function buildPlanFrom(
   // `plan.spaBuilds` and are built by their own `npm run build`. Statement 7's
   // placement and `spaBuilds`' phase are two independent facts that agree, not one
   // claim expressed twice (D7).
-  const tscSequence = buildSequence({
+  const tscSequence = buildSequence(context, {
     common: required.filter((pkg) => pkg.category === "common"),
     microservices: selected,
     spa: [],
@@ -213,8 +218,8 @@ export function buildPlanFrom(
   // manifest reads and no spawned process (D2). `workspaceOrder` is the
   // SequencedPackage[] over the full workspace membership, and `edges` the
   // Prerequisite_Graph over the same nodes and this Selector.
-  const workspaceNodes = workspaceNodesFrom(discovery, readDependencies);
-  const workspaceOrder = buildSequence({
+  const workspaceNodes = workspaceNodesFrom(context, discovery, readDependencies);
+  const workspaceOrder = buildSequence(context, {
     common: workspaceNodes
       .filter((node) => node.tier === "common")
       .map((node) => ({
@@ -241,8 +246,8 @@ export function buildPlanFrom(
     buildTools: true,
     testOnly: true,
   });
-  const edges = prerequisiteEdges(workspaceNodes, selected);
-  assertBuildOrder(tscSequence, edges, workspaceOrder);
+  const edges = prerequisiteEdges(context, workspaceNodes, selected);
+  assertBuildOrder(context, tscSequence, edges, workspaceOrder);
 
   return {
     selected,
@@ -254,7 +259,7 @@ export function buildPlanFrom(
     // Spa_Package can reach `tscRoots` (R6.3, R13.4).
     spaBuilds: required.filter((pkg) => pkg.buildKind === "bundler-project"),
     tscRoots: tscSequence.map((pkg) => pkg.packageDir),
-    stage: stageOf(selected, staged),
+    stage: stageOf(context, selected, staged),
   };
 }
 
@@ -265,6 +270,14 @@ export function buildPlanFrom(
  * It is the effect shell around {@link buildPlanFrom}: it supplies the two
  * filesystem-backed inputs, holds no logic, and discovers exactly once.
  */
-export function buildPlan(selector = process.env.MICROSERVICES): BuildPlan {
-  return buildPlanFrom(selector, discoverPackages(), readDependencySpecifiers);
+export function buildPlan(
+  context: ProjectContext,
+  selector = process.env.MICROSERVICES,
+): BuildPlan {
+  return buildPlanFrom(
+    context,
+    selector,
+    discoverPackages(context),
+    readDependencySpecifiers(context),
+  );
 }

@@ -84,24 +84,36 @@ import {
   discoverPackagesFrom,
   type BuildKind,
   type ConsumerPackage,
-  type ContainerEntry,
+  type RootEntry,
   type Discovery,
-  type ListContainer,
+  type ListRoot,
   type ManifestRead,
   type PackageManifest,
   type ReadManifest,
 } from "../src/discovery.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
 import {
-  BUILD_TOOLS,
   CONSUMER_CATEGORIES,
-  CONTRACTS,
-  FRAMEWORK_SINGLETONS,
-  INTEGRATION_TESTS,
-  NAMESPACE_CONTAINER,
-  OVERSEER,
-  WORKSPACE_SCOPE,
   type ConsumerCategory,
 } from "../src/framework.js";
+
+/** Default-config context; roots equal NAMESPACE_CONTAINER, so listers keyed by
+ *  it still match. */
+const discoveryContext = projectContext(defaultEffectiveConfig());
+
+// Scope, per-category roots, and the four Framework_Singletons (each with its
+// scope-composed name) come from the run's context, not from framework.ts's
+// scope-free surface (R3.7).
+const WORKSPACE_SCOPE = discoveryContext.config.scope;
+const NAMESPACE_CONTAINER = discoveryContext.roots;
+const FRAMEWORK_SINGLETONS = discoveryContext.framework.all;
+const {
+  contracts: CONTRACTS,
+  overseer: OVERSEER,
+  buildTools: BUILD_TOOLS,
+  integrationTests: INTEGRATION_TESTS,
+} = discoveryContext.framework;
 
 /** Framework directory names as data, so no generator collides with one. */
 const FRAMEWORK_DIR_NAMES: readonly string[] = FRAMEWORK_SINGLETONS.map(
@@ -220,7 +232,12 @@ function readerFor(layout: Layout): ReadDependencies {
 
 /** The plan `buildPlanFrom` derives for a layout and a raw Selector value. */
 function planOf(layout: Layout, selector: string | undefined) {
-  return buildPlanFrom(selector, discoveryOf(layout), readerFor(layout));
+  return buildPlanFrom(
+    discoveryContext,
+    selector,
+    discoveryOf(layout),
+    readerFor(layout),
+  );
 }
 
 /** The Microservice_Identifiers a layout discovers, in discovery order. */
@@ -830,8 +847,8 @@ const arbManifestLayout: fc.Arbitrary<readonly ManifestEntry[]> =
   });
 
 /** The container lister for a manifest layout; every container is present. */
-function listContainerFor(entries: readonly ManifestEntry[]): ListContainer {
-  const byContainer = new Map<string, ContainerEntry[]>(
+function listContainerFor(entries: readonly ManifestEntry[]): ListRoot {
+  const byContainer = new Map<string, RootEntry[]>(
     CONSUMER_CATEGORIES.map((category) => [NAMESPACE_CONTAINER[category], []]),
   );
   for (const entry of entries) {
@@ -878,8 +895,16 @@ describe("Property 15: Build_Kind is total and determined by category alone", ()
     fc.assert(
       fc.property(arbManifestLayout, (entries) => {
         const list = listContainerFor(entries);
-        const first = discoverPackagesFrom(list, readManifestFor(entries, 0));
-        const second = discoverPackagesFrom(list, readManifestFor(entries, 1));
+        const first = discoverPackagesFrom(
+          discoveryContext,
+          list,
+          readManifestFor(entries, 0),
+        );
+        const second = discoverPackagesFrom(
+          discoveryContext,
+          list,
+          readManifestFor(entries, 1),
+        );
 
         const kindsOf = (discovery: Discovery): Map<string, BuildKind> =>
           new Map(

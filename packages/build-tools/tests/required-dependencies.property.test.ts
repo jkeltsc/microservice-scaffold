@@ -57,6 +57,8 @@ import {
   resolveDependencySets,
   type ReadDependencies,
 } from "../src/required-dependencies.js";
+import { projectContext } from "../src/project-context.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
 import {
   buildKindOf,
   type ConsumerPackage,
@@ -64,13 +66,21 @@ import {
 } from "../src/discovery.js";
 import {
   ALWAYS_STAGED_SCOPED_ENTRIES,
-  CONTRACTS,
-  FRAMEWORK_SINGLETONS,
-  NAMESPACE_CONTAINER,
-  OVERSEER,
-  WORKSPACE_SCOPE,
   type ConsumerCategory,
 } from "../src/framework.js";
+
+/** The default project context every call to the resolver is threaded through.
+ *  Task 5.11 sweeps this suite off the framework shims; for now it pairs the
+ *  default config's context with the still-current WORKSPACE_SCOPE oracles. */
+const CONTEXT = projectContext(defaultEffectiveConfig());
+
+// Scope, per-category roots, and the four Framework_Singletons (each with its
+// scope-composed name) come from the run's context, not from framework.ts's
+// scope-free surface (R3.7).
+const WORKSPACE_SCOPE = CONTEXT.config.scope;
+const NAMESPACE_CONTAINER = CONTEXT.roots;
+const FRAMEWORK_SINGLETONS = CONTEXT.framework.all;
+const { contracts: CONTRACTS, overseer: OVERSEER } = CONTEXT.framework;
 
 /** Framework names as data, so the oracles never call the production lookup. */
 const FRAMEWORK_NAMES: readonly string[] = FRAMEWORK_SINGLETONS.map(
@@ -160,7 +170,12 @@ function requiredOf(
   layout: Layout,
   selected: readonly string[],
 ): readonly ConsumerPackage[] {
-  return requiredDependencies(selected, discoveryOf(layout), readerFor(layout));
+  return requiredDependencies(
+    CONTEXT,
+    selected,
+    discoveryOf(layout),
+    readerFor(layout),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1455,8 +1470,12 @@ function stagedOf(
   layout: Layout,
   selected: readonly string[],
 ): readonly ConsumerPackage[] {
-  return resolveDependencySets(selected, discoveryOf(layout), readerFor(layout))
-    .staged;
+  return resolveDependencySets(
+    CONTEXT,
+    selected,
+    discoveryOf(layout),
+    readerFor(layout),
+  ).staged;
 }
 
 /**

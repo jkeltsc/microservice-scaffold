@@ -3,14 +3,14 @@
 //
 // An example test, not a property test: there is one committed repository and
 // exactly one correct discovery result over it, so quantifying over inputs adds
-// nothing. `discoverPackages()` is the effect shell that reads the real
+// nothing. `discoverPackages(context)` is the effect shell that reads the real
 // filesystem; the pure `discoverPackagesFrom` core is exercised against
 // in-memory layouts elsewhere. What only this test can catch is the two of them
 // disagreeing with reality — a Namespace_Container renamed, a manifest field
 // that stops being read, or a framework directory that starts being discovered.
 //
 // The design's Data Models table is the oracle. Over the committed tree
-// `discoverPackages()` must yield exactly these six rows and no others:
+// `discoverPackages(context)` must yield exactly these six rows and no others:
 //
 //   packages/microservices/microservice1  microservice  @microservices/microservice1  tsc-project     [contracts, demo]
 //   packages/microservices/microservice2  microservice  @microservices/microservice2  tsc-project     [config, contracts]
@@ -36,25 +36,103 @@
 //     exactly that one specifier — the Config_Package is reached only
 //     transitively through it.
 //
-// `discoverPackages()` resolves the Namespace_Containers as repo-relative
+// `discoverPackages(context)` resolves the Namespace_Containers as repo-relative
 // paths, so the test runs with the repository root as cwd regardless of whether
 // vitest was launched from the package directory or the repo root.
 //
 // Validates: Requirements 2.10, 4.6, 8.5
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { readFileSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { discoverPackages, type ConsumerPackage } from "../src/discovery.js";
 import {
-  FRAMEWORK_SINGLETONS,
-  NAMESPACE_CONTAINER,
-} from "../src/framework.js";
+  loadProjectConfig,
+  type ConfigFileRead,
+  type RootProbe,
+} from "../src/config-loader.js";
+import {
+  PROJECT_CONFIG_FILE,
+  renderDiagnostic,
+} from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // tests/ -> build-tools -> packages -> repo root
 const repoRoot = resolve(__dirname, "..", "..", "..");
+
+/** Reads the committed `scaffold.config.json` (absent here → defaults). */
+function readConfigFile(configPath: string): ConfigFileRead {
+  try {
+    return { kind: "text", text: readFileSync(configPath, "utf8") };
+  } catch (error) {
+    const code: unknown = (error as { code?: unknown } | null)?.code;
+    if (code === "ENOENT" || code === "ENOTDIR") return { kind: "absent" };
+    return {
+      kind: "unreadable",
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/** Probes one Discovery_Root under the repository root. */
+function probeRoot(rootPath: string): RootProbe {
+  let stats;
+  try {
+    stats = statSync(resolve(repoRoot, rootPath));
+  } catch (error) {
+    const code: unknown = (error as { code?: unknown } | null)?.code;
+    if (code === "ENOENT" || code === "ENOTDIR") return { kind: "absent" };
+    return {
+      kind: "failed",
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+  if (!stats.isDirectory()) return { kind: "not-directory" };
+  let holdsPackageJsonFile: boolean;
+  try {
+    holdsPackageJsonFile = statSync(
+      resolve(repoRoot, rootPath, "package.json"),
+    ).isFile();
+  } catch {
+    holdsPackageJsonFile = false;
+  }
+  return { kind: "directory", holdsPackageJsonFile };
+}
+
+/**
+ * The context this test discovers against is the LOADED Effective_Config, not a
+ * fabricated default: the roots and scope come from `scaffold.config.json`
+ * exactly as a Build_System run reads them (R13.3, R13.4). This repository ships
+ * no config file, so the load takes all four defaults — but the test substitutes
+ * no path or scope literal of its own, and fails with a reported reason if the
+ * config cannot load, rather than falling back to a default.
+ */
+function loadContext() {
+  const outcome = loadProjectConfig(
+    readConfigFile,
+    probeRoot,
+    resolve(repoRoot, PROJECT_CONFIG_FILE),
+  );
+  if (outcome.kind === "rejected") {
+    throw new Error(
+      `the project configuration could not load; substituting no literal:\n${outcome.diagnostics
+        .map(renderDiagnostic)
+        .join("\n")}`,
+    );
+  }
+  return projectContext(outcome.config);
+}
+
+const context = loadContext();
+
+// The per-category roots and the four Framework_Singletons (each with its
+// scope-composed name) come from the run's context, not from framework.ts's
+// scope-free surface (R3.7).
+const NAMESPACE_CONTAINER = context.roots;
+const FRAMEWORK_SINGLETONS = context.framework.all;
 
 /** One row of the design's Data Models table, in the shape discovery returns. */
 interface ExpectedRow {
@@ -66,10 +144,13 @@ interface ExpectedRow {
   readonly dependencySpecifiers: readonly string[];
 }
 
-const CONTRACTS = "@microservices/contracts";
-const CONFIG = "@microservices/config";
-const EXTENDED_CONFIG = "@microservices/extended-config";
-const DEMO = "@microservices/demo";
+// The scoped names come from the loaded context, not from `@microservices/…`
+// literals, so a project with a different Configured_Scope composes them under
+// that scope (R13.4).
+const CONTRACTS = context.scopedName("contracts");
+const CONFIG = context.scopedName("config");
+const EXTENDED_CONFIG = context.scopedName("extended-config");
+const DEMO = context.scopedName("demo");
 
 /** The six rows of the design's "Discovery over the current tree" table. */
 const EXPECTED_ROWS: readonly ExpectedRow[] = [
@@ -77,7 +158,7 @@ const EXPECTED_ROWS: readonly ExpectedRow[] = [
     category: "microservice",
     dirName: "microservice1",
     packageDir: `${NAMESPACE_CONTAINER.microservice}/microservice1`,
-    name: "@microservices/microservice1",
+    name: context.scopedName("microservice1"),
     buildKind: "tsc-project",
     // sorted: contracts precedes demo. microservice1 declares
     // @microservices/demo because it serves the Demo_Spa at its Mount_Root; it
@@ -89,7 +170,7 @@ const EXPECTED_ROWS: readonly ExpectedRow[] = [
     category: "microservice",
     dirName: "microservice2",
     packageDir: `${NAMESPACE_CONTAINER.microservice}/microservice2`,
-    name: "@microservices/microservice2",
+    name: context.scopedName("microservice2"),
     buildKind: "tsc-project",
     // sorted: config precedes contracts
     dependencySpecifiers: [CONFIG, CONTRACTS],
@@ -98,7 +179,7 @@ const EXPECTED_ROWS: readonly ExpectedRow[] = [
     category: "microservice",
     dirName: "microservice3",
     packageDir: `${NAMESPACE_CONTAINER.microservice}/microservice3`,
-    name: "@microservices/microservice3",
+    name: context.scopedName("microservice3"),
     buildKind: "tsc-project",
     // sorted: contracts precedes extended-config; microservice3 reaches the
     // base Config_Package transitively through @microservices/extended-config
@@ -149,7 +230,7 @@ function rowOf(pkg: ConsumerPackage): ExpectedRow {
   };
 }
 
-describe("discoverPackages() over the committed repository (Data Models table)", () => {
+describe("discoverPackages(context) over the committed repository (Data Models table)", () => {
   const originalCwd = process.cwd();
 
   beforeAll(() => {
@@ -160,7 +241,7 @@ describe("discoverPackages() over the committed repository (Data Models table)",
   });
 
   it("yields exactly the six rows of the design's Data Models table", () => {
-    const discovery = discoverPackages();
+    const discovery = discoverPackages(context);
 
     const rows = [
       ...discovery.byCategory.microservice,
@@ -176,7 +257,7 @@ describe("discoverPackages() over the committed repository (Data Models table)",
   });
 
   it("discovers exactly one Spa_Package, demo (packages/spa now holds the Demo_Spa)", () => {
-    const discovery = discoverPackages();
+    const discovery = discoverPackages(context);
     expect(discovery.byCategory.spa.map(rowOf)).toEqual([
       {
         category: "spa",
@@ -190,7 +271,7 @@ describe("discoverPackages() over the committed repository (Data Models table)",
   });
 
   it("discovers no framework directory as a Consumer_Package", () => {
-    const discovery = discoverPackages();
+    const discovery = discoverPackages(context);
 
     const discoveredNames = new Set(discovery.byName.keys());
     const discoveredDirs = new Set(discovery.nameByDir.keys());
@@ -208,19 +289,19 @@ describe("discoverPackages() over the committed repository (Data Models table)",
   });
 
   it("does not discover build-tools despite its manifest, because membership is by location", () => {
-    const discovery = discoverPackages();
+    const discovery = discoverPackages(context);
 
     // build-tools is bin-only (no main/types), yet the negative that matters is
     // location, not shape: even were it to declare main/types tomorrow it would
     // stay undiscovered, exactly as contracts and overseer (which DO declare
     // both) stay undiscovered here (R2.10).
-    expect(discovery.byName.has("@microservices/build-tools")).toBe(false);
+    expect(discovery.byName.has(context.scopedName("build-tools"))).toBe(false);
     expect(discovery.byName.has(CONTRACTS)).toBe(false);
-    expect(discovery.byName.has("@microservices/overseer")).toBe(false);
+    expect(discovery.byName.has(context.scopedName("overseer"))).toBe(false);
   });
 
   it("records only the six declared names in the resolution index", () => {
-    const discovery = discoverPackages();
+    const discovery = discoverPackages(context);
 
     expect([...discovery.byName.keys()].sort()).toEqual(
       [...EXPECTED_ROWS].map((row) => row.name).sort(),

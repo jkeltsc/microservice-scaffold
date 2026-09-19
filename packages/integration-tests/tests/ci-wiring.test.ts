@@ -19,7 +19,13 @@
 // `typecheck --workspaces`, and the `check:invariants` script points at the
 // compiled `.js` bin under `dist/` (not a `src/` `.ts` path).
 //
-// Validates: Requirements 12.21, 14.8, 14.10
+// The Tsconfig_Verifier is one of the check:invariants checks (R9.11), so the
+// `ci` gate must keep running check:invariants after the repository build and
+// before the typecheck, lint, test, and type-assertion gates (R9.12), so a
+// Load_Bearing_Setting violation fails the quality gate before the slower gates
+// run. This suite pins that ordering against the committed root `package.json`.
+//
+// Validates: Requirements 12.21, 14.8, 14.10, 9.11, 9.12, 7.7, 7.8
 //
 // ---------------------------------------------------------------------------
 // scaffold-demo-samples task 12.6 additions (R11.4, R11.5, R11.6, R12.6)
@@ -66,6 +72,8 @@ import {
   discoverPackages,
   readDependencySpecifiers,
 } from "@microservices/build-tools/dist/discovery.js";
+import { defaultEffectiveConfig } from "@microservices/build-tools/dist/project-config.js";
+import { projectContext } from "@microservices/build-tools/dist/project-context.js";
 import {
   runOrderedBuild,
   workspaceBuildOrder,
@@ -73,6 +81,7 @@ import {
   type CommandRunner,
 } from "@microservices/build-tools/dist/workspace-build-order.js";
 import { devProjectList } from "@microservices/build-tools/dist/dev-supervisor.js";
+import { buildPlan } from "@microservices/build-tools/dist/build-plan.js";
 import {
   checkBuildOrderSource,
   type ScriptSource,
@@ -82,9 +91,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // tests/ -> integration-tests -> packages -> repo root
 const repoRoot = resolve(__dirname, "..", "..", "..");
 
+/** Default-config context threaded innermost-first (task 5.1); the CLI shell will
+ *  pass the real one in later tasks. */
+const discoveryContext = projectContext(defaultEffectiveConfig());
+
 /** The Demo_Spa's workspace name and its repo-relative package directory. */
 const DEMO_NAME = "@microservices/demo";
 const DEMO_DIR = "packages/spa/demo";
+
+/** The dev Project_List for a Selector: derive the plan, take its `tscRoots`.
+ *  `devProjectList` is now `(context, plan)`, so the CLI orchestration (derive
+ *  the plan) is replicated here. */
+function devListFor(selector: string): readonly string[] {
+  return devProjectList(discoveryContext, buildPlan(discoveryContext, selector));
+}
 
 interface Manifest {
   readonly scripts?: Readonly<Record<string, string>>;
@@ -163,7 +183,7 @@ describe("the root ci script wires in the repo-invariants check", () => {
     expect(ci).toContain("check:invariants");
   });
 
-  it("orders check:invariants after the build step and before typecheck --workspaces", () => {
+  it("orders check:invariants after the build step and before the typecheck, lint, test, and type-assertion gates", () => {
     const ci = scripts.ci ?? "";
     // Anchor on the leading build segment rather than a substring match, so
     // the position keys off `npm run build &&` and not an incidental
@@ -171,13 +191,27 @@ describe("the root ci script wires in the repo-invariants check", () => {
     expect(ci.startsWith("npm run build &&")).toBe(true);
     const buildPos = 0;
     const invariantsPos = ci.indexOf("check:invariants");
+    // The four slower gates the verifier (now one of the check:invariants
+    // checks, R9.11, R9.12) must fail before: typecheck, lint, the test run,
+    // and the type-level assertions (test:types). check:invariants runs after
+    // the repository build and before every one of them, so a
+    // Load_Bearing_Setting violation fails the gate before the slower steps.
     const typecheckPos = ci.indexOf("typecheck --workspaces");
+    const lintPos = ci.indexOf("lint --workspaces");
+    const testPos = ci.indexOf("npm test");
+    const testTypesPos = ci.indexOf("test:types");
 
     expect(invariantsPos).toBeGreaterThanOrEqual(0);
     expect(typecheckPos).toBeGreaterThanOrEqual(0);
+    expect(lintPos).toBeGreaterThanOrEqual(0);
+    expect(testPos).toBeGreaterThanOrEqual(0);
+    expect(testTypesPos).toBeGreaterThanOrEqual(0);
 
     expect(buildPos).toBeLessThan(invariantsPos);
     expect(invariantsPos).toBeLessThan(typecheckPos);
+    expect(invariantsPos).toBeLessThan(lintPos);
+    expect(invariantsPos).toBeLessThan(testPos);
+    expect(invariantsPos).toBeLessThan(testTypesPos);
   });
 
   it("check:invariants points at the compiled bin under dist/", () => {
@@ -230,8 +264,12 @@ describe("the ordered build reaches the Demo_Spa's own build script (R11.4, R11.
       return { status: 0 };
     };
 
-    const nodes = workspaceNodesFrom(discoverPackages(), readDependencySpecifiers);
-    const order = workspaceBuildOrder(nodes);
+    const nodes = workspaceNodesFrom(
+      discoveryContext,
+      discoverPackages(discoveryContext),
+      readDependencySpecifiers(discoveryContext),
+    );
+    const order = workspaceBuildOrder(discoveryContext, nodes);
     expect(() => runOrderedBuild(order, runner)).not.toThrow();
     return recorded;
   }
@@ -263,8 +301,12 @@ describe("the ordered build reaches the Demo_Spa's own build script (R11.4, R11.
     // than an isolated invocation.
     const recorded = recordOrderedBuild();
 
-    const nodes = workspaceNodesFrom(discoverPackages(), readDependencySpecifiers);
-    const order = workspaceBuildOrder(nodes);
+    const nodes = workspaceNodesFrom(
+      discoveryContext,
+      discoverPackages(discoveryContext),
+      readDependencySpecifiers(discoveryContext),
+    );
+    const order = workspaceBuildOrder(discoveryContext, nodes);
     expect(recorded).toHaveLength(order.length);
     expect(
       recorded.some((invocation) => workspaceNameOf(invocation) === DEMO_NAME),
@@ -287,8 +329,12 @@ describe("the ordered build reaches the Demo_Spa's own build script (R11.4, R11.
       return { status: name === DEMO_NAME ? failStatus : 0 };
     };
 
-    const nodes = workspaceNodesFrom(discoverPackages(), readDependencySpecifiers);
-    const order = workspaceBuildOrder(nodes);
+    const nodes = workspaceNodesFrom(
+      discoveryContext,
+      discoverPackages(discoveryContext),
+      readDependencySpecifiers(discoveryContext),
+    );
+    const order = workspaceBuildOrder(discoveryContext, nodes);
 
     expect(() => runOrderedBuild(order, runner)).toThrow(
       `[build-order:failed] "npm run build" for "${DEMO_DIR}" failed with exit code ${String(
@@ -376,18 +422,18 @@ describe("`npm run dev` invokes no Demo_Spa build (R11.6)", () => {
     // excluded. Use the `*` selector, which reaches Microservice1 and therefore
     // the Demo_Spa in the BUILD set; the Demo_Spa is still not in the dev list,
     // because the dev list is the `tsc --build` roots, never a Spa build.
-    const projectList = devProjectList("*");
+    const projectList = devListFor("*");
     expect(projectList).not.toContain(DEMO_DIR);
     // A concrete selector that reaches Microservice1 (and so the Demo_Spa)
     // holds the same: no Spa build on the dev path.
-    expect(devProjectList("microservice1")).not.toContain(DEMO_DIR);
+    expect(devListFor("microservice1")).not.toContain(DEMO_DIR);
   });
 
   it("the dev project list holds only Tsc_Project directories, never packages/spa/*", () => {
     // Structural complement: no entry of the dev list is under packages/spa/,
     // so the supervisor's sole build action (the solution builder over this
     // list) can never invoke a Spa_Package's `npm run build` (R11.6).
-    for (const dir of devProjectList("*")) {
+    for (const dir of devListFor("*")) {
       expect(
         dir.startsWith("packages/spa/"),
         `dev project "${dir}" must not be a Spa_Package directory`,
@@ -419,7 +465,7 @@ describe("every command the README quotes for the samples resolves to a declared
       const cwd = process.cwd();
       process.chdir(repoRoot);
       try {
-        return discoverPackages();
+        return discoverPackages(discoveryContext);
       } finally {
         process.chdir(cwd);
       }

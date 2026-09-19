@@ -39,6 +39,20 @@
 // snapshots and rewrites — is reached through a named constant and stays out of
 // scope, as intended.
 //
+// The write-destination scan (task 14.9) generalises Rule 2. It walks each
+// mutating fs call's whole argument span — which may cross lines — and flags a
+// write whose destination is INSIDE the checked-out repository and OUTSIDE the
+// three permitted locations (a gitignored `dist/`, a `*.tsbuildinfo`, and the
+// generated Microservice_Registry). A `scaffold.config.json` written into the
+// checked-out tree is a violation in particular: this repository deliberately
+// has no Project_Config_File, so a test needing one puts it in a
+// pristineWorktree() copy and passes that directory as the Project_Directory.
+// The classification is positive — a call is flagged only when its span carries
+// a checked-out anchor (`repoRoot`, `TESTS_DIR`, `__dirname`) with no permitted
+// location, or writes a `scaffold.config.json` with no temp/pristine base — so a
+// write anchored at a pristine copy's directory or an OS temp path is never
+// flagged.
+//
 // Validates: the worktree-safety prohibition recorded in `.kiro/steering/tech.md`
 
 import { describe, it, expect } from "vitest";
@@ -209,6 +223,111 @@ const MUTATION_AT_REPO_ROOT = new RegExp(
   `\\b(?:${MUTATING_FS.join("|")})\\s*\\([^)]*\\b${REPO_ROOT}\\b`,
 );
 
+// --- The write-destination scan (task 14.9, R13.6, R13.9) ------------------
+//
+// The `MUTATION_AT_REPO_ROOT` rule above catches a mutation whose destination
+// textually names `repoRoot`. That is a floor, not a ceiling: a write can reach
+// the checked-out tree by other anchors too. This scan generalises it. It walks
+// each mutating fs call's whole argument span (which may cross lines, unlike the
+// line-based rules) and FLAGS the call when its destination is inside the
+// checked-out repository and outside the three permitted locations (a gitignored
+// `dist/`, a `*.tsbuildinfo`, or the generated Microservice_Registry).
+//
+// The classification is positive: a call is flagged only when its argument span
+// carries a CHECKED-OUT ANCHOR — a base resolving inside the checked-out tree —
+// and no permitted-location token. The checked-out anchors are the bases a test
+// file can build a checked-out path from: `repoRoot`, `TESTS_DIR`, and
+// `__dirname` (this suite's own directory constants). A write anchored at a
+// pristineWorktree() copy's directory (conventionally `dir` or `root`, or an OS
+// temp path from `mkdtemp`/`tmpdir`) is NOT a checked-out anchor and is not
+// flagged. A `scaffold.config.json` destination is called out specially: writing
+// one anywhere without a temp/pristine base token is a violation, because this
+// repository deliberately has no Project_Config_File (R13.6) and an untracked one
+// would change what every other suite reads.
+
+/** Tokens that mark a destination as INSIDE the checked-out tree. */
+const CHECKED_OUT_ANCHORS: readonly string[] = [REPO_ROOT, "TESTS_DIR", "__dirname"];
+
+/** Tokens that mark a destination as a pristineWorktree() copy or an OS temp
+ *  directory — outside the checked-out tree, so a write there is fine. */
+const TEMP_ANCHORS: readonly string[] = [
+  "dir",
+  "root",
+  "tmp",
+  "mkdtemp",
+  "pristine",
+  "outPath",
+];
+
+/** The three permitted checked-out write locations (R13.6). A destination whose
+ *  text names one of these is allowed even inside the checked-out tree. */
+const PERMITTED_LOCATION = /\bdist\b|tsbuildinfo|microservice-registry(?!\.template)/;
+
+/** The Project_Config_File name — writing one into the checked-out tree is a
+ *  violation, assembled from fragments so this source never holds it whole. */
+const CONFIG_FILE = "scaffold" + ".config.json";
+
+/**
+ * Scans each mutating fs call's whole (possibly multi-line) argument span and
+ * returns an offence when the destination is inside the checked-out tree and
+ * outside the three permitted locations. Operates on the strings-preserved
+ * projection, since destinations are string literals and variable names.
+ */
+function scanWriteDestinations(): readonly Offence[] {
+  const offences: Offence[] = [];
+  const callHead = new RegExp(`\\b(?:${MUTATING_FS.join("|")})\\s*\\(`, "g");
+
+  for (const entry of sources) {
+    const text = entry.codeWithStrings;
+    const scanner = new RegExp(callHead.source, "g");
+    let match = scanner.exec(text);
+    while (match !== null) {
+      // Capture the balanced argument span from the opening paren.
+      const open = match.index + match[0].length - 1;
+      let depth = 0;
+      let end = open;
+      for (let i = open; i < text.length; i += 1) {
+        if (text[i] === "(") depth += 1;
+        else if (text[i] === ")") {
+          depth -= 1;
+          if (depth === 0) {
+            end = i;
+            break;
+          }
+        }
+      }
+      const span = text.slice(open, end + 1);
+
+      const hasCheckedOutAnchor = CHECKED_OUT_ANCHORS.some((token) =>
+        new RegExp(`\\b${token}\\b`).test(span),
+      );
+      const hasTempAnchor = TEMP_ANCHORS.some((token) =>
+        new RegExp(`\\b${token}\\b`).test(span),
+      );
+      const writesConfigFile = span.includes(CONFIG_FILE);
+      const isPermitted = PERMITTED_LOCATION.test(span);
+
+      // A checked-out-anchored write outside a permitted location, OR a config
+      // file written without a temp/pristine base, is a violation.
+      const flagged =
+        (hasCheckedOutAnchor && !isPermitted) ||
+        (writesConfigFile && !hasTempAnchor);
+
+      if (flagged) {
+        const line = text.slice(0, match.index).split("\n").length;
+        offences.push({
+          file: entry.file,
+          line,
+          rule: "write inside the checked-out tree",
+          text: span.split("\n")[0].trim(),
+        });
+      }
+      match = scanner.exec(text);
+    }
+  }
+  return offences;
+}
+
 interface Offence {
   readonly file: string;
   readonly line: number;
@@ -306,6 +425,22 @@ describe("no test mutates the real working tree", () => {
     expect(
       offences,
       `the ${RESTORE_HELPER} helper is deleted on purpose and must not return.\n${report(offences)}`,
+    ).toEqual([]);
+  });
+
+  it("writes nothing inside the checked-out tree outside the three permitted locations", () => {
+    // Every write belongs in a pristineWorktree() copy (or an OS temp dir),
+    // never in the checked-out tree — except a package's gitignored dist/, a
+    // *.tsbuildinfo, and the generated Microservice_Registry. A
+    // scaffold.config.json written into the checked-out tree is a violation,
+    // because this repository deliberately has none (R13.6). A test needing a
+    // non-default config puts it inside the copy and passes the copy's directory
+    // as the Project_Directory (R13.11).
+    const offences = scanWriteDestinations();
+    expect(
+      offences,
+      `a test wrote inside the checked-out tree outside the permitted locations; ` +
+        `write into a pristineWorktree() copy instead.\n${report(offences)}`,
     ).toEqual([]);
   });
 });

@@ -184,28 +184,68 @@ A consequence to expect from the specific image: the demo page is served (`micro
 ## Adopting this scaffold for a product
 
 The workspace packages share an npm scope (`@microservices` by default). That scope
-is a placeholder, not a product name — it shows up in package names, imports, the
-generated registry, and test fixtures, but it does not identify your product. Since
-each product is a fresh clone of this scaffold, rebrand the scope once after cloning:
+is a placeholder, not a product name — it shows up in package names, imports, and
+the generated registry, but it does not identify your product.
 
-```sh
-sh scripts/rename-scope.sh @your-product
-npm install
+You declare your scope once, in the `scope` field of `scaffold.config.json` at the
+repository root:
+
+```jsonc
+// scaffold.config.json
+{ "scope": "@your-product" }
 ```
 
-The script rewrites the `@microservices/` token across sources, `package.json`
-names and dependency keys, tests, and comments. It deliberately leaves generated
-output (the registry, the Dockerfile) and `package-lock.json` alone — those
-regenerate — and it only touches the scoped token, so the repo/folder name and
-image tags are untouched. The following `npm install` re-resolves the workspace
-symlinks under the new scope and regenerates the lockfile.
+The build system reads that field once per run and derives every scoped name it
+composes from it — discovery, the invariant checker, and the registry generator all
+follow the configured scope. There is no tracked-file search-and-replace to run: a
+project with no `scaffold.config.json` at all is valid and takes the `@microservices`
+default. See [Configuration](#configuration) for the full config file.
 
-To rename from a scope other than the default, pass it as a second argument:
-`sh scripts/rename-scope.sh @your-product @old-scope`.
+One place npm still requires the scope written literally is each package's own
+`package.json` `name`, because npm needs a literal package name. When you adopt the
+scaffold you update those `name` fields (and the matching dependency keys) to your
+scope, then run `npm install` so the workspace symlinks re-resolve under it. For a
+container build, a project whose scope differs from `@microservices` passes it as a
+build argument: `docker build --build-arg WORKSPACE_SCOPE=@your-product --build-arg MICROSERVICES=<selector> .`
+alongside the usual selector — the Dockerfile emit script does not carry the scope
+into the generated `Dockerfile`.
 
 ## Configuration
 
+### Runtime configuration (`.env`)
+
 Copy `.env.example` to `.env` and adjust. See `.env.example` for all available variables.
+
+### Project configuration (`scaffold.config.json`)
+
+`scaffold.config.json`, directly at the repository root, is committed source (not
+generated output) in which a project declares its npm scope and where its packages
+live. It is JSON with exactly two recognised top-level keys, both optional:
+
+```jsonc
+// scaffold.config.json
+{
+  "scope": "@your-product",
+  "roots": {
+    "microservice": "packages/microservices",
+    "common": "packages/common",
+    "spa": "packages/spa"
+  }
+}
+```
+
+- `scope` — the npm scope every scoped package name, dependency specifier, and
+  emitted import specifier carries. Defaults to `@microservices`.
+- `roots` — an object whose recognised keys are `microservice`, `common`, and
+  `spa`, each a path (relative to the repository root) to the directory whose direct
+  subdirectories are that category's packages. They default to `packages/microservices`,
+  `packages/common`, and `packages/spa`.
+
+Every declared path is relative to the repository root. A project with no
+`scaffold.config.json` is valid and takes all four defaults, which is exactly how
+this repository is configured. A rejected config file fails the run before any
+package is discovered or built, reporting one diagnostic per rejected value that
+names the JSON key path, the offending value, and why it was rejected.
 
 ## Project structure
 
@@ -230,7 +270,6 @@ Copy `.env.example` to `.env` and adjust. See `.env.example` for all available v
 | `npm run build` | Build all packages in dependency order. |
 | `npm run typecheck --workspaces` | Typecheck all packages. |
 | `npm run lint --workspaces` | Lint all packages. |
-| `sh scripts/rename-scope.sh @your-product` | Rebrand the npm scope after cloning (see "Adopting this scaffold"). |
 
 ### How a build order is produced
 

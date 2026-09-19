@@ -44,12 +44,16 @@ import { describe, expect, it } from "vitest";
 import * as fc from "fast-check";
 
 import {
-  SCOPE_DIR,
   type BuildPlan,
   type StagedPackage,
 } from "../src/build-plan.js";
 import type { ConsumerPackage } from "../src/discovery.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
 import { executeBuildPlan, type CommandRunner } from "../src/image-tree.js";
+
+/** The Image_Tree scope directory, derived from the default-config context. */
+const SCOPE_DIR = projectContext(defaultEffectiveConfig()).scopeDir;
 
 /** One recorded runner invocation, captured before any throw. */
 interface Invocation {

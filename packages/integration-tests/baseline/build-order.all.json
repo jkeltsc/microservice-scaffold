@@ -1,0 +1,24 @@
+{
+  "selector": "*",
+  "buildOrder": [
+    "packages/contracts",
+    "packages/build-tools",
+    "packages/common/config",
+    "packages/common/extended-config",
+    "packages/microservices/microservice1",
+    "packages/microservices/microservice2",
+    "packages/microservices/microservice3",
+    "packages/overseer",
+    "packages/integration-tests",
+    "packages/spa/demo"
+  ],
+  "projectList": [
+    "packages/contracts",
+    "packages/common/config",
+    "packages/common/extended-config",
+    "packages/microservices/microservice1",
+    "packages/microservices/microservice2",
+    "packages/microservices/microservice3",
+    "packages/overseer"
+  ]
+}

@@ -48,6 +48,8 @@ import * as fc from "fast-check";
 import { buildPlanFrom } from "../src/build-plan.js";
 import { generateRegistry } from "../src/generate-registry.js";
 import { resolveSelected } from "../src/selector.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
 import {
   workspaceBuildOrder,
   type WorkspaceNode,
@@ -58,15 +60,20 @@ import {
   type Discovery,
 } from "../src/discovery.js";
 import type { ReadDependencies } from "../src/required-dependencies.js";
-import {
-  BUILD_TOOLS,
-  CONTRACTS,
-  FRAMEWORK_SINGLETONS,
-  NAMESPACE_CONTAINER,
-  OVERSEER,
-  WORKSPACE_SCOPE,
-  type ConsumerCategory,
-} from "../src/framework.js";
+import { type ConsumerCategory } from "../src/framework.js";
+
+/** Default-config context threaded into the Workspace_Build_Order derivation. */
+const CONTEXT = projectContext(defaultEffectiveConfig());
+
+// The scope, per-category roots, and the four Framework_Singletons (each with
+// its scope-composed name) come from the run's context, not from framework.ts's
+// scope-free surface. The framework records are the context's FrameworkSingletons
+// so `.name` composes under this run's scope (R3.7).
+const WORKSPACE_SCOPE = CONTEXT.config.scope;
+const NAMESPACE_CONTAINER = CONTEXT.roots;
+const FRAMEWORK_SINGLETONS = CONTEXT.framework.all;
+const { contracts: CONTRACTS, overseer: OVERSEER, buildTools: BUILD_TOOLS } =
+  CONTEXT.framework;
 
 // ---------------------------------------------------------------------------
 // Shared primitives
@@ -445,7 +452,9 @@ describe("Property 2: every prerequisite-forced pair keeps its Pre_Fix_Baseline 
         // domain; guard it anyway so the claim is exactly "no violation ⇒ ...".
         fc.pre(!hasOrderingViolation(baseline, pairs));
 
-        const derived = workspaceBuildOrder(nodes).map((n) => n.packageDir);
+        const derived = workspaceBuildOrder(CONTEXT, nodes).map(
+          (n) => n.packageDir,
+        );
 
         // Every FORCED pair keeps its relative order in the derived order.
         for (const [prerequisite, dependent] of pairs) {
@@ -466,7 +475,7 @@ describe("Property 2: every prerequisite-forced pair keeps its Pre_Fix_Baseline 
     // The 3.18 shape carries no Ordering_Violation.
     expect(hasOrderingViolation(baseline, pairs)).toBe(false);
 
-    const derived = workspaceBuildOrder(nodes).map((n) => n.packageDir);
+    const derived = workspaceBuildOrder(CONTEXT, nodes).map((n) => n.packageDir);
     for (const [prerequisite, dependent] of pairs) {
       expect(positionOf(derived, prerequisite)).toBeLessThan(
         positionOf(derived, dependent),
@@ -550,7 +559,12 @@ function readerFor(layout: Layout): ReadDependencies {
 }
 
 function planOf(layout: Layout, selector: string | undefined) {
-  return buildPlanFrom(selector, discoveryOf(layout), readerFor(layout));
+  return buildPlanFrom(
+    projectContext(defaultEffectiveConfig()),
+    selector,
+    discoveryOf(layout),
+    readerFor(layout),
+  );
 }
 
 /** The Microservice_Identifiers a layout discovers, in discovery (directory) order. */

@@ -38,8 +38,9 @@ import {
   discoverPackages,
   readDependencySpecifiers,
 } from "./discovery.js";
+import { requireProjectContext } from "./config-loader.js";
 import type { ConsumerCategory } from "./framework.js";
-import { FRAMEWORK_SINGLETONS } from "./framework.js";
+import { type ProjectContext } from "./project-context.js";
 import type { ReadDependencies } from "./required-dependencies.js";
 
 /**
@@ -75,19 +76,22 @@ function orderedBuildFailedError(packageDir: string, status: number): Error {
 /**
  * Collects every workspace package as a node of the build graph (R12.1).
  *
- * That is the four packages the scaffold owns, named in framework.ts, plus every
- * package discovery found under the three category directories. Called from
+ * That is the four packages the scaffold owns, plus every package discovery
+ * found under the three category directories. Called from
  * {@link runOrderedBuildCli}.
  *
+ * @param context the run's per-run derivation of its Effective_Config; supplies
+ *   the four Framework_Singletons with their scope-composed names (R1.9, R3.7).
  * @param discovery the discovery result; supplies every Consumer_Package.
  * @param readDependencies reads a Framework_Singleton's own specifiers, which
  *   discovery never records.
  */
 export function workspaceNodesFrom(
+  context: ProjectContext,
   discovery: Discovery,
   readDependencies: ReadDependencies,
 ): readonly WorkspaceNode[] {
-  const frameworkNodes: WorkspaceNode[] = FRAMEWORK_SINGLETONS.map(
+  const frameworkNodes: WorkspaceNode[] = context.framework.all.map(
     (singleton) => ({
       packageDir: singleton.packageDir,
       name: singleton.name,
@@ -132,6 +136,7 @@ export function workspaceNodesFrom(
  * @throws `[shared:unresolved]` for an unresolvable specifier.
  */
 export function workspaceBuildOrder(
+  context: ProjectContext,
   nodes: readonly WorkspaceNode[],
 ): readonly WorkspaceNode[] {
   // Partition the workspace by tier and category. Statement 3 (common) and
@@ -162,7 +167,9 @@ export function workspaceBuildOrder(
     .filter((node) => node.tier === "microservice")
     .map((node) => node.packageDir.slice(node.packageDir.lastIndexOf("/") + 1));
 
-  const order = buildSequence({
+  // The Build_Sequence derivation runs against the run's context (R1.9): no part
+  // of the order comes from the `workspaces` entry order.
+  const order = buildSequence(context, {
     common,
     microservices: microserviceIdentifiers,
     spa,
@@ -175,7 +182,11 @@ export function workspaceBuildOrder(
   // Prerequisite_Graph (`[build-order:cycle]`), and rejects an order placing a
   // package ahead of one of its prerequisites (`[build-order:prerequisite]`).
   // Every discovered microservice is a Selected_Microservice for this path.
-  assertBuildOrder(order, prerequisiteEdges(nodes, microserviceIdentifiers));
+  assertBuildOrder(
+    context,
+    order,
+    prerequisiteEdges(context, nodes, microserviceIdentifiers),
+  );
 
   // Map each SequencedPackage back to its input WorkspaceNode by packageDir, so
   // the return type stays `readonly WorkspaceNode[]` for `runOrderedBuild` and
@@ -250,9 +261,16 @@ export function runOrderedBuild(
  * written to stderr and exits 1.
  */
 export function runOrderedBuildCli(): void {
+  // requireProjectContext reports any Config_Diagnostic to stderr and exits 1
+  // before any order is derived (R1.10); on success it returns the run's context.
+  const context = requireProjectContext();
   try {
-    const nodes = workspaceNodesFrom(discoverPackages(), readDependencySpecifiers);
-    const order = workspaceBuildOrder(nodes);
+    const nodes = workspaceNodesFrom(
+      context,
+      discoverPackages(context),
+      readDependencySpecifiers(context),
+    );
+    const order = workspaceBuildOrder(context, nodes);
     runOrderedBuild(order);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

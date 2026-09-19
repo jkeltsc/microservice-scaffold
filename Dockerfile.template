@@ -50,6 +50,17 @@
 # Placeholder selector: overridden per build via `--build-arg MICROSERVICES=...`.
 ARG MICROSERVICES=*
 
+# The Configured_Scope's workspace-symlink namespace, interpolated into the
+# prod-deps stage's symlink-removal step. Its default value is the Scope_Default
+# (`@microservices`) — the single scope literal this template still carries, and
+# the one place outside packages/build-tools/src/project-config.ts that spells
+# it. A project whose Configured_Scope differs from the Scope_Default passes
+# `--build-arg WORKSPACE_SCOPE=<scope>` alongside `--build-arg MICROSERVICES=<selector>`.
+# The Emit_Script neither reads nor writes the scope and emits no ARG line for
+# it, so this default's presence in committed source keeps the generated
+# Dockerfile byte-identical to the Pre_Change_Baseline for a default-scope build.
+ARG WORKSPACE_SCOPE=@microservices
+
 # Base-image version pins: overridable via --build-arg without touching this
 # file. Defaults match the versions the CI workflow forwards.
 ARG NODE_VERSION=22
@@ -98,6 +109,12 @@ RUN npx tsc --build packages/contracts packages/build-tools \
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS prod-deps
 WORKDIR /app
 
+# An ARG declaration does not cross a stage boundary, so WORKSPACE_SCOPE must be
+# re-declared here for the symlink-removal step below to see it — exactly as the
+# build stage re-declares MICROSERVICES for the same reason. The default is
+# repeated so a build that overrides neither arg still removes the right scope.
+ARG WORKSPACE_SCOPE=@microservices
+
 # --- MANIFEST_COPY_PRODDEPS ---
 
 # Same reason as the build stage: `npm ci` here also runs the root `prepare`
@@ -112,7 +129,7 @@ RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --workspaces --includ
 # directories come from the build stage's /out overlay, and Docker cannot COPY a
 # directory over an existing symlink — so drop the workspace-scope symlinks here.
 # Only third-party runtime dependencies remain to be copied from this stage.
-RUN rm -rf node_modules/@microservices
+RUN rm -rf node_modules/${WORKSPACE_SCOPE}
 
 # ---------------------------------------------------------------------------
 # Stage: runtime - minimal image that runs the Overseer.

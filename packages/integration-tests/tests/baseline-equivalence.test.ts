@@ -50,22 +50,36 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
 import { buildImageTree } from "@microservices/build-tools/dist/image-tree.js";
+import { buildPlan } from "@microservices/build-tools/dist/build-plan.js";
 import { generateRegistry } from "@microservices/build-tools/dist/generate-registry.js";
+import { discoverPackages } from "@microservices/build-tools/dist/discovery.js";
+import { defaultEffectiveConfig } from "@microservices/build-tools/dist/project-config.js";
+import { projectContext } from "@microservices/build-tools/dist/project-context.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // tests/ -> integration-tests -> packages -> repo root
 const repoRoot = resolve(__dirname, "..", "..", "..");
+
+/** The compiled build-tools module directory the recorder imports entry points from. */
+const DIST = resolve(repoRoot, "packages/build-tools/dist");
+
+/** Where the recorded Pre_Change_Baseline fixtures live (task 1.2). */
+const BASELINE_DIR = resolve(__dirname, "..", "baseline");
 
 /** The generated (gitignored) registry file `generateRegistry` writes. */
 const REGISTRY_PATH = resolve(
   repoRoot,
   "packages/overseer/src/generated/microservice-registry.ts",
 );
+
+/** The compiled Repo_Invariant_Checker bin the root `check:invariants` runs. */
+const CHECK_INVARIANTS_BIN = resolve(DIST, "bin/check-repo-invariants.js");
 
 /** Real assembly runs a full `tsc --build`; give each case room. */
 const ASSEMBLE_TIMEOUT_MS = 180_000;
@@ -184,7 +198,7 @@ function generateRegistryText(selector: string): string {
   try {
     process.chdir(repoRoot);
     process.env.MICROSERVICES = selector;
-    generateRegistry(selector);
+    generateRegistry(projectContext(defaultEffectiveConfig()), selector);
     return readFileSync(REGISTRY_PATH, "utf8");
   } finally {
     writeFileSync(REGISTRY_PATH, previousRegistry, "utf8");
@@ -209,7 +223,15 @@ function assemble(selector: string): { outDir: string } {
   try {
     process.chdir(repoRoot);
     process.env.MICROSERVICES = selector;
-    buildImageTree(outDir);
+    // The CLI (runImageTreeCli) exits the process on a Config_Diagnostic, so a
+    // test cannot call it; it replicates the CLI orchestration instead —
+    // discover, generate the registry, derive the plan, then hand context+plan
+    // to the domain function.
+    const context = projectContext(defaultEffectiveConfig());
+    const discovery = discoverPackages(context);
+    generateRegistry(context, selector, discovery);
+    const plan = buildPlan(context, selector);
+    buildImageTree(context, plan, outDir);
   } finally {
     process.chdir(previousCwd);
     if (previousSelector === undefined) {
@@ -371,4 +393,410 @@ describe("Baseline Image_Tree equivalence (R14.7, R5.6, R7.6, R5.8)", () => {
       });
     });
   }
+});
+
+// ===========================================================================
+// Task 1.3 — the Requirement 15 comparisons this suite owns.
+//
+// The three suites below recompute four observables the same way
+// `scripts/record-baseline.js` records them, and compare each against its
+// committed fixture under `packages/integration-tests/baseline/`:
+//
+//   - Package_Discovery facts               → baseline/discovery.json          (R15.3)
+//   - workspace build order + Project_List  → baseline/build-order.<slug>.json (R15.4)
+//   - generated registry bytes              → baseline/registry.<slug>.ts      (R15.10)
+//   - Repo_Invariant_Checker output         → baseline/check-invariants.txt    (R7.8)
+//
+// These are EXAMPLE-BASED comparisons over this repository's default
+// configuration, not generated inputs (design "Integration tests"; task 1.3).
+//
+// Failure shape (R15.12, R15.13, R14.12): every comparison assertion carries a
+// message naming the observable compared, the recorded value, and the observed
+// value; a mismatch fails the case with a non-zero suite exit. None of these
+// suites writes into the checked-out tree — the registry suite snapshots the
+// gitignored registry file's bytes and writes them back with `writeFileSync`,
+// never through git — so a run leaves the tree exactly as it found it.
+//
+// And per R15.13, the suite must fail if a Config_Diagnostic was reported during
+// the run even when every observable matches. On the Pre_Change_Baseline there
+// is no configuration layer, so `reportedConfigDiagnostics()` finds no loader to
+// consult and yields none; once the layer lands (task 2.15) the same helper
+// loads the Effective_Config for this repository and surfaces any diagnostic,
+// and the dedicated case below fails the whole suite when one appears.
+//
+// Recomputation goes through the SAME compiled entry points and the SAME
+// `withContext` shim the recorder uses, so the observed value is produced the
+// way the recorded value was — the comparison is meaningful before and after the
+// config-threading changes the module signatures.
+
+/**
+ * The Selectors the build-order and registry fixtures were recorded for, with
+ * the filename slug each takes (recorder `SELECTORS.buildAndRegistry`): `*` →
+ * `all`, blank/unset → `blank`, `microservice1,microservice2` →
+ * `microservice1-microservice2`.
+ */
+const BUILD_AND_REGISTRY_SELECTORS = [
+  { slug: "all", value: "*" },
+  { slug: "blank", value: "" },
+  {
+    slug: "microservice1-microservice2",
+    value: "microservice1,microservice2",
+  },
+] as const;
+
+/** Imports a compiled build-tools module by its dist filename. */
+async function distModule(fileName: string): Promise<Record<string, unknown>> {
+  return import(pathToFileURL(resolve(DIST, fileName)).href) as Promise<
+    Record<string, unknown>
+  >;
+}
+
+/**
+ * Builds the default ProjectContext when the config-threading modules exist
+ * (post task 2.14) and returns `undefined` on the Pre_Change_Baseline where they
+ * do not — the exact contract of the recorder's `loadDefaultContext()`, so the
+ * test threads the same context (or the same absence of one) into every entry
+ * point the recorder did. It never changes the recomputed observable: the
+ * default context reproduces the baseline scope and roots by construction (R1.7).
+ */
+async function loadDefaultContext(): Promise<unknown> {
+  try {
+    const projectConfig = await distModule("project-config.js");
+    const projectContext = await distModule("project-context.js");
+    const config = (projectConfig.defaultEffectiveConfig as () => unknown)();
+    return (projectContext.projectContext as (c: unknown) => unknown)(config);
+  } catch {
+    return undefined; // Pre_Change_Baseline: no configuration layer yet.
+  }
+}
+
+/**
+ * Calls an entry point the way the recorder's `withContext` does: prepend the
+ * default context as the first argument only when the function's arity says it
+ * expects one, so the same call site drives the baseline signature
+ * `fn(...args)` and the threaded signature `fn(context, ...args)` alike.
+ */
+function withContext<T>(
+  fn: (...a: unknown[]) => T,
+  context: unknown,
+  ...args: unknown[]
+): T {
+  return context !== undefined && fn.length > args.length
+    ? fn(context, ...args)
+    : fn(...args);
+}
+
+/**
+ * Runs `run` with MICROSERVICES set to `value` (unset when `undefined`),
+ * restoring the previous environment afterward so one Selector's env never
+ * leaks into the next. Mirrors the recorder's `withSelectorEnv`.
+ */
+function withSelectorEnv<T>(value: string | undefined, run: () => T): T {
+  const previous = process.env.MICROSERVICES;
+  if (value === undefined) {
+    delete process.env.MICROSERVICES;
+  } else {
+    process.env.MICROSERVICES = value;
+  }
+  try {
+    return run();
+  } finally {
+    if (previous === undefined) {
+      delete process.env.MICROSERVICES;
+    } else {
+      process.env.MICROSERVICES = previous;
+    }
+  }
+}
+
+/** Reads a recorded JSON fixture and parses it. */
+function readJsonFixture(name: string): unknown {
+  return JSON.parse(readFileSync(resolve(BASELINE_DIR, name), "utf8"));
+}
+
+/** Reads a recorded text fixture verbatim. */
+function readTextFixture(name: string): string {
+  return readFileSync(resolve(BASELINE_DIR, name), "utf8");
+}
+
+/**
+ * The Config_Diagnostics reported for THIS repository's Effective_Config, or an
+ * empty list on the Pre_Change_Baseline where the configuration layer does not
+ * exist. Once the Config_Loader lands (task 2.15) it loads the config over the
+ * real Project_Directory and returns any diagnostics; the R15.13 case fails the
+ * suite when the list is non-empty.
+ */
+async function reportedConfigDiagnostics(): Promise<readonly unknown[]> {
+  let loader: Record<string, unknown>;
+  try {
+    loader = await distModule("config-loader.js");
+  } catch {
+    return []; // Pre_Change_Baseline: no Config_Loader to consult.
+  }
+  const load = loader.loadProjectConfigForProjectDirectory as
+    | ((projectDir: string) => { readonly diagnostics?: readonly unknown[] })
+    | undefined;
+  if (typeof load !== "function") {
+    return [];
+  }
+  const outcome = load(repoRoot);
+  return outcome.diagnostics ?? [];
+}
+
+// ---------------------------------------------------------------------------
+// 4. Package_Discovery equivalence (R15.3)
+// ---------------------------------------------------------------------------
+
+/** One package's recorded/observed discovery facts (recorder `recordDiscovery`). */
+interface DiscoveryFact {
+  category: string;
+  dirName: string;
+  packageDir: string;
+  name: string;
+  buildKind: string;
+  dependencySpecifiers: string[];
+}
+
+/**
+ * Recompute the discovery facts exactly as the recorder does: flatten every
+ * category's members, project the six compared fields, sort each package's
+ * Dependency_Specifiers, and order the packages by package directory so the
+ * result is stable.
+ */
+function observedDiscoveryFacts(context: unknown): DiscoveryFact[] {
+  const discovery = withContext(
+    discoverPackages as unknown as (...a: unknown[]) => {
+      byCategory: Record<string, readonly Record<string, unknown>[]>;
+    },
+    context,
+  );
+
+  return Object.values(discovery.byCategory)
+    .flat()
+    .map((pkg) => ({
+      category: pkg.category as string,
+      dirName: pkg.dirName as string,
+      packageDir: pkg.packageDir as string,
+      name: pkg.name as string,
+      buildKind: pkg.buildKind as string,
+      dependencySpecifiers: [
+        ...(pkg.dependencySpecifiers as readonly string[]),
+      ].sort(),
+    }))
+    .sort((a, b) =>
+      a.packageDir < b.packageDir ? -1 : a.packageDir > b.packageDir ? 1 : 0,
+    );
+}
+
+describe("Baseline Package_Discovery equivalence (R15.3)", () => {
+  let context: unknown;
+
+  beforeAll(async () => {
+    context = await loadDefaultContext();
+  });
+
+  it("yields the recorded Consumer_Package set with equal facts for every member", () => {
+    const recorded = readJsonFixture("discovery.json") as DiscoveryFact[];
+    const observed = observedDiscoveryFacts(context);
+
+    // Compare the whole set first so a mismatch names the recorded and observed
+    // structures in one diff (R15.12 observable: "discovery facts").
+    expect(
+      observed,
+      "discovery facts (baseline/discovery.json): observed set differs from recorded",
+    ).toEqual(recorded);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. Workspace build order + Project_List equivalence, per Selector (R15.4)
+// ---------------------------------------------------------------------------
+
+interface BuildOrderRecord {
+  selector: string | undefined;
+  buildOrder: string[];
+  projectList: string[];
+}
+
+describe("Baseline build order and Project_List equivalence (R15.4)", () => {
+  let context: unknown;
+  let workspaceMod: Record<string, unknown>;
+  let discoveryMod: Record<string, unknown>;
+  let devMod: Record<string, unknown>;
+  let buildPlanMod: Record<string, unknown>;
+
+  beforeAll(async () => {
+    context = await loadDefaultContext();
+    workspaceMod = await distModule("workspace-build-order.js");
+    discoveryMod = await distModule("discovery.js");
+    devMod = await distModule("dev-supervisor.js");
+    buildPlanMod = await distModule("build-plan.js");
+  });
+
+  function observed(value: string | undefined): BuildOrderRecord {
+    const readDepsFn = discoveryMod.readDependencySpecifiers as (
+      ...a: unknown[]
+    ) => unknown;
+    // Post-change, `readDependencySpecifiers(context)` returns the bound reader;
+    // pre-change (no context) it IS the reader. Bind it the same way the recorder
+    // does, so `workspaceNodesFrom` receives a `(packageDir) => string[]` either
+    // way and the recomputed observable is unchanged (R15.4).
+    const readDeps =
+      context !== undefined ? readDepsFn(context) : readDepsFn;
+    const discover = discoveryMod.discoverPackages as (...a: unknown[]) => unknown;
+    const nodesFrom = workspaceMod.workspaceNodesFrom as (
+      ...a: unknown[]
+    ) => unknown;
+    const buildOrderFn = workspaceMod.workspaceBuildOrder as (
+      ...a: unknown[]
+    ) => readonly { packageDir: string }[];
+    const projectListFn = devMod.devProjectList as (
+      ...a: unknown[]
+    ) => readonly string[];
+    const buildPlanFn = buildPlanMod.buildPlan as (
+      ...a: unknown[]
+    ) => { readonly tscRoots: readonly string[] };
+
+    return withSelectorEnv(value, () => {
+      const discovery = withContext(discover, context);
+      const nodes = withContext(nodesFrom, context, discovery, readDeps);
+      const buildOrder = withContext(buildOrderFn, context, nodes).map(
+        (node) => node.packageDir,
+      );
+      // `devProjectList` is now `(context, plan)`: derive the plan for this
+      // Selector (`buildPlan(context, value)`) and take its Project_List. On the
+      // Pre_Change_Baseline (no context) `devProjectList(value)` was the reader,
+      // so fall back to that call shape.
+      const projectList =
+        context !== undefined
+          ? [
+              ...projectListFn(
+                context,
+                buildPlanFn(context, value),
+              ),
+            ]
+          : [...projectListFn(value)];
+      return { selector: value, buildOrder, projectList };
+    });
+  }
+
+  for (const { slug, value } of BUILD_AND_REGISTRY_SELECTORS) {
+    describe(`selector ${slug}`, () => {
+      it("derives the recorded workspace build order, position by position", () => {
+        const recorded = readJsonFixture(
+          `build-order.${slug}.json`,
+        ) as BuildOrderRecord;
+        expect(
+          observed(value).buildOrder,
+          `build order (baseline/build-order.${slug}.json): observed order differs from recorded`,
+        ).toEqual(recorded.buildOrder);
+      });
+
+      it("derives the recorded Project_List, position by position", () => {
+        const recorded = readJsonFixture(
+          `build-order.${slug}.json`,
+        ) as BuildOrderRecord;
+        expect(
+          observed(value).projectList,
+          `Project_List (baseline/build-order.${slug}.json): observed list differs from recorded`,
+        ).toEqual(recorded.projectList);
+      });
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 6. Generated registry bytes equivalence, per Selector (R15.10)
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate the registry for `selector` the way the recorder does, read the
+ * emitted bytes back, and restore the prior (gitignored) file contents with
+ * `writeFileSync` — never git — so the checked-out tree is left as it was found.
+ */
+function observedRegistryBytes(
+  context: unknown,
+  value: string | undefined,
+): string {
+  const previousRegistry = readFileSync(REGISTRY_PATH, "utf8");
+  const previousCwd = process.cwd();
+  try {
+    process.chdir(repoRoot);
+    return withSelectorEnv(value, () => {
+      // `generateRegistry` is now `(context, selector, discovery?)`. Its only
+      // non-defaulted parameter is `context`, so the arity-based `withContext`
+      // cannot detect it needs one; call it directly with the loaded context.
+      // On the Pre_Change_Baseline (no context) it was `generateRegistry(value)`.
+      const generate = generateRegistry as unknown as (...a: unknown[]) => void;
+      if (context !== undefined) {
+        generate(context, value);
+      } else {
+        generate(value);
+      }
+      return readFileSync(REGISTRY_PATH, "utf8");
+    });
+  } finally {
+    writeFileSync(REGISTRY_PATH, previousRegistry, "utf8");
+    process.chdir(previousCwd);
+  }
+}
+
+describe("Baseline generated registry bytes equivalence (R15.10)", () => {
+  let context: unknown;
+
+  beforeAll(async () => {
+    context = await loadDefaultContext();
+  });
+
+  for (const { slug, value } of BUILD_AND_REGISTRY_SELECTORS) {
+    it(`emits byte-identical registry for selector ${slug}`, () => {
+      const recorded = readTextFixture(`registry.${slug}.ts`);
+      const observed = observedRegistryBytes(context, value);
+      expect(
+        observed,
+        `registry bytes (baseline/registry.${slug}.ts): observed bytes differ from recorded`,
+      ).toBe(recorded);
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// 7. Repo_Invariant_Checker output equivalence (R7.8)
+// ---------------------------------------------------------------------------
+
+describe("Baseline Repo_Invariant_Checker output equivalence (R7.8)", () => {
+  it("produces the recorded combined stdout+stderr from the compiled checker", () => {
+    const recorded = readTextFixture("check-invariants.txt");
+    const result = spawnSync("node", [CHECK_INVARIANTS_BIN], {
+      cwd: repoRoot,
+      env: process.env,
+      encoding: "utf8",
+    });
+    const observed = `${result.stdout}${result.stderr}`;
+    expect(
+      observed,
+      "Repo_Invariant_Checker output (baseline/check-invariants.txt): observed output differs from recorded",
+    ).toBe(recorded);
+    // A clean baseline run exits zero; a non-zero exit is itself a divergence.
+    expect(
+      result.status,
+      "Repo_Invariant_Checker exit status: expected 0 on the clean baseline tree",
+    ).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R15.13 — a Config_Diagnostic fails the suite even when observables match.
+// ---------------------------------------------------------------------------
+
+describe("Baseline configuration is diagnostic-free (R15.13)", () => {
+  it("reports no Config_Diagnostic for this repository's Effective_Config", async () => {
+    const diagnostics = await reportedConfigDiagnostics();
+    expect(
+      diagnostics,
+      `Config_Diagnostics reported during the comparison run: ${JSON.stringify(
+        diagnostics,
+      )} (R15.13 requires the comparison to fail when any is reported, even if every observable matches)`,
+    ).toEqual([]);
+  });
 });

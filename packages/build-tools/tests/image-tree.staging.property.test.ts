@@ -275,19 +275,25 @@ import {
   buildPlanFrom,
   type BuildPlan,
 } from "../src/build-plan.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
 import {
   buildKindOf,
   type ConsumerPackage,
   type Discovery,
 } from "../src/discovery.js";
-import {
-  CONTRACTS,
-  NAMESPACE_CONTAINER,
-  OVERSEER,
-  WORKSPACE_SCOPE,
-  type ConsumerCategory,
-} from "../src/framework.js";
+import { type ConsumerCategory } from "../src/framework.js";
 import type { ReadDependencies } from "../src/required-dependencies.js";
+
+/** Default-config context; scope and roots equal the pre-context baseline. */
+const CONTEXT = projectContext(defaultEffectiveConfig());
+
+// Scope, per-category roots, and the two Framework_Singletons this file names
+// (each with its scope-composed name) come from the run's context, not from
+// framework.ts's scope-free surface (R3.7).
+const WORKSPACE_SCOPE = CONTEXT.config.scope;
+const NAMESPACE_CONTAINER = CONTEXT.roots;
+const { contracts: CONTRACTS, overseer: OVERSEER } = CONTEXT.framework;
 
 /** A discovered Consumer_Package placed in its category's Namespace_Container. */
 function consumerPackage(
@@ -359,7 +365,7 @@ const chainReader: ReadDependencies = (packageDir) => {
 };
 
 function planFor(selector: string): BuildPlan {
-  return buildPlanFrom(selector, chainDiscovery(), chainReader);
+  return buildPlanFrom(CONTEXT, selector, chainDiscovery(), chainReader);
 }
 
 /** Directory names of a plan's BUILD set. */
@@ -457,7 +463,7 @@ describe("Property 10: the STAGE set omits exactly what only a Spa_Package reach
       );
     };
 
-    const plan = buildPlanFrom("*", discovery, reader);
+    const plan = buildPlanFrom(CONTEXT, "*", discovery, reader);
     expect([...plan.stagedDependencies.map((pkg) => pkg.dirName)].sort()).toEqual(
       ["config", "demo", "extended-config"].sort(),
     );

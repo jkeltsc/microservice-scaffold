@@ -75,6 +75,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { discoverPackages, readDependencySpecifiers } from "@microservices/build-tools/dist/discovery.js";
+import { defaultEffectiveConfig } from "@microservices/build-tools/dist/project-config.js";
+import { projectContext } from "@microservices/build-tools/dist/project-context.js";
 import {
   runOrderedBuild,
   workspaceBuildOrder,
@@ -82,6 +84,10 @@ import {
 } from "@microservices/build-tools/dist/workspace-build-order.js";
 import type { CommandRunner } from "@microservices/build-tools/dist/workspace-build-order.js";
 import { pristineWorktree, type PristineWorktreeResult } from "./helpers.js";
+
+/** Default-config context threaded innermost-first (task 5.1); the CLI shell will
+ *  pass the real one in later tasks. */
+const discoveryContext = projectContext(defaultEffectiveConfig());
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // tests/ -> integration-tests -> packages -> repo root
@@ -212,8 +218,12 @@ describe("R12.12 — the ordered pass invokes contracts and build-tools a second
       return { status: 0 };
     };
 
-    const nodes = workspaceNodesFrom(discoverPackages(), readDependencySpecifiers);
-    const order = workspaceBuildOrder(nodes);
+    const nodes = workspaceNodesFrom(
+      discoveryContext,
+      discoverPackages(discoveryContext),
+      readDependencySpecifiers(discoveryContext),
+    );
+    const order = workspaceBuildOrder(discoveryContext, nodes);
 
     // A clean return here IS the "each exiting zero with no error and no warning
     // about the repeat" evidence: runOrderedBuild throws [build-order:failed] on
@@ -269,8 +279,12 @@ describe("R12.12 — the ordered pass invokes contracts and build-tools a second
     // Sanity: the pass visited every workspace node exactly once, so the
     // "second build" of the two bootstrap packages is part of a complete pass
     // rather than an isolated invocation.
-    const nodes = workspaceNodesFrom(discoverPackages(), readDependencySpecifiers);
-    const order = workspaceBuildOrder(nodes);
+    const nodes = workspaceNodesFrom(
+      discoveryContext,
+      discoverPackages(discoveryContext),
+      readDependencySpecifiers(discoveryContext),
+    );
+    const order = workspaceBuildOrder(discoveryContext, nodes);
     expect(recorded).toHaveLength(order.length);
   });
 });
@@ -301,8 +315,12 @@ describe("R4.4 — the ordered pass builds config before extended-config and exi
       return { status: 0 };
     };
 
-    const nodes = workspaceNodesFrom(discoverPackages(), readDependencySpecifiers);
-    const order = workspaceBuildOrder(nodes);
+    const nodes = workspaceNodesFrom(
+      discoveryContext,
+      discoverPackages(discoveryContext),
+      readDependencySpecifiers(discoveryContext),
+    );
+    const order = workspaceBuildOrder(discoveryContext, nodes);
 
     expect(() => runOrderedBuild(order, runner)).not.toThrow();
 
@@ -352,8 +370,12 @@ describe("R4.4 — the ordered pass builds config before extended-config and exi
 
     // Sanity: the pass visited every workspace node exactly once, so config's
     // build preceding extended-config's is part of a complete, all-zero pass.
-    const nodes = workspaceNodesFrom(discoverPackages(), readDependencySpecifiers);
-    const order = workspaceBuildOrder(nodes);
+    const nodes = workspaceNodesFrom(
+      discoveryContext,
+      discoverPackages(discoveryContext),
+      readDependencySpecifiers(discoveryContext),
+    );
+    const order = workspaceBuildOrder(discoveryContext, nodes);
     expect(recorded).toHaveLength(order.length);
   });
 });

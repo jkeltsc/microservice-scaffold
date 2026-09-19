@@ -10,11 +10,16 @@
 //   2. import discipline — no source file crosses a package boundary illegally;
 //   3. dependency direction — a Common_Package points downward only;
 //   4. build-order source — no repository script derives a build order from the
-//      Declared_Array_Sequence by invoking a build with `--workspaces` (2.15).
+//      Declared_Array_Sequence by invoking a build with `--workspaces` (2.15);
+//   5. Load_Bearing_Settings — every Tsc_Project's Resolved_Tsconfig declares
+//      the four TypeScript settings the build depends on (the Tsconfig_Verifier,
+//      R9.11).
 //
 // Sections 1 to 4 are those checks, each a pure function returning its violation
-// messages rather than throwing, so one run reports every problem at once. Section
-// 5 reads the real repository and feeds them; section 6 is the CLI the bin calls.
+// messages rather than throwing, so one run reports every problem at once; the
+// Tsconfig_Verifier (its own module) is appended the same way, its violations
+// rendered to strings. Section 5 reads the real repository and feeds them;
+// section 6 is the CLI the bin calls.
 // Framework and category directory names all come from framework.ts (R10.5).
 //
 // (Requirements R8.9, R12.15–R12.20, R14.4, R14.5, R14.10, R14.13, R14.14, 2.15.)
@@ -23,16 +28,26 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 
 import {
   CONSUMER_CATEGORIES,
-  FRAMEWORK_SINGLETONS,
-  OVERSEER,
   type ConsumerCategory,
 } from "./framework.js";
+import { requireProjectContext } from "./config-loader.js";
 import {
   discoverPackages,
   readDependencySpecifiers,
   type BuildKind,
   type Discovery,
 } from "./discovery.js";
+import { type ProjectContext } from "./project-context.js";
+import {
+  checkRegistryTemplateScope,
+  checkScopeLiterals,
+  readRegistryTemplate,
+} from "./scope-checks.js";
+import {
+  renderTsconfigViolation,
+  resolveTsconfigWithCompiler,
+  verifyTsconfigs,
+} from "./tsconfig-verifier.js";
 
 /** Message prefixes, one per invariant, matching the design's error catalog. */
 const COVERAGE = "[workspaces:coverage]";
@@ -153,7 +168,10 @@ interface OwningPackage {
  * innermost package containing it — which matters when one package sits inside
  * another's private content. Both tiers share the list; the SPA rule spans both.
  */
-function packagesByDepth(discovery: Discovery): OwningPackage[] {
+function packagesByDepth(
+  context: ProjectContext,
+  discovery: Discovery,
+): OwningPackage[] {
   const consumers: OwningPackage[] = CONSUMER_CATEGORIES.flatMap((category) =>
     discovery.byCategory[category].map((pkg) => ({
       packageDir: pkg.packageDir,
@@ -161,7 +179,7 @@ function packagesByDepth(discovery: Discovery): OwningPackage[] {
       buildKind: pkg.buildKind,
     })),
   );
-  const frameworks: OwningPackage[] = FRAMEWORK_SINGLETONS.map((singleton) => ({
+  const frameworks: OwningPackage[] = context.framework.all.map((singleton) => ({
     packageDir: singleton.packageDir,
     category: undefined,
     buildKind: "tsc-project",
@@ -363,6 +381,7 @@ function importSpecifiers(source: string): string[] {
  * Overseer (R14.5), and anything compiled by `tsc` naming a SPA (R14.13, R14.14).
  */
 function importViolation(
+  context: ProjectContext,
   discovery: Discovery,
   owner: OwningPackage,
   file: string,
@@ -379,7 +398,7 @@ function importViolation(
   const target = packageNameOf(specifier);
 
   if (owner.category === "microservice") {
-    if (target === OVERSEER.name) {
+    if (target === context.framework.overseer.name) {
       return `${PEER} "${file}" imports "${specifier}", the Overseer`;
     }
 
@@ -423,11 +442,12 @@ function importViolation(
  * test sources are treated alike (R14.4).
  */
 export function checkImportDiscipline(
+  context: ProjectContext,
   discovery: Discovery,
   files: readonly string[],
   readSource: (file: string) => string,
 ): readonly string[] {
-  const packages = packagesByDepth(discovery);
+  const packages = packagesByDepth(context, discovery);
   const messages: string[] = [];
 
   for (const file of [...files].sort(compareStrings)) {
@@ -436,7 +456,13 @@ export function checkImportDiscipline(
       continue;
     }
     for (const specifier of importSpecifiers(readSource(file))) {
-      const violation = importViolation(discovery, owner, file, specifier);
+      const violation = importViolation(
+        context,
+        discovery,
+        owner,
+        file,
+        specifier,
+      );
       if (violation !== undefined) {
         messages.push(violation);
       }
@@ -457,9 +483,13 @@ export function checkImportDiscipline(
  * allowed. A `common -> spa` specifier is not reported here either: R8.9 prohibits
  * exactly this pair, and required-dependencies.ts covers the SPA case.
  */
-function pointsUpward(discovery: Discovery, specifier: string): boolean {
+function pointsUpward(
+  context: ProjectContext,
+  discovery: Discovery,
+  specifier: string,
+): boolean {
   return (
-    specifier === OVERSEER.name ||
+    specifier === context.framework.overseer.name ||
     discovery.byName.get(specifier)?.category === "microservice"
   );
 }
@@ -473,6 +503,7 @@ function pointsUpward(discovery: Discovery, specifier: string): boolean {
  * `@microservices`-scoped specifiers reach here; that is what discovery records.
  */
 export function checkDependencyDirection(
+  context: ProjectContext,
   discovery: Discovery,
 ): readonly string[] {
   const messages: string[] = [];
@@ -483,7 +514,7 @@ export function checkDependencyDirection(
 
   for (const pkg of commonPackages) {
     for (const specifier of pkg.dependencySpecifiers) {
-      if (pointsUpward(discovery, specifier)) {
+      if (pointsUpward(context, discovery, specifier)) {
         messages.push(
           `${DIRECTION} Common_Package "${pkg.packageDir}" depends on "${specifier}"; a Common_Package must point downward only`,
         );
@@ -700,12 +731,16 @@ function resolveWorkspaceEntries(
  * every one of the scaffold's own packages plus every discovered package, which is
  * the set an entry is required for (R12.15).
  */
-function workspacePackages(discovery: Discovery): readonly WorkspacePackage[] {
+function workspacePackages(
+  context: ProjectContext,
+  discovery: Discovery,
+): readonly WorkspacePackage[] {
+  const readDeps = readDependencySpecifiers(context);
   return [
-    ...FRAMEWORK_SINGLETONS.map((singleton) => ({
+    ...context.framework.all.map((singleton) => ({
       packageDir: singleton.packageDir,
       name: singleton.name,
-      dependencySpecifiers: readDependencySpecifiers(singleton.packageDir),
+      dependencySpecifiers: readDeps(singleton.packageDir),
     })),
     ...CONSUMER_CATEGORIES.flatMap(
       (category) => discovery.byCategory[category],
@@ -758,12 +793,15 @@ function sourceFilesUnder(dir: string): string[] {
  * are walked because the SPA-import rule ranges over everything compiled by `tsc`; the
  * escape and peer rules never fire on those files.
  */
-function consumerSourceFiles(discovery: Discovery): readonly string[] {
+function consumerSourceFiles(
+  context: ProjectContext,
+  discovery: Discovery,
+): readonly string[] {
   const packageDirs = [
     ...CONSUMER_CATEGORIES.flatMap((category) =>
       discovery.byCategory[category].map((pkg) => pkg.packageDir),
     ),
-    ...FRAMEWORK_SINGLETONS.map((singleton) => singleton.packageDir),
+    ...context.framework.all.map((singleton) => singleton.packageDir),
   ];
   return packageDirs.flatMap((packageDir) =>
     SOURCE_ROOTS.flatMap((root) => sourceFilesUnder(`${packageDir}/${root}`)),
@@ -823,20 +861,39 @@ function repoScriptSources(): readonly ScriptSource[] {
     .map((path) => ({ source: path, text: readFileSync(path, "utf8") }));
 }
 
-/** Runs all four checks over the real repository and returns every message. */
-function collectViolations(): readonly string[] {
-  const discovery = discoverPackages();
+/**
+ * Runs all four checks over the real repository and returns every message.
+ *
+ * Takes the run's {@link ProjectContext} and its {@link Discovery} (R7.1): the
+ * peer, Overseer, Spa_Package and dependency-direction rules compare against
+ * `context.framework.overseer.name` and the context-composed names, and
+ * Workspace_Coverage evaluates the four Framework_Singleton directories plus every
+ * Consumer_Package discovered under the configured roots. Every pre-existing
+ * violation message and tag is unchanged.
+ */
+export function collectViolations(
+  context: ProjectContext,
+  discovery: Discovery,
+): readonly string[] {
   const entries = resolveWorkspaceEntries(readWorkspacePatterns());
 
   return [
-    ...checkWorkspaceCoverage(entries, workspacePackages(discovery)),
+    ...checkWorkspaceCoverage(entries, workspacePackages(context, discovery)),
     ...checkImportDiscipline(
+      context,
       discovery,
-      consumerSourceFiles(discovery),
+      consumerSourceFiles(context, discovery),
       (file) => readFileSync(file, "utf8"),
     ),
-    ...checkDependencyDirection(discovery),
+    ...checkDependencyDirection(context, discovery),
     ...checkBuildOrderSource(rootManifestScripts(), repoScriptSources()),
+    ...verifyTsconfigs(
+      context,
+      discovery,
+      resolveTsconfigWithCompiler,
+    ).map(renderTsconfigViolation),
+    ...checkRegistryTemplateScope(context, readRegistryTemplate),
+    ...checkScopeLiterals(),
   ];
 }
 
@@ -856,9 +913,14 @@ function collectViolations(): readonly string[] {
  * it is a finding about the repository, not a crash.
  */
 export function runRepoInvariantsCli(): void {
+  // requireProjectContext reports any Config_Diagnostic to stderr and exits 1
+  // before any check runs, which already discharges "perform no check when a
+  // Config_Diagnostic was reported" (R7.10).
+  const context = requireProjectContext();
+
   let messages: readonly string[];
   try {
-    messages = collectViolations();
+    messages = collectViolations(context, discoverPackages(context));
   } catch (error) {
     process.stderr.write(
       `${error instanceof Error ? error.message : String(error)}\n`,

@@ -42,19 +42,29 @@ import * as fc from "fast-check";
 
 import {
   CONSUMER_CATEGORIES,
-  FRAMEWORK_SINGLETONS,
-  NAMESPACE_CONTAINER,
-  WORKSPACE_SCOPE,
   type ConsumerCategory,
 } from "../src/framework.js";
 import {
   discoverPackagesFrom,
-  type ContainerEntry,
+  type RootEntry,
   type Discovery,
-  type ListContainer,
+  type ListRoot,
   type PackageManifest,
   type ReadManifest,
 } from "../src/discovery.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
+
+/** Default-config context; scope equals WORKSPACE_SCOPE and roots equal
+ *  NAMESPACE_CONTAINER, so expected values and lister keys are unchanged. */
+const discoveryContext = projectContext(defaultEffectiveConfig());
+
+// Scope, per-category roots, and the four Framework_Singletons (each with its
+// scope-composed name) come from the run's context, not from framework.ts's
+// scope-free surface (R3.7).
+const WORKSPACE_SCOPE = discoveryContext.config.scope;
+const NAMESPACE_CONTAINER = discoveryContext.roots;
+const FRAMEWORK_SINGLETONS = discoveryContext.framework.all;
 
 // ---------------------------------------------------------------------------
 // In-memory layout model
@@ -102,7 +112,7 @@ const DIR_POOL: readonly string[] = [
 ];
 
 /** Non-package entries a Namespace_Container may hold, none of them discoverable. */
-const NOISE_ENTRIES: readonly ContainerEntry[] = [
+const NOISE_ENTRIES: readonly RootEntry[] = [
   { name: "README.md", isDirectory: false },
   { name: ".DS_Store", isDirectory: false },
   { name: ".cache", isDirectory: true },
@@ -333,7 +343,7 @@ function categoryOfContainer(
  * name order and interleaved with non-package noise, so any ordering in the
  * reported failure is discovery's own doing rather than the lister's.
  */
-function listerFor(layout: Layout): ListContainer {
+function listerFor(layout: Layout): ListRoot {
   return (containerDir) => {
     const category = categoryOfContainer(containerDir);
     if (category === undefined || layout.absent.includes(category)) {
@@ -460,7 +470,11 @@ function runDiscovery(layout: Layout): Outcome {
   try {
     return {
       kind: "ok",
-      discovery: discoverPackagesFrom(listerFor(layout), readerFor(layout)),
+      discovery: discoverPackagesFrom(
+        discoveryContext,
+        listerFor(layout),
+        readerFor(layout),
+      ),
     };
   } catch (error) {
     expect(error).toBeInstanceOf(Error);
@@ -703,5 +717,241 @@ describe("Property 9: category-contract validation is exact, total, and reported
       ),
       { numRuns: 200 },
     );
+  });
+});
+
+// ===========================================================================
+// Feature: config-driven-discovery, Property 13: A non-conforming package fails
+// the run by name
+//
+// For any Synthesized_Tree seeded with a package whose manifest declares no
+// `name`, declares a `name` not mirroring its directory under the Configured_Scope,
+// cannot be read or parsed, or does not satisfy its Consumer_Category's manifest
+// contract, Package_Discovery fails the run with an error naming that package
+// directory and the reason, and records no Consumer_Package, Dependency_Specifier,
+// or build kind for it.
+//
+// This block lives in the discovery-validation property file, which already owns
+// discovery's manifest-validation failures (the design's file table assigns no
+// separate file to Property 13). It exercises the same pure core,
+// `discoverPackagesFrom`, over the in-memory Synthesized_Trees of
+// `arbitraries/tree.ts` — whose `defect` field records the ONE way a seeded
+// package departs from what discovery accepts, so the expected failure and its
+// reason are known by construction rather than recomputed from the module.
+//
+// Validates: Requirements 6.6, 6.12, 6.13
+// ===========================================================================
+
+import {
+  DEFAULT_ROOTS,
+  defectiveTree,
+  packageDirOf,
+  treeInputs,
+  type PackageDefect,
+  type PackageSpec,
+  type TreeDescription,
+} from "./arbitraries/tree.js";
+
+/** The default context the defective-tree discovery runs under: scope
+ *  `@microservices`, the three Root_Defaults — the same one the base of the tree
+ *  arbitraries is composed under. */
+const defectContext = projectContext(defaultEffectiveConfig());
+
+/** The bracketed failure tag Requirement 6.12 attaches to each defect kind. A
+ *  `no-name` fails stage 2 (`[discovery:name]`); a `non-mirroring-name` fails
+ *  stage 3 (`[discovery:mirror]`); an unreadable or unparsable manifest fails
+ *  stage 1 (`[discovery:manifest]`); a broken category contract fails stage 5
+ *  (`[barrel:invalid]`). A microservice carries no barrel contract, so a
+ *  `contract` defect on one is not actually a defect — see `isRealDefect`. */
+function expectedTagOf(defect: PackageDefect): string {
+  switch (defect.kind) {
+    case "no-name":
+      return "[discovery:name]";
+    case "non-mirroring-name":
+      return "[discovery:mirror]";
+    case "unreadable":
+    case "unparsable":
+      return "[discovery:manifest]";
+    case "contract":
+      return "[barrel:invalid]";
+  }
+}
+
+/** Whether a spec's declared defect actually makes discovery fail. A `contract`
+ *  defect only bites a Common_Package (missing barrel) or a Spa_Package (missing
+ *  build script); a Microservice_Package owes neither, so a `contract` defect on
+ *  one leaves a conforming package (R4.5). Every other defect kind always bites. */
+function isRealDefect(spec: PackageSpec): boolean {
+  if (spec.defect === undefined) return false;
+  if (spec.defect.kind === "contract") return spec.category !== "microservice";
+  return true;
+}
+
+/** The defect stage discovery reports first, so the expected tag on a tree with
+ *  several offenders is the earliest failing stage's. Stages run manifest (1) →
+ *  name (2) → mirror (3) → duplicate (4) → contract (5). */
+const STAGE_RANK: Readonly<Record<string, number>> = {
+  "[discovery:manifest]": 1,
+  "[discovery:name]": 2,
+  "[discovery:mirror]": 3,
+  "[barrel:invalid]": 5,
+};
+
+describe("Property 13: a non-conforming package fails the run by name", () => {
+  it("fails naming the offending directory and the reason, recording nothing for it", () => {
+    // Coverage guards: a run with a real defect must be seen (so the property is
+    // not vacuously about clean trees), and so must a clean run (so the accept
+    // side is exercised).
+    let withDefect = 0;
+    let clean = 0;
+
+    fc.assert(
+      fc.property(defectiveTree(), (tree: TreeDescription) => {
+        const offenders = tree.packages.filter(isRealDefect);
+        const { listRoot, readManifest } = treeInputs(tree);
+
+        let thrown: Error | undefined;
+        let discovery:
+          | ReturnType<typeof discoverPackagesFrom>
+          | undefined;
+        try {
+          discovery = discoverPackagesFrom(
+            defectContext,
+            listRoot,
+            readManifest,
+          );
+        } catch (error) {
+          expect(error).toBeInstanceOf(Error);
+          thrown = error as Error;
+        }
+
+        if (offenders.length === 0) {
+          // No real defect: the run succeeds and records every package.
+          clean += 1;
+          expect(thrown, thrown?.message).toBeUndefined();
+          expect(discovery).toBeDefined();
+          return;
+        }
+
+        withDefect += 1;
+
+        // The run fails (R6.12): discovery throws rather than returning.
+        expect(thrown).toBeDefined();
+        if (thrown === undefined) return;
+        const message = thrown.message;
+
+        // The earliest failing stage's tag heads the message (R6.12).
+        const earliestStage = Math.min(
+          ...offenders.map((spec) =>
+            STAGE_RANK[expectedTagOf(spec.defect as PackageDefect)] as number,
+          ),
+        );
+        const firstOffenders = offenders.filter(
+          (spec) =>
+            STAGE_RANK[expectedTagOf(spec.defect as PackageDefect)] ===
+            earliestStage,
+        );
+        const expectedTag = expectedTagOf(
+          firstOffenders[0]?.defect as PackageDefect,
+        );
+        expect(message.startsWith(expectedTag)).toBe(true);
+
+        // The failure names each offender at that stage by its package directory
+        // (R6.12) — the reason is reported alongside the directory in every
+        // stage's message shape.
+        for (const spec of firstOffenders) {
+          expect(message).toContain(`"${packageDirOf(tree, spec)}"`);
+        }
+
+        // Records no Consumer_Package, Dependency_Specifier, or build kind for
+        // the failing run (R6.13): discovery returned nothing at all.
+        expect(discovery).toBeUndefined();
+      }),
+      { numRuns: 300 },
+    );
+
+    expect(withDefect).toBeGreaterThan(0);
+    expect(clean).toBeGreaterThan(0);
+  });
+
+  it("names the directory and reason for each single-defect kind (concrete)", () => {
+    const cases: {
+      readonly spec: PackageSpec;
+      readonly tag: string;
+      readonly reasonFragment: string;
+    }[] = [
+      {
+        spec: {
+          category: "common",
+          dirName: "config",
+          dependencyDirNames: [],
+          defect: { kind: "no-name" },
+        },
+        tag: "[discovery:name]",
+        reasonFragment: "missing or empty",
+      },
+      {
+        spec: {
+          category: "common",
+          dirName: "config",
+          dependencyDirNames: [],
+          defect: { kind: "non-mirroring-name" },
+        },
+        tag: "[discovery:mirror]",
+        reasonFragment: "does not mirror",
+      },
+      {
+        spec: {
+          category: "common",
+          dirName: "config",
+          dependencyDirNames: [],
+          defect: { kind: "unparsable" },
+        },
+        tag: "[discovery:manifest]",
+        reasonFragment: "not parseable",
+      },
+      {
+        spec: {
+          category: "common",
+          dirName: "config",
+          dependencyDirNames: [],
+          defect: { kind: "contract" },
+        },
+        tag: "[barrel:invalid]",
+        reasonFragment: "missing",
+      },
+      {
+        spec: {
+          category: "spa",
+          dirName: "portal",
+          dependencyDirNames: [],
+          defect: { kind: "contract" },
+        },
+        tag: "[barrel:invalid]",
+        reasonFragment: "scripts.build",
+      },
+    ];
+
+    for (const { spec, tag, reasonFragment } of cases) {
+      const tree: TreeDescription = {
+        packages: [spec],
+        roots: DEFAULT_ROOTS,
+        scope: defaultEffectiveConfig().scope,
+      };
+      const { listRoot, readManifest } = treeInputs(tree);
+
+      let thrown: Error | undefined;
+      try {
+        discoverPackagesFrom(defectContext, listRoot, readManifest);
+      } catch (error) {
+        thrown = error as Error;
+      }
+
+      expect(thrown, `${spec.defect?.kind ?? "none"} should fail`).toBeDefined();
+      const message = (thrown as Error).message;
+      expect(message.startsWith(tag)).toBe(true);
+      expect(message).toContain(`"${packageDirOf(tree, spec)}"`);
+      expect(message).toContain(reasonFragment);
+    }
   });
 });

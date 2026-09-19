@@ -1,66 +1,71 @@
-// Feature: package-categories, Property 4: An absent or empty consumer container is tolerated; an absent microservices container is not
+// Feature: config-driven-discovery, Property (containers): An absent Discovery_Root
+// is tolerated uniformly for every Consumer_Category.
 //
-// For any layout, when the `common` or `spa` container is absent or holds zero
-// qualifying entries, discovery yields zero members for that category, raises
-// nothing, and returns the same members for every other category as it would
-// with that container populated; when the `microservices` container is absent,
-// discovery fails naming that directory and returns no result for any category.
+// For any layout, when ANY of the three Discovery_Roots — microservice, common,
+// or spa — is absent or holds zero qualifying entries, discovery yields zero
+// members for that category, raises nothing, and returns the same members for
+// every other category as it would with that root populated. The
+// required-versus-tolerant distinction the Pre_Change_Baseline drew (an absent
+// microservice root throwing `[discovery:container-missing]`) is gone: task 7.1
+// deleted that throw, and the Config_Loader's `[config:root-missing]` now fails
+// the run before discovery is ever called when a microservice root is absent
+// (asserted in `config-loader.root-missing.test.ts`). So discovery itself treats
+// all three roots alike (R5.2, R6.14).
 //
-// The property is expressed over `discoverPackagesFrom(listContainer,
+// The property is expressed over `discoverPackagesFrom(context, listRoot,
 // readManifest)`, the pure core: the injected lister is exactly where the three
-// container states live — `undefined` for an absent container directory, an
-// empty (or noise-only) entry list for a present-but-empty one, and an entry per
-// member for a populated one. Each of the three containers varies independently
-// across those states, so the generated space covers the requirement's cases
-// (absent `common`/`spa`, empty `common`/`spa`, absent `microservices`) together
-// rather than one at a time.
+// root states live — `undefined` for an absent root directory, an empty (or
+// noise-only) entry list for a present-but-empty one, and an entry per member
+// for a populated one. Each of the three roots varies independently across those
+// states, so the generated space covers the requirement's cases together rather
+// than one at a time. The roots come from the generated context
+// (`context.roots`), not from any Namespace_Container literal.
 //
 // Two things beyond "no throw" are pinned, because neither follows from the
 // verdict alone. First, tolerance is *silent*: `console.warn`/`console.error`
-// are never called, so an absent consumer container produces no diagnostic at
-// all (R2.6 "raise no error"). Second, tolerance is *inert*: for every layout
-// whose `common` or `spa` container is absent or empty, discovery is re-run with
-// that container populated by a witness member, and the members of the other
-// two categories must come back byte-identical — which is the clause a
+// are never called, so an absent root produces no diagnostic at all. Second,
+// tolerance is *inert*: for every layout with an absent or empty root, discovery
+// is re-run with that root populated by a witness member, and the members of the
+// other two categories must come back byte-identical — the clause a
 // zero-members assertion cannot express.
 //
 // Expected members are computed by a local oracle (`expectedMembers`) written
-// straight from the requirement — populated container yields its qualifying
-// entries in ascending code-point order, absent or empty yields none — and kept
+// straight from the requirement — populated root yields its qualifying entries
+// in ascending code-point order, absent or empty yields none — and kept
 // independent of the production enumeration.
 //
-// Validates: Requirements 1.9, 2.6, 2.7, 9.3
+// Validates: Requirements 5.2, 6.14, 13.1
 
 import { describe, expect, it, vi } from "vitest";
 import * as fc from "fast-check";
 
 import {
   discoverPackagesFrom,
-  type ContainerEntry,
+  type RootEntry,
   type Discovery,
-  type ListContainer,
+  type ListRoot,
   type PackageManifest,
   type ReadManifest,
 } from "../src/discovery.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
 import {
   CONSUMER_CATEGORIES,
-  FRAMEWORK_SINGLETONS,
-  NAMESPACE_CONTAINER,
-  WORKSPACE_SCOPE,
   type ConsumerCategory,
 } from "../src/framework.js";
 
-/** The category whose container may not be absent (R2.7). */
-const REQUIRED: ConsumerCategory = "microservice";
+/** Default-config context; the Discovery_Roots come from `context.roots`, and
+ *  every scoped member name from `context.scopedName`. */
+const discoveryContext = projectContext(defaultEffectiveConfig());
 
-/** The categories an absent or empty container is tolerated for (R2.6). */
-const TOLERANT: readonly ConsumerCategory[] = ["common", "spa"];
+/** The four Framework_Singletons (each with its scope-composed name) come from
+ *  the run's context, not from framework.ts's scope-free surface (R3.7). */
+const FRAMEWORK_SINGLETONS = discoveryContext.framework.all;
 
 /**
- * The member used to populate an otherwise absent/empty container in the
- * invariance re-run. One per tolerant category, so the re-run stays a valid
- * layout; the names are excluded from generation so they can never collide with
- * a generated member.
+ * The member used to populate an otherwise absent/empty root in the invariance
+ * re-run. One per category, so the re-run stays a valid layout; the names are
+ * excluded from generation so they can never collide with a generated member.
  */
 const WITNESS: Readonly<Record<ConsumerCategory, string>> = {
   microservice: "witnessmicro",
@@ -80,22 +85,22 @@ const RESERVED_DIR_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 /** Non-qualifying container entries: a regular file and a dot-prefixed dir. */
-const NOISE_ENTRIES: readonly ContainerEntry[] = [
+const NOISE_ENTRIES: readonly RootEntry[] = [
   { name: "README.md", isDirectory: false },
   { name: ".cache", isDirectory: true },
 ];
 
-/** One qualifying member of a container, with the manifest its category needs. */
+/** One qualifying member of a root, with the manifest its category needs. */
 interface Member {
   readonly dirName: string;
   readonly manifest: PackageManifest;
 }
 
 /**
- * A container's state. `present` with zero members models "present and contains
- * zero qualifying entries"; `noise` decides whether it holds non-qualifying
- * entries as well, so an "empty" container is covered both as a genuinely empty
- * directory and as one holding only files and dot-directories.
+ * A root's state. `present` with zero members models "present and contains zero
+ * qualifying entries"; `noise` decides whether it holds non-qualifying entries
+ * as well, so an "empty" root is covered both as a genuinely empty directory and
+ * as one holding only files and dot-directories.
  */
 type ContainerState =
   | { readonly kind: "absent" }
@@ -108,8 +113,8 @@ type ContainerState =
 type Layout = Readonly<Record<ConsumerCategory, ContainerState>>;
 
 /**
- * A manifest that satisfies its category's contract, so the only failure a
- * generated layout can produce is the absent-`microservices` one this property
+ * A manifest that satisfies its category's contract, so the only outcome a
+ * generated layout can produce is the tolerated absent/empty one this property
  * is about. Common declares the barrel (R4.1), Spa a build script (R4.3), a
  * Microservice_Package only its name.
  */
@@ -117,7 +122,7 @@ function manifestFor(
   category: ConsumerCategory,
   dirName: string,
 ): PackageManifest {
-  const name = `${WORKSPACE_SCOPE}/${dirName}`;
+  const name = discoveryContext.scopedName(dirName);
   if (category === "common") {
     return { name, main: "./dist/index.js", types: "./dist/index.d.ts" };
   }
@@ -139,8 +144,8 @@ function byCodePoint(a: string, b: string): number {
 /**
  * The oracle: the directory names discovery must report for one category,
  * derived from the requirement rather than from the production enumeration. A
- * populated container yields its qualifying entries in ascending code-point
- * order; an absent or empty one yields none.
+ * populated root yields its qualifying entries in ascending code-point order; an
+ * absent or empty one yields none.
  */
 function expectedMembers(state: ContainerState): string[] {
   if (state.kind === "absent") {
@@ -149,10 +154,10 @@ function expectedMembers(state: ContainerState): string[] {
   return state.members.map((member) => member.dirName).sort(byCodePoint);
 }
 
-/** The entries the lister reports for one container state. */
+/** The entries the lister reports for one root state. */
 function entriesOf(
   state: ContainerState,
-): readonly ContainerEntry[] | undefined {
+): readonly RootEntry[] | undefined {
   if (state.kind === "absent") {
     return undefined;
   }
@@ -163,30 +168,30 @@ function entriesOf(
   return state.noise ? [...qualifying, ...NOISE_ENTRIES] : qualifying;
 }
 
-/** Readers over an in-memory layout, plus the container paths they were asked about. */
+/** Readers over an in-memory layout, plus the root paths they were asked about. */
 function readersFor(layout: Layout): {
-  readonly listContainer: ListContainer;
+  readonly listRoot: ListRoot;
   readonly readManifest: ReadManifest;
   readonly queried: string[];
 } {
-  const entriesByDir = new Map<string, readonly ContainerEntry[] | undefined>();
+  const entriesByDir = new Map<string, readonly RootEntry[] | undefined>();
   const manifestByDir = new Map<string, PackageManifest>();
   for (const category of CONSUMER_CATEGORIES) {
     const state = layout[category];
-    const containerDir = NAMESPACE_CONTAINER[category];
-    entriesByDir.set(containerDir, entriesOf(state));
+    const rootDir = discoveryContext.roots[category];
+    entriesByDir.set(rootDir, entriesOf(state));
     if (state.kind === "present") {
       for (const member of state.members) {
-        manifestByDir.set(`${containerDir}/${member.dirName}`, member.manifest);
+        manifestByDir.set(`${rootDir}/${member.dirName}`, member.manifest);
       }
     }
   }
 
   const queried: string[] = [];
   return {
-    listContainer: (containerDir) => {
-      queried.push(containerDir);
-      return entriesByDir.get(containerDir);
+    listRoot: (rootDir) => {
+      queried.push(rootDir);
+      return entriesByDir.get(rootDir);
     },
     readManifest: (packageDir) => {
       const manifest = manifestByDir.get(packageDir);
@@ -199,8 +204,8 @@ function readersFor(layout: Layout): {
 }
 
 function discover(layout: Layout): Discovery {
-  const { listContainer, readManifest } = readersFor(layout);
-  return discoverPackagesFrom(listContainer, readManifest);
+  const { listRoot, readManifest } = readersFor(layout);
+  return discoverPackagesFrom(discoveryContext, listRoot, readManifest);
 }
 
 /** An identity for each member of one category, for cross-run comparison. */
@@ -215,7 +220,7 @@ function membersOf(
   }));
 }
 
-/** The same layout with one container populated by that category's witness. */
+/** The same layout with one root populated by that category's witness. */
 function withPopulated(layout: Layout, category: ConsumerCategory): Layout {
   return {
     ...layout,
@@ -235,8 +240,8 @@ const arbDirName: fc.Arbitrary<string> = fc
   );
 
 /**
- * One container's state, weighted so absent, empty, and populated all occur
- * often: absent 1/4, present-but-empty 1/4, populated 1/2.
+ * One root's state, weighted so absent, empty, and populated all occur often:
+ * absent 1/4, present-but-empty 1/4, populated 1/2.
  */
 const arbState: fc.Arbitrary<{
   readonly kind: "absent" | "present";
@@ -270,10 +275,10 @@ const arbState: fc.Arbitrary<{
 );
 
 /**
- * A layout: each of the three containers independently absent, present-empty,
- * or populated. Member directory names are deduplicated across the whole layout
- * so no two members declare the same mirrored name — a duplicate name is
- * Property 6's subject and would mask this property's outcome.
+ * A layout: each of the three roots independently absent, present-empty, or
+ * populated. Member directory names are deduplicated across the whole layout so
+ * no two members declare the same mirrored name — a duplicate name is Property
+ * 6's subject and would mask this property's outcome.
  */
 const arbLayout: fc.Arbitrary<Layout> = fc
   .record({
@@ -301,8 +306,8 @@ const arbLayout: fc.Arbitrary<Layout> = fc
     return layout as Layout;
   });
 
-describe("Property 4: container presence across the three categories", () => {
-  it("tolerates an absent or empty consumer container and fails on an absent microservices container", () => {
+describe("Discovery: an absent Discovery_Root is tolerated uniformly", () => {
+  it("yields zero members for an absent or empty root of any category, silently and inertly", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const error = vi
       .spyOn(console, "error")
@@ -311,36 +316,18 @@ describe("Property 4: container presence across the three categories", () => {
     try {
       fc.assert(
         fc.property(arbLayout, (layout) => {
-          const { listContainer, readManifest, queried } = readersFor(layout);
+          const { listRoot, readManifest, queried } = readersFor(layout);
 
-          if (layout[REQUIRED].kind === "absent") {
-            // The microservices container is absent: the run fails naming that
-            // directory, and no Discovery value comes back for any category.
-            let thrown: unknown;
-            try {
-              discoverPackagesFrom(listContainer, readManifest);
-            } catch (caught) {
-              thrown = caught;
-            }
-            expect(thrown).toBeInstanceOf(Error);
-            const message = (thrown as Error).message;
-            expect(message.startsWith("[discovery:container-missing] ")).toBe(
-              true,
-            );
-            // The failure names the missing directory, and only it: a message
-            // naming a tolerated container would send a reader after the wrong
-            // directory.
-            expect(message).toContain(`"${NAMESPACE_CONTAINER[REQUIRED]}"`);
-            for (const category of TOLERANT) {
-              expect(message).not.toContain(NAMESPACE_CONTAINER[category]);
-            }
-            return;
-          }
-
-          const discovery = discoverPackagesFrom(listContainer, readManifest);
+          // No category's absence throws now: every root is tolerated (R5.2,
+          // R6.14). Discovery always returns a Discovery value.
+          const discovery = discoverPackagesFrom(
+            discoveryContext,
+            listRoot,
+            readManifest,
+          );
 
           // Every category matches the oracle, including the empty ones: an
-          // absent or empty container yields an empty array, not a missing key.
+          // absent or empty root yields an empty array, not a missing key.
           for (const category of CONSUMER_CATEGORIES) {
             const state = layout[category];
             expect(
@@ -349,34 +336,36 @@ describe("Property 4: container presence across the three categories", () => {
             for (const pkg of discovery.byCategory[category]) {
               expect(pkg.category).toBe(category);
               expect(pkg.packageDir).toBe(
-                `${NAMESPACE_CONTAINER[category]}/${pkg.dirName}`,
+                `${discoveryContext.roots[category]}/${pkg.dirName}`,
               );
             }
           }
 
-          // Every container was consulted — a tolerated container is tolerated
-          // after being looked at, not by being skipped.
+          // Every root was consulted — a tolerated root is tolerated after being
+          // looked at, not by being skipped.
           expect(new Set(queried)).toEqual(
             new Set(
               CONSUMER_CATEGORIES.map(
-                (category) => NAMESPACE_CONTAINER[category],
+                (category) => discoveryContext.roots[category],
               ),
             ),
           );
 
-          for (const category of TOLERANT) {
+          // For every category whose root is absent or empty: zero members,
+          // nothing recorded under that root, and populating it leaves every
+          // other category byte-identical.
+          for (const category of CONSUMER_CATEGORIES) {
             if (expectedMembers(layout[category]).length > 0) continue;
 
-            // Zero members, and nothing recorded under that container.
             expect(discovery.byCategory[category]).toEqual([]);
             for (const dir of discovery.nameByDir.keys()) {
-              expect(dir.startsWith(`${NAMESPACE_CONTAINER[category]}/`)).toBe(
-                false,
-              );
+              expect(
+                dir.startsWith(`${discoveryContext.roots[category]}/`),
+              ).toBe(false);
             }
 
-            // Inert as well as silent: populating this container leaves every
-            // other category's members byte-identical.
+            // Inert as well as silent: populating this root leaves every other
+            // category's members byte-identical.
             const populated = discover(withPopulated(layout, category));
             for (const other of CONSUMER_CATEGORIES) {
               if (other === category) continue;

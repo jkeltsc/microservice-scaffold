@@ -46,13 +46,14 @@ import { join } from "node:path";
 
 import {
   buildPlanFrom,
-  SCOPE_DIR,
   type BuildPlan,
   type StagedPackage,
 } from "./build-plan.js";
+import { requireProjectContext } from "./config-loader.js";
 import { discoverPackages, readDependencySpecifiers } from "./discovery.js";
 import { assertFrameworkDirectoriesPresent } from "./framework.js";
 import { generateRegistry } from "./generate-registry.js";
+import { type ProjectContext } from "./project-context.js";
 
 /** The build-output directory every staged package contributes (R6.8). */
 const DIST_DIR = "dist";
@@ -155,6 +156,32 @@ export function listScopedEntries(scopeDir: string): readonly string[] {
 /** The repo-relative build output directory of a planned package. */
 function distOf(sourceDir: string): string {
   return `${sourceDir}/${DIST_DIR}`;
+}
+
+/**
+ * The Image_Tree scope directory this plan targets, read off the plan itself
+ * rather than from any scope literal (R10.5).
+ *
+ * Every scoped staged package carries `targetDir === \`${scopeDir}/${scopedEntry}\``
+ * (build-plan.ts's `scopedStage`), where `scopeDir` is the run's
+ * `context.scopeDir`. Stripping the trailing `/<scopedEntry>` from the first such
+ * entry recovers that directory, so the Integrity_Assertion enumerates exactly
+ * the directory `build-plan.ts` targeted — under the run's configured scope, not
+ * a hard-coded one. A plan with no scoped entry stages nothing under the scope,
+ * so the returned value is unobservable; the module's own `DIST_DIR` sibling of a
+ * default has no bearing here, so an empty string is returned and the absent
+ * scope directory reads as an empty entry list.
+ */
+function scopeDirOf(plan: BuildPlan): string {
+  for (const staged of plan.stage) {
+    if (staged.scopedEntry !== undefined) {
+      return staged.targetDir.slice(
+        0,
+        staged.targetDir.length - staged.scopedEntry.length - 1,
+      );
+    }
+  }
+  return "";
 }
 
 /** Sorted, quoted, comma-joined offender names for one failure message. */
@@ -263,7 +290,7 @@ export function assertImageTreeIntegrity(
   plan: BuildPlan,
   listScopedEntries: (scopeDir: string) => readonly string[],
 ): void {
-  const scopeDir = join(outDir, SCOPE_DIR);
+  const scopeDir = join(outDir, scopeDirOf(plan));
   const justified = new Set(
     plan.stage
       .map((staged) => staged.scopedEntry)
@@ -287,22 +314,58 @@ export function assertImageTreeIntegrity(
 }
 
 /**
- * Builds and assembles the whole Image_Tree for one container build.
+ * Assembles the Image_Tree for one container build from a derived plan.
  *
- * This is the entry point of the image path, invoked from the Dockerfile's build
- * stage. It runs pipeline steps 1 to 6 — framework directories present,
- * discovery, registry generation, then the plan derived for the `MICROSERVICES`
- * value, which says which microservices this build includes — and hands the plan
- * to {@link executeBuildPlan} for steps 7 to 11.
+ * The domain function of the image path (R1.9): it takes the run's
+ * {@link ProjectContext} and the {@link BuildPlan} already derived for the
+ * `MICROSERVICES` value, and runs pipeline steps 7 to 11 through
+ * {@link executeBuildPlan} — the single `tsc --build`, the per-SPA bundler
+ * builds, the build-output assertion, staging, and the Integrity_Assertion. It
+ * derives nothing and reads no configuration: the config load, discovery,
+ * registry generation and plan derivation are the CLI's business
+ * ({@link runImageTreeCli}), so this function stays a pure executor a test can
+ * drive with a synthesized context and plan.
+ *
+ * @param context the per-run derivation of this run's Effective_Config (R1.9).
+ * @param plan the plan derived for the `MICROSERVICES` value.
+ * @param outDir the Image_Tree root to assemble; defaults to the container
+ *   build's `/out`.
  */
-export function buildImageTree(outDir = "/out"): void {
-  assertFrameworkDirectoriesPresent(existsSync); // R10.7
-  const discovery = discoverPackages(); // R3.4–R3.6, R4 validation
-  const selector = process.env.MICROSERVICES;
-  generateRegistry(selector, discovery); // R14.2, unchanged output
-  const plan = buildPlanFrom(selector, discovery, readDependencySpecifiers);
-
+export function buildImageTree(
+  context: ProjectContext,
+  plan: BuildPlan,
+  outDir = "/out",
+): void {
+  void context; // threaded for R1.9 uniformity; the plan already carries scope
   executeBuildPlan(plan, outDir);
+}
+
+/**
+ * The CLI adapter of the image path, invoked from `bin/build-image-tree.ts`.
+ *
+ * It holds every effect the domain function does not: the config load (through
+ * {@link requireProjectContext}, the one place a Config_Diagnostic reaches stderr
+ * and the process exits over one, R1.10), the framework-directory presence check
+ * (pipeline step 1, R10.7), discovery (steps 2 and 4–5), registry generation
+ * (step 3, R14.2), and plan derivation (step 6). It then hands the context and
+ * plan to {@link buildImageTree}.
+ *
+ * @param outDir the Image_Tree root; defaults to the container build's `/out`.
+ */
+export function runImageTreeCli(outDir = "/out"): void {
+  const context = requireProjectContext(); // R1.10 — config load, exit on diagnostics
+  assertFrameworkDirectoriesPresent(existsSync); // R10.7
+  const discovery = discoverPackages(context); // R3.4–R3.6, R4 validation
+  const selector = process.env.MICROSERVICES;
+  generateRegistry(context, selector, discovery); // R14.2, unchanged output
+  const plan = buildPlanFrom(
+    context,
+    selector,
+    discovery,
+    readDependencySpecifiers(context),
+  );
+
+  buildImageTree(context, plan, outDir);
 }
 
 /**

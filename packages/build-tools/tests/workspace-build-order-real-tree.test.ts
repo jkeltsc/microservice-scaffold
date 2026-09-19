@@ -70,7 +70,18 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { readFileSync, statSync } from "node:fs";
 import { discoverPackages, readDependencySpecifiers } from "../src/discovery.js";
+import {
+  loadProjectConfig,
+  type ConfigFileRead,
+  type RootProbe,
+} from "../src/config-loader.js";
+import {
+  PROJECT_CONFIG_FILE,
+  renderDiagnostic,
+} from "../src/project-config.js";
+import { projectContext, type ProjectContext } from "../src/project-context.js";
 import {
   workspaceBuildOrder,
   workspaceNodesFrom,
@@ -101,10 +112,78 @@ const EXPECTED_ORDER: readonly string[] = [
   "packages/spa/demo",
 ];
 
+/** Reads the committed `scaffold.config.json` (absent here → defaults). */
+function readConfigFile(configPath: string): ConfigFileRead {
+  try {
+    return { kind: "text", text: readFileSync(configPath, "utf8") };
+  } catch (error) {
+    const code: unknown = (error as { code?: unknown } | null)?.code;
+    if (code === "ENOENT" || code === "ENOTDIR") return { kind: "absent" };
+    return {
+      kind: "unreadable",
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/** Probes one Discovery_Root under the repository root. */
+function probeRoot(rootPath: string): RootProbe {
+  let stats;
+  try {
+    stats = statSync(resolve(repoRoot, rootPath));
+  } catch (error) {
+    const code: unknown = (error as { code?: unknown } | null)?.code;
+    if (code === "ENOENT" || code === "ENOTDIR") return { kind: "absent" };
+    return {
+      kind: "failed",
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+  if (!stats.isDirectory()) return { kind: "not-directory" };
+  let holdsPackageJsonFile: boolean;
+  try {
+    holdsPackageJsonFile = statSync(
+      resolve(repoRoot, rootPath, "package.json"),
+    ).isFile();
+  } catch {
+    holdsPackageJsonFile = false;
+  }
+  return { kind: "directory", holdsPackageJsonFile };
+}
+
+/**
+ * The context the derivation runs against is the LOADED Effective_Config, read
+ * from `scaffold.config.json` exactly as a Build_System run reads it (R13.3,
+ * R13.4). This repository ships no config file, so the load takes all four
+ * defaults — under which the ten-position table's `packages/…` directories are
+ * the roots — but the test substitutes no path or scope literal of its own and
+ * fails with a reported reason if the config cannot load.
+ */
+function loadContext(): ProjectContext {
+  const outcome = loadProjectConfig(
+    readConfigFile,
+    probeRoot,
+    resolve(repoRoot, PROJECT_CONFIG_FILE),
+  );
+  if (outcome.kind === "rejected") {
+    throw new Error(
+      `the project configuration could not load; substituting no literal:\n${outcome.diagnostics
+        .map(renderDiagnostic)
+        .join("\n")}`,
+    );
+  }
+  return projectContext(outcome.config);
+}
+
 /** The derivation exactly as the CLI shell runs it over the real filesystem. */
 function deriveOrder(): readonly string[] {
-  const nodes = workspaceNodesFrom(discoverPackages(), readDependencySpecifiers);
-  return workspaceBuildOrder(nodes).map((node) => node.packageDir);
+  const context = loadContext();
+  const nodes = workspaceNodesFrom(
+    context,
+    discoverPackages(context),
+    readDependencySpecifiers(context),
+  );
+  return workspaceBuildOrder(context, nodes).map((node) => node.packageDir);
 }
 
 describe("Workspace_Build_Order over the committed repository (Data Models table)", () => {

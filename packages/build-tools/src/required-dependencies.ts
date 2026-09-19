@@ -27,12 +27,7 @@
 
 import type { ConsumerCategory } from "./framework.js";
 import type { ConsumerPackage, Discovery } from "./discovery.js";
-import {
-  NAMESPACE_CONTAINER,
-  OVERSEER,
-  WORKSPACE_SCOPE,
-  frameworkSingletonByName,
-} from "./framework.js";
+import type { ProjectContext } from "./project-context.js";
 import {
   compareCodePoints,
   findCyclePath,
@@ -48,17 +43,20 @@ export type ReadDependencies = (packageDir: string) => readonly string[];
  *
  * The message is an operator-facing contract pinned byte for byte by R13.11: keep
  * the `[shared:` prefix and the wording, though every other failure uses `[deps:`.
+ * Only the scope token is now the run's Configured_Scope rather than a constant.
  *
+ * @param scope the run's Configured_Scope, named in the message (R10.7).
  * @param consumer repo-relative directory of the declaring package.
  * @param unresolved deduplicated and sorted by the caller.
  */
 function unresolvedSpecifierError(
+  scope: string,
   consumer: string,
   unresolved: readonly string[],
 ): Error {
   const named = unresolved.map((name) => `"${name}"`).join(", ");
   return new Error(
-    `[shared:unresolved] "${consumer}" depends on unknown ${WORKSPACE_SCOPE} package(s): ${named}`,
+    `[shared:unresolved] "${consumer}" depends on unknown ${scope} package(s): ${named}`,
   );
 }
 
@@ -107,12 +105,13 @@ function spaToSpaError(consumer: string, target: string): Error {
  * participant in cycle order (R7.10). The path is closed by its entry point:
  * `"a" -> "a"` for a self-dependency, `"a" -> "b" -> "a"` for a pair.
  *
+ * @param scope the run's Configured_Scope, named in the message (R10.7).
  * @param participants the cycle in traversal order, closed by its entry point.
  */
-function cycleError(participants: readonly string[]): Error {
+function cycleError(scope: string, participants: readonly string[]): Error {
   const path = participants.map((name) => `"${name}"`).join(" -> ");
   return new Error(
-    `[deps:cycle] the ${WORKSPACE_SCOPE} dependency graph contains a cycle: ${path}`,
+    `[deps:cycle] the ${scope} dependency graph contains a cycle: ${path}`,
   );
 }
 
@@ -131,13 +130,17 @@ function byDirName(a: ConsumerPackage, b: ConsumerPackage): number {
 /**
  * Lists the directories the walk starts from: each microservice this build
  * includes, in the order `selector.ts` resolved them, then the Overseer. These
- * are consumers only — none is itself a required dependency (R7.1); both
- * prefixes come from `framework.ts` (R10.5).
+ * are consumers only — none is itself a required dependency (R7.1); the
+ * microservice Discovery_Root and the Overseer's package directory both come
+ * from the run's context (R10.5).
  */
-function rootDirectories(selected: readonly string[]): readonly string[] {
+function rootDirectories(
+  context: ProjectContext,
+  selected: readonly string[],
+): readonly string[] {
   return [
-    ...selected.map((id) => `${NAMESPACE_CONTAINER.microservice}/${id}`),
-    OVERSEER.packageDir,
+    ...selected.map((id) => `${context.roots.microservice}/${id}`),
+    context.framework.overseer.packageDir,
   ];
 }
 
@@ -173,6 +176,7 @@ function rootDirectories(selected: readonly string[]): readonly string[] {
  *   `[deps:spa-to-spa]`.
  */
 function resolveSpecifiers(
+  context: ProjectContext,
   declaringCategory: ConsumerCategory,
   declaringDir: string,
   specifiers: readonly string[],
@@ -185,10 +189,10 @@ function resolveSpecifiers(
   const spaToSpa: ConsumerPackage[] = [];
 
   for (const specifier of specifiers) {
-    if (!specifier.startsWith(`${WORKSPACE_SCOPE}/`)) {
+    if (!specifier.startsWith(context.specifierPrefix)) {
       continue;
     }
-    if (frameworkSingletonByName(specifier) !== undefined) {
+    if (context.frameworkByName(specifier) !== undefined) {
       continue;
     }
 
@@ -208,6 +212,7 @@ function resolveSpecifiers(
 
   if (unresolved.length > 0) {
     throw unresolvedSpecifierError(
+      context.config.scope,
       declaringDir,
       [...new Set(unresolved)].sort(),
     );
@@ -254,6 +259,7 @@ interface Subgraph {
  *   `[deps:spa-to-spa]`, `[deps:cycle]`.
  */
 function reachableSubgraph(
+  context: ProjectContext,
   selected: readonly string[],
   discovery: Discovery,
   readDependencies: ReadDependencies,
@@ -279,13 +285,14 @@ function reachableSubgraph(
           (node) => node.name,
           (node) => dependencies.get(node.name) ?? [],
         ) ?? [];
-      throw cycleError(participants);
+      throw cycleError(context.config.scope, participants);
     }
 
     grey.add(pkg.name);
     greyNodes.set(pkg.name, pkg);
 
     const deps = resolveSpecifiers(
+      context,
       pkg.category,
       pkg.packageDir,
       pkg.dependencySpecifiers,
@@ -302,10 +309,11 @@ function reachableSubgraph(
     members.set(pkg.name, pkg);
   };
 
-  for (const packageDir of rootDirectories(selected)) {
+  for (const packageDir of rootDirectories(context, selected)) {
     // A root is a microservice or the Overseer, so neither inbound-SPA rule can
     // apply to it; `"microservice"` is the branch that forbids neither.
     const roots = resolveSpecifiers(
+      context,
       "microservice",
       packageDir,
       readDependencies(packageDir),
@@ -343,6 +351,9 @@ function topologicalOrder(subgraph: Subgraph): readonly ConsumerPackage[] {
  * Required_Dependencies in the lexicographically-least topological order (R7.1,
  * R7.2), for callers that do not need the stage set as well.
  *
+ * @param context the run's project context; supplies the microservice
+ *   Discovery_Root, the Overseer directory, the Dependency_Specifier prefix, the
+ *   framework lookup, and the scope named in the failure messages (R10.7).
  * @param selected the microservices this build includes.
  * @param discovery the discovery result; supplies members and the name index.
  * @param readDependencies reads the roots' specifiers; member edges come from
@@ -351,11 +362,13 @@ function topologicalOrder(subgraph: Subgraph): readonly ConsumerPackage[] {
  *   `[deps:spa-to-spa]`, `[deps:cycle]`.
  */
 export function requiredDependencies(
+  context: ProjectContext,
   selected: readonly string[],
   discovery: Discovery,
   readDependencies: ReadDependencies,
 ): readonly ConsumerPackage[] {
-  return resolveDependencySets(selected, discovery, readDependencies).required;
+  return resolveDependencySets(context, selected, discovery, readDependencies)
+    .required;
 }
 
 /**
@@ -421,6 +434,9 @@ export interface DependencySets {
  * Runs all three phases and returns both sets — the entry point `build-plan.ts`
  * calls. Every failure below is raised in phase 1 ({@link reachableSubgraph}).
  *
+ * @param context the run's project context; supplies the microservice
+ *   Discovery_Root, the Overseer directory, the Dependency_Specifier prefix, the
+ *   framework lookup, and the scope named in the failure messages (R10.7).
  * @param selected the microservices this build includes.
  * @param discovery the discovery result; supplies members and the name index.
  * @param readDependencies reads the root consumers' specifiers.
@@ -428,11 +444,17 @@ export interface DependencySets {
  *   `[deps:spa-to-spa]`, `[deps:cycle]`.
  */
 export function resolveDependencySets(
+  context: ProjectContext,
   selected: readonly string[],
   discovery: Discovery,
   readDependencies: ReadDependencies,
 ): DependencySets {
-  const subgraph = reachableSubgraph(selected, discovery, readDependencies);
+  const subgraph = reachableSubgraph(
+    context,
+    selected,
+    discovery,
+    readDependencies,
+  );
   const required = topologicalOrder(subgraph);
   const staged = stagedSubset(subgraph, required);
   return { required, staged };

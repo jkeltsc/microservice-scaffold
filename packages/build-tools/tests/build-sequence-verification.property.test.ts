@@ -36,16 +36,25 @@ import {
 } from "../src/build-sequence.js";
 import type { ConsumerPackage } from "../src/discovery.js";
 import { buildKindOf } from "../src/discovery.js";
-import {
-  BUILD_TOOLS,
-  CONTRACTS,
-  INTEGRATION_TESTS,
-  NAMESPACE_CONTAINER,
-  OVERSEER,
-  WORKSPACE_SCOPE,
-  type ConsumerCategory,
-} from "../src/framework.js";
+import { type ConsumerCategory } from "../src/framework.js";
 import type { WorkspaceNode } from "../src/workspace-build-order.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
+
+/** The per-run context threaded through the build-sequence primitives (task 5.3). */
+const CONTEXT = projectContext(defaultEffectiveConfig());
+
+// Scope, per-category roots, and the four Framework_Singletons (each with its
+// scope-composed name) come from the run's context, not from framework.ts's
+// scope-free surface (R3.7).
+const WORKSPACE_SCOPE = CONTEXT.config.scope;
+const NAMESPACE_CONTAINER = CONTEXT.roots;
+const {
+  contracts: CONTRACTS,
+  overseer: OVERSEER,
+  buildTools: BUILD_TOOLS,
+  integrationTests: INTEGRATION_TESTS,
+} = CONTEXT.framework;
 
 // ---------------------------------------------------------------------------
 // The wording the requirements preserve, restated as literals for the oracle.
@@ -411,7 +420,7 @@ describe("Property 8: verifyBuildOrder verdict equals an independent oracle", ()
         const nodes = inject(layout, defect);
         if (nodes === undefined) return; // layout cannot host this defect
 
-        const order = buildSequence(repoMembership(layout));
+        const order = buildSequence(CONTEXT, repoMembership(layout));
 
         // A cycle in the Prerequisite_Graph makes `prerequisiteEdges` produce a
         // cyclic edge set; `verifyBuildOrder` throws `[build-order:cycle]`. That
@@ -421,13 +430,14 @@ describe("Property 8: verifyBuildOrder verdict equals an independent oracle", ()
         // Property 8 defect introduces — every injected specifier resolves — so
         // any throw here propagates and fails the test, which is what we want.
         const edges: readonly PrerequisiteEdge[] = prerequisiteEdges(
+          CONTEXT,
           nodes,
           layout.selected,
         );
 
         let messages: readonly string[];
         try {
-          messages = verifyBuildOrder(order, edges);
+          messages = verifyBuildOrder(CONTEXT, order, edges);
         } catch (error) {
           // The pass throws `[build-order:cycle]` — and only that — when the
           // Prerequisite_Graph is cyclic. The explicit `cycle` defect always
@@ -480,9 +490,9 @@ describe("Property 8: verifyBuildOrder verdict equals an independent oracle", ()
               consumer("microservice", peerName, []),
             ];
             const layout: Layout = { consumers, selected: [] };
-            const order = buildSequence(repoMembership(layout));
-            const edges = prerequisiteEdges(nodesOf(layout), layout.selected);
-            const messages = verifyBuildOrder(order, edges);
+            const order = buildSequence(CONTEXT, repoMembership(layout));
+            const edges = prerequisiteEdges(CONTEXT, nodesOf(layout), layout.selected);
+            const messages = verifyBuildOrder(CONTEXT, order, edges);
 
             expect(messages.length).toBeGreaterThan(0);
             // Both directories named, and reported as a prerequisite finding.
@@ -553,7 +563,7 @@ describe("Property 10: preserved diagnostics keep wording and participant sets",
           // `[shared:unresolved]` for the unknown ones — computing no order.
           let threw = false;
           try {
-            prerequisiteEdges(nodes, layout.selected);
+            prerequisiteEdges(CONTEXT, nodes, layout.selected);
           } catch (error) {
             threw = true;
             const message = (error as Error).message;
@@ -619,12 +629,12 @@ describe("Property 10: preserved diagnostics keep wording and participant sets",
           };
           const cycleDirs = cycleConsumers.map((pkg) => pkg.packageDir);
 
-          const edges = prerequisiteEdges(nodesOf(layout), layout.selected);
-          const order = buildSequence(repoMembership(layout));
+          const edges = prerequisiteEdges(CONTEXT, nodesOf(layout), layout.selected);
+          const order = buildSequence(CONTEXT, repoMembership(layout));
 
           let threw = false;
           try {
-            verifyBuildOrder(order, edges);
+            verifyBuildOrder(CONTEXT, order, edges);
           } catch (error) {
             threw = true;
             const message = (error as Error).message;
@@ -670,7 +680,7 @@ describe("Property 10: preserved diagnostics keep wording and participant sets",
           };
           let commonMessage = "";
           try {
-            buildSequence(repoMembership(commonLayout));
+            buildSequence(CONTEXT, repoMembership(commonLayout));
           } catch (error) {
             commonMessage = (error as Error).message;
           }
@@ -686,14 +696,18 @@ describe("Property 10: preserved diagnostics keep wording and participant sets",
             consumers: microConsumers,
             selected: [],
           };
-          const microOrder = buildSequence(repoMembership(microLayout));
+          const microOrder = buildSequence(
+            CONTEXT,
+            repoMembership(microLayout),
+          );
           const microEdges = prerequisiteEdges(
+            CONTEXT,
             nodesOf(microLayout),
             microLayout.selected,
           );
           let microMessage = "";
           try {
-            verifyBuildOrder(microOrder, microEdges);
+            verifyBuildOrder(CONTEXT, microOrder, microEdges);
           } catch (error) {
             microMessage = (error as Error).message;
           }
@@ -725,9 +739,9 @@ describe("Property 10: preserved diagnostics keep wording and participant sets",
     // counterpart must not manufacture a divergence finding.
     fc.assert(
       fc.property(arbLayout, (layout) => {
-        const order = buildSequence(repoMembership(layout));
-        const edges = prerequisiteEdges(nodesOf(layout), layout.selected);
-        const messages = verifyBuildOrder(order, edges);
+        const order = buildSequence(CONTEXT, repoMembership(layout));
+        const edges = prerequisiteEdges(CONTEXT, nodesOf(layout), layout.selected);
+        const messages = verifyBuildOrder(CONTEXT, order, edges);
         expect(messages.every((m) => !m.startsWith(DIVERGENCE_PREFIX))).toBe(
           true,
         );
@@ -789,11 +803,11 @@ describe("Feature: spa-common-consumption, Property 12: a spa → common edge yi
   it("reports no [build-order:prerequisite] and no [build-order:divergence] for a spa → common edge", () => {
     fc.assert(
       fc.property(arbLayoutWithSpaCommonEdge, (layout) => {
-        const order = buildSequence(repoMembership(layout));
-        const edges = prerequisiteEdges(nodesOf(layout), layout.selected);
+        const order = buildSequence(CONTEXT, repoMembership(layout));
+        const edges = prerequisiteEdges(CONTEXT, nodesOf(layout), layout.selected);
 
         // The order the Build_Sequence produces verifies clean.
-        const messages = verifyBuildOrder(order, edges);
+        const messages = verifyBuildOrder(CONTEXT, order, edges);
         expect(messages).toEqual([]);
         expect(messages.every((m) => !m.startsWith(PREREQUISITE_PREFIX))).toBe(
           true,

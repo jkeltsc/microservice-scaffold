@@ -75,6 +75,8 @@ import {
   discoverPackages,
   readDependencySpecifiers,
 } from "@microservices/build-tools/dist/discovery.js";
+import { defaultEffectiveConfig } from "@microservices/build-tools/dist/project-config.js";
+import { projectContext } from "@microservices/build-tools/dist/project-context.js";
 import {
   workspaceBuildOrder,
   workspaceNodesFrom,
@@ -177,8 +179,13 @@ function reduceToPredecessorShape(paths: ReductionPaths): void {
 
 /** The derivation exactly as the CLI shell runs it, over cwd's filesystem. */
 function deriveOrder(): readonly string[] {
-  const nodes = workspaceNodesFrom(discoverPackages(), readDependencySpecifiers);
-  return workspaceBuildOrder(nodes).map((node) => node.packageDir);
+  const context = projectContext(defaultEffectiveConfig());
+  const nodes = workspaceNodesFrom(
+    context,
+    discoverPackages(context),
+    readDependencySpecifiers(context),
+  );
+  return workspaceBuildOrder(context, nodes).map((node) => node.packageDir);
 }
 
 let pristine: PristineWorktreeResult | undefined;

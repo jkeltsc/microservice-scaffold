@@ -48,18 +48,28 @@ import { requiredDependencies } from "../src/required-dependencies.js";
 import {
   discoverPackagesFrom,
   type Discovery,
-  type ListContainer,
+  type ListRoot,
   type PackageManifest,
   type ReadManifest,
 } from "../src/discovery.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
 import {
   CONSUMER_CATEGORIES,
-  FRAMEWORK_SINGLETONS,
-  NAMESPACE_CONTAINER,
-  OVERSEER,
-  WORKSPACE_SCOPE,
   type ConsumerCategory,
 } from "../src/framework.js";
+
+/** Default-config context; scope equals WORKSPACE_SCOPE and roots equal
+ *  NAMESPACE_CONTAINER, so expected names and lister keys are unchanged. */
+const discoveryContext = projectContext(defaultEffectiveConfig());
+
+// Scope, per-category roots, and the four Framework_Singletons (each with its
+// scope-composed name) come from the run's context, not from framework.ts's
+// scope-free surface (R3.7).
+const WORKSPACE_SCOPE = discoveryContext.config.scope;
+const NAMESPACE_CONTAINER = discoveryContext.roots;
+const FRAMEWORK_SINGLETONS = discoveryContext.framework.all;
+const { overseer: OVERSEER } = discoveryContext.framework;
 
 // ---------------------------------------------------------------------------
 // In-memory layout model
@@ -168,7 +178,7 @@ function failedEntry(
  * container is Property 4's subject), and entries come back in *descending*
  * name order so that any ordering downstream is discovery's own doing.
  */
-function listerFor(entries: readonly Entry[]): ListContainer {
+function listerFor(entries: readonly Entry[]): ListRoot {
   return (containerDir) => {
     const category = CONSUMER_CATEGORIES.find(
       (candidate) => NAMESPACE_CONTAINER[candidate] === containerDir,
@@ -214,6 +224,7 @@ function discover(entries: readonly Entry[]): {
 } {
   const asked: string[] = [];
   const discovery = discoverPackagesFrom(
+    discoveryContext,
     listerFor(entries),
     readerFor(entries, asked),
   );
@@ -661,7 +672,12 @@ describe("Property 5: the Package_Name_Lookup records exactly and resolves only 
             packageDir === service.packageDir ? [specifier] : [];
 
           const resolve = (): readonly { packageDir: string }[] =>
-            requiredDependencies([serviceDir], discovery, readDependencies);
+            requiredDependencies(
+              discoveryContext,
+              [serviceDir],
+              discovery,
+              readDependencies,
+            );
 
           if (expected.kind === "package") {
             // Only the exact declared name (and, when the target mirrors its
@@ -708,7 +724,7 @@ describe("Property 5: the Package_Name_Lookup records exactly and resolves only 
     expect(discovery.byName.has(mirrorNameOf("alpha"))).toBe(true);
     expect(discovery.byName.has(mirrorNameOf("beta"))).toBe(false);
     expect(() =>
-      requiredDependencies([], discovery, (packageDir) =>
+      requiredDependencies(discoveryContext, [], discovery, (packageDir) =>
         packageDir === OVERSEER.packageDir ? [mirrorNameOf("beta")] : [],
       ),
     ).toThrow(
@@ -1001,6 +1017,7 @@ describe("Property 7: an unusable or nameless manifest fails, naming the directo
         const asked: string[] = [];
         try {
           discovery = discoverPackagesFrom(
+            discoveryContext,
             listerFor(entries),
             readerFor(entries, asked),
           );

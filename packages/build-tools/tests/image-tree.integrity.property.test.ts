@@ -50,22 +50,32 @@ import * as fc from "fast-check";
 import type { ReadDependencies } from "../src/required-dependencies.js";
 import {
   buildPlanFrom,
-  SCOPE_DIR,
   type BuildPlan,
   type StagedPackage,
 } from "../src/build-plan.js";
+import { defaultEffectiveConfig } from "../src/project-config.js";
+import { projectContext } from "../src/project-context.js";
 import {
   buildKindOf,
   type ConsumerPackage,
   type Discovery,
 } from "../src/discovery.js";
+
+/** Default-config context; scope and roots equal the pre-context baseline. */
+const CONTEXT = projectContext(defaultEffectiveConfig());
+
+/** The Image_Tree scope directory, derived from the default-config context. */
+const SCOPE_DIR = CONTEXT.scopeDir;
+
+// Scope, per-category roots, and the four Framework_Singletons (each with its
+// scope-composed name) come from the run's context, not from framework.ts's
+// scope-free surface (R3.7).
+const WORKSPACE_SCOPE = CONTEXT.config.scope;
+const NAMESPACE_CONTAINER = CONTEXT.roots;
+const FRAMEWORK_SINGLETONS = CONTEXT.framework.all;
+const { contracts: CONTRACTS, overseer: OVERSEER } = CONTEXT.framework;
 import {
   ALWAYS_STAGED_SCOPED_ENTRIES,
-  CONTRACTS,
-  FRAMEWORK_SINGLETONS,
-  NAMESPACE_CONTAINER,
-  OVERSEER,
-  WORKSPACE_SCOPE,
   type ConsumerCategory,
 } from "../src/framework.js";
 import {
@@ -159,7 +169,7 @@ function readerFor(layout: Layout): ReadDependencies {
 
 /** The plan `buildPlanFrom` derives for a layout and a raw Selector value. */
 function planOf(layout: Layout, selector: string | undefined): BuildPlan {
-  return buildPlanFrom(selector, discoveryOf(layout), readerFor(layout));
+  return buildPlanFrom(CONTEXT, selector, discoveryOf(layout), readerFor(layout));
 }
 
 /** The Microservice_Identifiers a layout discovers, in discovery order. */

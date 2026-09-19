@@ -361,23 +361,23 @@ export function reduceDevEvents(
 // to agree, so membership, order, determinism and every selector or dependency
 // error message are an image build's (R3.6, R3.7, R13.1-R13.11).
 
-import { buildPlanFrom } from "./build-plan.js";
+import { buildPlan, buildPlanFrom, type BuildPlan } from "./build-plan.js";
+import { requireProjectContext } from "./config-loader.js";
 import type { ReadDependencies } from "./required-dependencies.js";
-import {
-  discoverPackages,
-  readDependencySpecifiers,
-  type Discovery,
-} from "./discovery.js";
+import { type Discovery } from "./discovery.js";
+import { type ProjectContext } from "./project-context.js";
 
 /**
  * This function returns the projects to compile, in build order. Each entry is a
  * repo-relative package directory, the form the solution builder wants as a root.
  *
- * Called from {@link devProjectList}, which supplies the real filesystem. Taking
- * the inputs as arguments keeps it pure and testable over in-memory layouts, and
+ * The pure Project_List derivation, kept for the dev/image parity property tests
+ * that exercise it directly over in-memory layouts. Taking the inputs as
+ * arguments keeps it pure and testable over in-memory layouts, and
  * taking the whole `Discovery` rather than a directory list means the dev path
  * cannot be handed a different view of the repository than an image build.
  *
+ * @param context the per-run derivation of this run's Effective_Config (R1.9).
  * @param selector the raw `MICROSERVICES` value, passed through unmodified.
  * @param discovery one discovery run's result.
  * @param readDependencies reads a package's `@microservices` dependency names.
@@ -385,30 +385,33 @@ import {
  *   `[deps:peer]`, `[deps:cycle]` — all from the plan, unmodified.
  */
 export function projectListFrom(
+  context: ProjectContext,
   selector: string | undefined,
   discovery: Discovery,
   readDependencies: ReadDependencies,
 ): readonly string[] {
-  return buildPlanFrom(selector, discovery, readDependencies).tscRoots;
+  return buildPlanFrom(context, selector, discovery, readDependencies).tscRoots;
 }
 
 /**
- * This function builds the project list for the real repository and the current
- * `MICROSERVICES` value. Called from {@link runDevSupervisorCli} at startup.
+ * This function returns the dev Project_List — the projects the watcher compiles
+ * — as the `tscRoots` of an already-derived plan. Called from
+ * {@link runDevSupervisorCli}, which derives the plan for the run's context.
  *
- * Discovery runs once, here; nothing in the steady state lists the microservice
- * directory again (R7.1, R7.3). It reads the environment the way generate-registry.ts
- * does and dependencies through discovery.ts's single reader, so the dev path sees
- * the same microservices as the generated registry.
+ * Taking the whole plan rather than re-deriving from a selector means the dev
+ * path and the image path read one plan, so the watcher compiles exactly the
+ * roots an image build compiles (R13.8). The context is threaded for R1.9
+ * uniformity; the roots are wholly determined by the plan.
+ *
+ * @param context the per-run derivation of this run's Effective_Config (R1.9).
+ * @param plan the plan derived for the current `MICROSERVICES` value.
  */
 export function devProjectList(
-  selector = process.env.MICROSERVICES,
+  context: ProjectContext,
+  plan: BuildPlan,
 ): readonly string[] {
-  return projectListFrom(
-    selector,
-    discoverPackages(),
-    readDependencySpecifiers,
-  );
+  void context; // threaded for R1.9 uniformity; the plan determines the roots
+  return plan.tscRoots;
 }
 
 // ---------------------------------------------------------------------------
@@ -760,7 +763,9 @@ export function runDevSupervisor(
  * src/bin/dev-supervisor.ts; it owns both steps' failure reporting and exit statuses
  * (R1.4, R1.5, R2.4).
  *
- * The list is derived before, and separately from, starting the shell, so a bad
+ * The context is obtained through {@link requireProjectContext}, the one place a
+ * Config_Diagnostic reaches stderr and the process exits over one (R1.10). The
+ * list is derived before, and separately from, starting the shell, so a bad
  * `MICROSERVICES` value exits 1 with no watcher and no Overseer ever existing. Its
  * message reaches stderr verbatim, because {@link projectListFrom}'s messages carry
  * their own prefixes and the dev path fails with exactly the text an image build
@@ -768,11 +773,16 @@ export function runDevSupervisor(
  * exit 1, and on success this function does not return.
  */
 export function runDevSupervisorCli(): void {
-  // Deriving the list resolves the selector and lists the microservice directory
-  // once. It defaults to `process.env.MICROSERVICES`, so the bin reads nothing.
+  // The config load reports Config_Diagnostics and exits 1 on its own (R1.10).
+  const context = requireProjectContext();
+
+  // Deriving the plan resolves the selector and lists the microservice directory
+  // once; the dev list is its `tscRoots`. The plan reads the selector from
+  // `process.env.MICROSERVICES`, so the bin reads nothing.
   let projectList: readonly string[];
   try {
-    projectList = devProjectList();
+    const plan = buildPlan(context);
+    projectList = devProjectList(context, plan);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     process.stderr.write(`${reason}\n`);

@@ -3,28 +3,27 @@
 //
 // It is step 2 of the build pipeline, and every entry path starts with it:
 // image-tree.ts, build-plan.ts, dev-supervisor.ts, workspace-build-order.ts, and
-// repo-invariants.ts all call `discoverPackages()` first.
+// repo-invariants.ts all call `discoverPackages(context)` first.
 //
 // Membership is decided by location alone: a package belongs to the microservice,
 // common, or spa category because it is a direct subdirectory of that category's
-// parent directory under `packages/`. No manifest field takes part (R1.3, R1.5,
-// R2.8, R2.9). Manifests are read afterwards, and a package that breaks its
+// configured Discovery_Root (R6.1, R6.9). No manifest field takes part (R1.3,
+// R6.9, R6.10). Manifests are read afterwards, and a package that breaks its
 // category's contract fails the build instead of dropping out of the set.
 //
-// The scaffold's own packages sit directly under `packages/`, so this never
-// reaches them (R1.6, R5.2); their names, the category directories, and the
-// workspace scope all come from framework.ts (R10.4, R10.5).
+// Every scope- and root-dependent value now comes from the threaded
+// ProjectContext (R1.9): the per-category Discovery_Root (`context.roots`), the
+// scoped-name composer (`context.scopedName`), the Dependency_Specifier prefix
+// (`context.specifierPrefix`), and the four Framework_Singleton records with
+// their names composed under this run's scope (`context.framework.all`). The
+// scaffold's own packages are known by name and are never reached here (R6.8);
+// the only path literal left in the module is the `package.json` filename.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import {
-  CONSUMER_CATEGORIES,
-  FRAMEWORK_SINGLETONS,
-  NAMESPACE_CONTAINER,
-  WORKSPACE_SCOPE,
-  type ConsumerCategory,
-} from "./framework.js";
+import { CONSUMER_CATEGORIES, type ConsumerCategory } from "./framework.js";
+import { type ProjectContext } from "./project-context.js";
 
 /** How a package's build output is produced (R6.1, R6.2). */
 export type BuildKind = "tsc-project" | "bundler-project";
@@ -57,17 +56,18 @@ export interface Discovery {
   readonly byName: ReadonlyMap<string, ConsumerPackage>;
 }
 
-/** One direct entry of a category's parent directory, as the lister reports it. */
-export interface ContainerEntry {
+/** One direct entry of a Discovery_Root, as the lister reports it. */
+export interface RootEntry {
   readonly name: string;
+  /** Symlink already resolved (R6.2). */
   readonly isDirectory: boolean;
 }
 
-/** Lists the direct entries of a category's parent directory. `undefined` means
- *  absent: tolerated for `common` and `spa` (R2.6), fatal for the other (R2.7). */
-export type ListContainer = (
-  containerDir: string,
-) => readonly ContainerEntry[] | undefined;
+/** Lists the direct entries of the path it is HANDED — it derives no path and
+ *  knows no category. `undefined` means the path is absent (R5.2, R6.14). */
+export type ListRoot = (
+  rootDir: string,
+) => readonly RootEntry[] | undefined;
 
 /** The outcome of reading one manifest. The three failures stay apart because
  *  R3.4 wants the error to say which occurred. */
@@ -87,9 +87,6 @@ export interface PackageManifest {
 }
 
 export type ReadManifest = (packageDir: string) => ManifestRead;
-
-/** The one category whose parent directory must exist (R2.7). */
-const REQUIRED_CONTAINER_CATEGORY: ConsumerCategory = "microservice";
 
 /** How each category names itself in a validation failure. */
 const CATEGORY_LABEL: Readonly<Record<ConsumerCategory, string>> = {
@@ -150,16 +147,20 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-/** Collects a manifest's `@microservices`-scoped `dependencies` keys, sorted;
- *  other keys are ignored uninspected (R3.10). A manifest is arbitrary parsed
- *  JSON, so a non-object `dependencies` yields nothing rather than throwing. */
-function scopedDependencySpecifiers(manifest: PackageManifest): string[] {
+/** Collects a manifest's scoped `dependencies` keys, sorted; other keys are
+ *  ignored uninspected (R6.7). The scope to match is the run's configured one,
+ *  taken from `context.specifierPrefix`. A manifest is arbitrary parsed JSON, so
+ *  a non-object `dependencies` yields nothing rather than throwing. */
+function scopedDependencySpecifiers(
+  context: ProjectContext,
+  manifest: PackageManifest,
+): string[] {
   const dependencies: unknown = manifest.dependencies;
   if (dependencies === null || typeof dependencies !== "object") {
     return [];
   }
   return Object.keys(dependencies)
-    .filter((key) => key.startsWith(`${WORKSPACE_SCOPE}/`))
+    .filter((key) => key.startsWith(context.specifierPrefix))
     .sort();
 }
 
@@ -174,21 +175,20 @@ function scopedDependencySpecifiers(manifest: PackageManifest): string[] {
  * deeper stays private content of the package above it (R1.4, R9.6). Survivors
  * sort by directory name, so two runs over an unchanged tree agree (R2.5).
  *
- * @throws `[discovery:container-missing]` when `packages/microservices` is absent
- *   (R2.7); an absent `common` or `spa` yields no candidates instead (R2.6).
+ * An absent Discovery_Root of ANY category yields no candidates, not an error
+ * (R5.2, R6.14): the Config_Loader's `[config:root-missing]` (task 2.15) already
+ * fails the run before discovery is called when a microservice root is absent, so
+ * discovery can never see that state. An existing-but-empty microservice root is a
+ * discovery result of zero packages, not a configuration failure (R5.1).
  */
 function candidatesOf(
+  context: ProjectContext,
   category: ConsumerCategory,
-  listContainer: ListContainer,
+  listRoot: ListRoot,
 ): Candidate[] {
-  const containerDir = NAMESPACE_CONTAINER[category];
-  const entries = listContainer(containerDir);
+  const rootDir = context.roots[category];
+  const entries = listRoot(rootDir);
   if (entries === undefined) {
-    if (category === REQUIRED_CONTAINER_CATEGORY) {
-      throw new Error(
-        `[discovery:container-missing] no such Microservice_Namespace: "${containerDir}"`,
-      );
-    }
     return [];
   }
 
@@ -197,7 +197,7 @@ function candidatesOf(
     .map((entry) => ({
       category,
       dirName: entry.name,
-      packageDir: `${containerDir}/${entry.name}`,
+      packageDir: `${rootDir}/${entry.name}`,
     }))
     .sort((a, b) =>
       a.dirName < b.dirName ? -1 : a.dirName > b.dirName ? 1 : 0,
@@ -292,12 +292,13 @@ function readDeclaredNames(
  * package claiming a framework name (R1.6, R5.2).
  */
 function assertNamesMirrorDirectories(
+  context: ProjectContext,
   candidates: readonly NamedCandidate[],
 ): void {
   const offenders = candidates
     .filter(
       (candidate) =>
-        candidate.name !== `${WORKSPACE_SCOPE}/${candidate.dirName}`,
+        candidate.name !== context.scopedName(candidate.dirName),
     )
     .sort(byPackageDir);
 
@@ -307,7 +308,7 @@ function assertNamesMirrorDirectories(
       `${String(offenders.length)} discovered package(s) declare a name that does not mirror the directory:`,
       offenders.map(
         (candidate) =>
-          `"${candidate.packageDir}" — declared "${candidate.name}", expected "${WORKSPACE_SCOPE}/${candidate.dirName}"`,
+          `"${candidate.packageDir}" — declared "${candidate.name}", expected "${context.scopedName(candidate.dirName)}"`,
       ),
     );
   }
@@ -317,10 +318,15 @@ function assertNamesMirrorDirectories(
  * Validation stage 4 — checks no package name is declared twice, which is what
  * makes `byName` injective and so usable as an index (R3.9).
  *
- * The claim map is seeded with the framework names, so a package claiming one
- * collides with that directory instead of shadowing it (R1.6, R2.10, R5.2).
+ * The claim map is seeded with the framework names composed under this run's
+ * scope (`context.framework.all`), so a package claiming one collides with that
+ * directory instead of shadowing it, and the exclusion stays effective under
+ * relocated roots because it compares composed names (R6.8).
  */
-function assertNamesUnique(candidates: readonly NamedCandidate[]): void {
+function assertNamesUnique(
+  context: ProjectContext,
+  candidates: readonly NamedCandidate[],
+): void {
   const dirsByName = new Map<string, string[]>();
   const claim = (name: string, packageDir: string): void => {
     const dirs = dirsByName.get(name);
@@ -331,7 +337,7 @@ function assertNamesUnique(candidates: readonly NamedCandidate[]): void {
     }
   };
 
-  for (const singleton of FRAMEWORK_SINGLETONS) {
+  for (const singleton of context.framework.all) {
     claim(singleton.name, singleton.packageDir);
   }
   for (const candidate of candidates) {
@@ -428,9 +434,11 @@ function assertCategoryContracts(candidates: readonly NamedCandidate[]): void {
  * contract — each collecting every offender before it fails, and nothing
  * downstream is emitted until all five pass (R4.8).
  *
- * @param listContainer lists one category directory's direct entries.
+ * @param context the run's threaded per-run derivation of its Effective_Config;
+ *   supplies the Discovery_Roots, the scoped-name composer, the specifier prefix,
+ *   and the framework name index (R1.9, R6.1, R6.6, R6.7, R6.8).
+ * @param listRoot lists one Discovery_Root's direct entries.
  * @param readManifest reads one package's manifest.
- * @throws `[discovery:container-missing]` when `packages/microservices` is absent (R2.7).
  * @throws `[discovery:manifest]` for absent/unreadable/unparsable manifests (R3.4).
  * @throws `[discovery:name]` for a missing, non-string, or blank `name` (R3.5).
  * @throws `[discovery:mirror]` when a declared name does not mirror its directory (R3.6).
@@ -438,18 +446,19 @@ function assertCategoryContracts(candidates: readonly NamedCandidate[]): void {
  * @throws `[barrel:invalid]` for a missing barrel or build script (R4.1, R4.3, R4.7).
  */
 export function discoverPackagesFrom(
-  listContainer: ListContainer,
+  context: ProjectContext,
+  listRoot: ListRoot,
   readManifest: ReadManifest,
 ): Discovery {
   // Enumerate all three categories before validating any of them, so the stages
   // see every offender in the repository, not just the first category's.
   const candidates = CONSUMER_CATEGORIES.flatMap((category) =>
-    candidatesOf(category, listContainer),
+    candidatesOf(context, category, listRoot),
   );
 
   const named = readDeclaredNames(readManifests(candidates, readManifest));
-  assertNamesMirrorDirectories(named);
-  assertNamesUnique(named);
+  assertNamesMirrorDirectories(context, named);
+  assertNamesUnique(context, named);
   assertCategoryContracts(named);
 
   const packages: ConsumerPackage[] = named.map((candidate) => ({
@@ -457,7 +466,7 @@ export function discoverPackagesFrom(
     dirName: candidate.dirName,
     packageDir: candidate.packageDir,
     name: candidate.name,
-    dependencySpecifiers: scopedDependencySpecifiers(candidate.manifest),
+    dependencySpecifiers: scopedDependencySpecifiers(context, candidate.manifest),
     buildKind: buildKindOf(candidate.category),
   }));
 
@@ -487,15 +496,15 @@ function isAbsent(error: unknown): boolean {
   return code === "ENOENT" || code === "ENOTDIR";
 }
 
-/** Lists a category directory's direct entries from the real filesystem.
- *  `undefined` means absent; any other failure propagates. A symlink is resolved
- *  first, since R2.4 asks what an entry resolves to. */
-function listContainerFromDisk(
-  containerDir: string,
-): readonly ContainerEntry[] | undefined {
+/** Lists a Discovery_Root's direct entries from the real filesystem, over the
+ *  path it is HANDED. `undefined` means absent; any other failure propagates. A
+ *  symlink is resolved first, since R6.2 asks what an entry resolves to. */
+function listRootFromDisk(
+  rootDir: string,
+): readonly RootEntry[] | undefined {
   let entries;
   try {
-    entries = readdirSync(containerDir, { withFileTypes: true });
+    entries = readdirSync(rootDir, { withFileTypes: true });
   } catch (error) {
     if (isAbsent(error)) {
       return undefined;
@@ -508,7 +517,7 @@ function listContainerFromDisk(
     isDirectory:
       entry.isDirectory() ||
       (entry.isSymbolicLink() &&
-        resolvesToDirectory(join(containerDir, entry.name))),
+        resolvesToDirectory(join(rootDir, entry.name))),
   }));
 }
 
@@ -546,25 +555,32 @@ function readManifestFromDisk(packageDir: string): ManifestRead {
 /**
  * Runs discovery against the real filesystem. This is the entry point every other
  * module calls; it only wires the two filesystem readers into
- * {@link discoverPackagesFrom}, which holds the logic.
+ * {@link discoverPackagesFrom}, which holds the logic. The run's context supplies
+ * every scope- and root-dependent value (R1.9, R6.1).
  */
-export function discoverPackages(): Discovery {
-  return discoverPackagesFrom(listContainerFromDisk, readManifestFromDisk);
+export function discoverPackages(context: ProjectContext): Discovery {
+  return discoverPackagesFrom(context, listRootFromDisk, readManifestFromDisk);
 }
 
 /**
- * Reads the `@microservices`-scoped `dependencies` keys of any workspace package,
- * sorted. Other keys are ignored without resolution and without failing (R3.10).
+ * Reads the scoped `dependencies` keys of any workspace package, sorted, matching
+ * the run's Configured_Scope via `context.specifierPrefix`. Other keys are
+ * ignored without resolution and without failing (R6.7).
  *
- * THE single dependency reader of the Build_System: required-dependencies.ts,
- * the dev path, the workspace order, and the invariant check all reach manifests
- * through it, so no two paths read dependencies differently. An absent or
- * unparsable manifest yields an empty list — a leniency discovered packages never
- * meet, since their specifiers come from `ConsumerPackage.dependencySpecifiers`.
+ * Returns a {@link ReadDependencies}-shaped reader bound to `context`: the single
+ * dependency reader of the Build_System, so required-dependencies.ts, the dev
+ * path, the workspace order, and the invariant check all reach manifests through
+ * it and no two paths read dependencies differently. An absent or unparsable
+ * manifest yields an empty list — a leniency discovered packages never meet,
+ * since their specifiers come from `ConsumerPackage.dependencySpecifiers`.
  */
 export function readDependencySpecifiers(
-  packageDir: string,
-): readonly string[] {
-  const read = readManifestFromDisk(packageDir);
-  return read.kind === "ok" ? scopedDependencySpecifiers(read.manifest) : [];
+  context: ProjectContext,
+): (packageDir: string) => readonly string[] {
+  return (packageDir: string): readonly string[] => {
+    const read = readManifestFromDisk(packageDir);
+    return read.kind === "ok"
+      ? scopedDependencySpecifiers(context, read.manifest)
+      : [];
+  };
 }

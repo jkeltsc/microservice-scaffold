@@ -2,11 +2,25 @@
 //
 // The checks in `repo-invariants.ts` are pure and property-tested in
 // `repo-invariants.property.test.ts` (and, for the fourth `[workspaces:order-source]`
-// check, example-tested in `build-order-source.test.ts`). What is NOT covered
-// there is the bin around them: that it resolves the repository from cwd, runs
-// every check in one invocation, writes every message to stderr, and exits 0 / 1
-// as R12.8 requires. That boundary is only observable by running the bin as a
-// process, which is what this does.
+// check, example-tested in `build-order-source.test.ts`; the Tsconfig_Verifier
+// in `tsconfig-verifier.property.test.ts`). What is NOT covered there is the bin
+// around them: that it resolves the repository from cwd, runs every check in one
+// invocation, writes every message to stderr, and exits 0 / 1 as R12.8 requires.
+// That boundary is only observable by running the bin as a process, which is
+// what this does.
+//
+// Because the Tsconfig_Verifier is now one of the bin's checks (task 9.4), every
+// generated Tsc_Project carries a `tsconfig.json` that satisfies the
+// Load_Bearing_Settings judged for it — all four for a shipping package,
+// `composite`/`declaration` alone for a Non_Shipping_Singleton (`build-tools`,
+// `integration-tests`). Likewise the `[scope:template]` check (task 10.1) is one
+// of the bin's checks, so every generated tree carries a Registry_Template whose
+// import is scoped under this tree's scope; the `[scope:literal]` check (task
+// 10.2) scans `packages/build-tools/src/`, which these trees populate only with
+// a trivial `index.ts` naming no scope literal. Both scope checks are therefore
+// silent over both trees, and the violating tree still produces exactly the five
+// messages of the original four checks, so this suite keeps testing the bin
+// boundary rather than the new checks' own logic.
 //
 // An example test rather than a property test: the observable contract is two
 // exit statuses and the message set that accompanies them, and the interesting
@@ -92,6 +106,32 @@ function manifest(value: Manifest): string {
   return `${JSON.stringify(value, null, 2)}\n`;
 }
 
+/**
+ * A `tsconfig.json` that satisfies the Load_Bearing_Settings the Tsconfig_Verifier
+ * judges. `composite` and `declaration` are declared for every Tsc_Project;
+ * `outDir: ./dist` and `rootDir: ./src` are declared only for a shipping
+ * package. A Non_Shipping_Singleton (`build-tools`, `integration-tests`) omits
+ * the two layout settings, which the verifier does not judge for it (R9.8,
+ * R9.13). No `extends` base exists in these generated trees, so each package
+ * declares the settings directly.
+ */
+function tsconfig(options: { readonly layout: boolean }): string {
+  const compilerOptions: Record<string, unknown> = {
+    composite: true,
+    declaration: true,
+  };
+  if (options.layout) {
+    compilerOptions.outDir = "./dist";
+    compilerOptions.rootDir = "./src";
+  }
+  return `${JSON.stringify({ compilerOptions }, null, 2)}\n`;
+}
+
+/** A shipping Tsc_Project's satisfying tsconfig (all four settings). */
+const shippingTsconfig = tsconfig({ layout: true });
+/** A Non_Shipping_Singleton's satisfying tsconfig (composite + declaration). */
+const nonShippingTsconfig = tsconfig({ layout: false });
+
 /** The four Framework_Singleton manifests every generated tree carries. */
 const frameworkFiles: Readonly<Record<string, string>> = {
   "packages/contracts/package.json": manifest({
@@ -99,20 +139,44 @@ const frameworkFiles: Readonly<Record<string, string>> = {
     main: "./dist/index.js",
     types: "./dist/index.d.ts",
   }),
+  // contracts ships (staged for every Selector) -> all four settings judged.
+  "packages/contracts/tsconfig.json": shippingTsconfig,
+  // A trivial input so `tsc` finds at least one file and resolves the config
+  // (an empty project reports TS18003, which the verifier reads as unresolvable).
+  "packages/contracts/src/index.ts": "export const contracts = true;\n",
   "packages/build-tools/package.json": manifest({
     name: `${SCOPE}/build-tools`,
     dependencies: deps(CONTRACTS),
   }),
+  // build-tools is a Non_Shipping_Singleton -> only composite/declaration.
+  "packages/build-tools/tsconfig.json": nonShippingTsconfig,
+  "packages/build-tools/src/index.ts": "export const buildTools = true;\n",
   "packages/overseer/package.json": manifest({
     name: OVERSEER,
     main: "./dist/index.js",
     types: "./dist/index.d.ts",
     dependencies: deps(CONTRACTS, ALPHA, BETA),
   }),
+  // overseer ships at its package directory -> all four settings judged.
+  "packages/overseer/tsconfig.json": shippingTsconfig,
+  "packages/overseer/src/index.ts": "export const overseer = true;\n",
   "packages/integration-tests/package.json": manifest({
     name: `${SCOPE}/integration-tests`,
     dependencies: deps(CONTRACTS),
   }),
+  // integration-tests is a Non_Shipping_Singleton -> only composite/declaration.
+  "packages/integration-tests/tsconfig.json": nonShippingTsconfig,
+  "packages/integration-tests/src/index.ts":
+    "export const integrationTests = true;\n",
+  // The committed Registry_Template the `[scope:template]` check inspects (task
+  // 10.1). It must carry a scoped import under this tree's scope so the check is
+  // silent; without it the check would report an unreadable-template violation
+  // in every generated tree.
+  "packages/overseer/src/generated/microservice-registry.template.ts": [
+    `import type { MicroserviceRegistry } from "${CONTRACTS}";`,
+    `export const microserviceRegistry: MicroserviceRegistry = [];`,
+    "",
+  ].join("\n"),
 };
 
 /**
@@ -144,6 +208,7 @@ function cleanTree(): Tree {
         types: "./dist/index.d.ts",
         dependencies: deps(CONTRACTS),
       }),
+      "packages/common/cfg/tsconfig.json": shippingTsconfig,
       "packages/common/cfg/src/index.ts": [
         `import type { Thing } from "${CONTRACTS}";`,
         `import { helper } from "./helper.js";`,
@@ -157,6 +222,7 @@ function cleanTree(): Tree {
         name: ALPHA,
         dependencies: deps(CONTRACTS, CFG),
       }),
+      "packages/microservices/alpha/tsconfig.json": shippingTsconfig,
       "packages/microservices/alpha/src/index.ts": [
         `import { value } from "${CFG}";`,
         `import { router } from "./router.js";`,
@@ -176,6 +242,7 @@ function cleanTree(): Tree {
         name: BETA,
         dependencies: deps(CONTRACTS),
       }),
+      "packages/microservices/beta/tsconfig.json": shippingTsconfig,
       "packages/microservices/beta/src/index.ts": [
         `import type { Thing } from "${CONTRACTS}";`,
         `export const thing: Thing | undefined = undefined;`,
