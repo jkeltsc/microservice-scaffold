@@ -6,13 +6,15 @@
 // The oracle used to be the lexicographically-least topological order over
 // declared dependencies (Kahn with a `packageDir`-ordered ready queue). That is
 // no longer the derivation: the fix collapsed every Order_Producing_Path onto the
-// Build_Sequence of bugfix.md 2.1 — a fixed sequence of seven ordered statements,
-// where a declared dependency is honoured by the Verification_Pass rather than by
-// the sort. So the oracle here is a fresh restatement of those seven statements,
-// written from the requirement and NEVER by calling `buildSequence`, so the two
-// agreeing is evidence rather than a tautology.
+// Build_Sequence of bugfix.md 2.1 — a fixed sequence of ordered statements, where
+// a declared dependency is honoured by the Verification_Pass rather than by the
+// sort. registry-inversion R8.1 then inserted the Entry_Statement at position 6,
+// renumbering the test-only and Spa statements, so there are eight. The oracle
+// here is a fresh restatement of those eight statements, written from the
+// requirement and NEVER by calling `buildSequence`, so the two agreeing is
+// evidence rather than a tautology.
 //
-// The seven statements of 2.1, restated:
+// The eight statements of 2.1, restated:
 //   1. `packages/contracts`;
 //   2. `packages/build-tools`;
 //   3. the Common_Packages in CALCULATED order — a topological sort over each
@@ -20,22 +22,25 @@
 //      Common_Package, ready queue in ascending `packageDir` code point (2.3);
 //   4. the Microservice_Packages sorted by ascending `packageDir` code point;
 //   5. `packages/overseer`;
-//   6. the test-only Framework_Singletons (`integration-tests`);
-//   7. the Spa_Packages sorted by ascending `packageDir` code point, a trailing
+//   6. the Entry_Package, at the threaded Entry_Root — one member, no membership
+//      flag, present on every Order_Producing_Path (registry-inversion R8.1, R8.7);
+//   7. the test-only Framework_Singletons (`integration-tests`);
+//   8. the Spa_Packages sorted by ascending `packageDir` code point, a trailing
 //      phase after every statement above (2.4).
 //
 // The world is a set of `WorkspaceNode` values — constructed directly, no
-// filesystem — spanning both tiers: the four Framework_Singletons and any set of
-// discovered Consumer_Packages across all three Consumer_Categories, each with an
-// arbitrary assignment of `@microservices`-scoped `dependencies` resolving to
-// other nodes. The generators keep the base graph acyclic, so `workspaceBuildOrder`
-// returns rather than failing the Verification_Pass.
+// filesystem — spanning both tiers: the four Framework_Singletons, the
+// Entry_Package (tier `"entry"`), and any set of discovered Consumer_Packages
+// across all three Consumer_Categories, each with an arbitrary assignment of
+// `@microservices`-scoped `dependencies` resolving to other nodes. The generators
+// keep the base graph acyclic, so `workspaceBuildOrder` returns rather than failing
+// the Verification_Pass.
 //
 // The assertions, all off one generated node set:
 //   - every workspace package present exactly once and nothing else (R12.1);
 //   - the order equals the Build_Sequence oracle element for element;
 //   - each package after every one of its Compile_Time_Prerequisites — a declared
-//     specifier resolving to a NON-Spa package, plus Overseer after each
+//     specifier resolving to a NON-Spa package, plus the Entry_Package after each
 //     microservice — the pass, not the sort, being what honours the edge (2.8);
 //   - identical element for element across repeated derivations AND independent
 //     of the order the packages are presented in (2.3, Property 5).
@@ -43,7 +48,7 @@
 // The within-statement tiebreak (2.3, 3.3): a separate block asserts the
 // `compareCodePoints(packageDir)` order governs pairs WITHIN one statement only —
 // the microservices of statement 4 among themselves, the Spa_Packages of
-// statement 7 among themselves — and is NOT consulted across statement boundaries,
+// statement 8 among themselves — and is NOT consulted across statement boundaries,
 // so a Common_Package declaring no specifier no longer leads the order ahead of
 // `packages/contracts` (3.3, F11's specifier-free-Common_Package counterexample).
 //
@@ -89,6 +94,14 @@ const {
 
 const FRAMEWORK_DIR_NAMES: readonly string[] = FRAMEWORK_SINGLETONS.map(
   (entry) => entry.dirName,
+);
+
+/** The Entry_Package's directory and declared name, as statement 6 emits them:
+ *  the threaded Entry_Root, and the scope composed with that root's last segment
+ *  (registry-inversion R1.10, R8.1). */
+const ENTRY_ROOT = CONTEXT.entryRoot;
+const ENTRY_NAME = CONTEXT.scopedName(
+  ENTRY_ROOT.slice(ENTRY_ROOT.lastIndexOf("/") + 1),
 );
 
 // ---------------------------------------------------------------------------
@@ -163,14 +176,15 @@ function commonOrderOracle(
 }
 
 /**
- * Reference Workspace_Build_Order — the seven statements of 2.1, in order, over
- * the full workspace membership (`buildTools` and `testOnly` both present, no
- * Selector). Built here from the requirement, NEVER by calling `buildSequence`,
- * so `workspaceBuildOrder` agreeing with it is evidence.
+ * Reference Workspace_Build_Order — the eight statements of 2.1 as
+ * registry-inversion R8.1 renumbered them, in order, over the full workspace
+ * membership (`buildTools` and `testOnly` both present, no Selector). Built here
+ * from the requirement, NEVER by calling `buildSequence`, so
+ * `workspaceBuildOrder` agreeing with it is evidence.
  *
  * Statement order is what decides a cross-statement pair; the `packageDir`
- * tiebreak is consulted only within statements 4 and 7 (statement 3 is
- * calculated). Assumes an acyclic node set.
+ * tiebreak is consulted only within statements 4 and 8 (statement 3 is
+ * calculated, and statement 6 has one member). Assumes an acyclic node set.
  */
 function referenceOrder(nodes: readonly WorkspaceNode[]): WorkspaceNode[] {
   const byDir = new Map(nodes.map((node) => [node.packageDir, node]));
@@ -201,11 +215,13 @@ function referenceOrder(nodes: readonly WorkspaceNode[]): WorkspaceNode[] {
   )) {
     order.push(node);
   }
-  // Statement 5 — the Overseer.
+  // Statement 5 — the Overseer_Library.
   push(pick(OVERSEER.packageDir));
-  // Statement 6 — the test-only Framework_Singletons.
+  // Statement 6 — the Entry_Package, on every path.
+  push(pick(ENTRY_ROOT));
+  // Statement 7 — the test-only Framework_Singletons.
   push(pick(INTEGRATION_TESTS.packageDir));
-  // Statement 7 — the Spa_Packages, ascending packageDir code point, trailing.
+  // Statement 8 — the Spa_Packages, ascending packageDir code point, trailing.
   for (const node of [...byTier("spa")].sort((a, b) =>
     compareCodePoints(a.packageDir, b.packageDir),
   )) {
@@ -257,16 +273,40 @@ function consumerNode(
   };
 }
 
-/** The four Framework_Singleton nodes with empty specifiers, for small fixtures. */
-function frameworkNodes(
+/**
+ * The nodes `workspaceNodesFrom` collects without discovering them: the four
+ * Framework_Singletons (tier `"framework"`) and the Entry_Package (tier
+ * `"entry"`). Every fixture below needs all five, because statement 6 emits the
+ * Entry_Package on every Order_Producing_Path and `workspaceBuildOrder` maps each
+ * produced entry back to an input node — a node set omitting it would fail with
+ * `[build-order:internal]` rather than exercising the order.
+ *
+ * Specifiers default to none for a Framework_Singleton and to `contracts` plus
+ * `overseer` for the Entry_Package, mirroring what R1.10 requires its manifest to
+ * name; both are back-edges (statements 1 and 5 precede statement 6), so the base
+ * graph stays sound. `specifiersByDir` overrides either.
+ */
+function nonDiscoveredNodes(
   specifiersByDir: ReadonlyMap<string, readonly string[]>,
 ): WorkspaceNode[] {
-  return FRAMEWORK_SINGLETONS.map((entry) => ({
-    packageDir: entry.packageDir,
-    name: entry.name,
-    dependencySpecifiers: [...(specifiersByDir.get(entry.packageDir) ?? [])].sort(),
-    tier: "framework" as const,
-  }));
+  return [
+    ...FRAMEWORK_SINGLETONS.map((entry) => ({
+      packageDir: entry.packageDir,
+      name: entry.name,
+      dependencySpecifiers: [
+        ...(specifiersByDir.get(entry.packageDir) ?? []),
+      ].sort(),
+      tier: "framework" as const,
+    })),
+    {
+      packageDir: ENTRY_ROOT,
+      name: ENTRY_NAME,
+      dependencySpecifiers: [
+        ...(specifiersByDir.get(ENTRY_ROOT) ?? [CONTRACTS.name, OVERSEER.name]),
+      ].sort(),
+      tier: "entry" as const,
+    },
+  ];
 }
 
 /**
@@ -284,15 +324,17 @@ function statementOf(node: WorkspaceNode): number {
       return 3;
     case "microservice":
       return 4;
+    case "entry":
+      return 6;
     case "spa":
-      return 7;
+      return 8;
     default: {
       // A Framework_Singleton, by its packageDir: contracts 1, build-tools 2,
-      // overseer 5, integration-tests 6.
+      // overseer 5, integration-tests 7.
       if (node.packageDir === CONTRACTS.packageDir) return 1;
       if (node.packageDir === BUILD_TOOLS.packageDir) return 2;
       if (node.packageDir === OVERSEER.packageDir) return 5;
-      return 6;
+      return 7;
     }
   }
 }
@@ -302,7 +344,8 @@ function statementOf(node: WorkspaceNode): number {
  * Build_Sequence, so `workspaceBuildOrder` returns and equals the oracle. The
  * four Framework_Singletons participate (with no declared specifiers — their
  * position is their statement, named by `framework.ts`, so a declared framework
- * edge would either be ignored or rejected by the pass), and each drawn
+ * edge would either be ignored or rejected by the pass), the Entry_Package
+ * participates with its two declared framework specifiers, and each drawn
  * Consumer_Package may declare a specifier resolving to any node in a STRICTLY
  * EARLIER statement, plus any Spa_Package unconditionally (a `... -> spa` edge is
  * never a prerequisite, 2.6, so it never constrains the order). Diamonds arise
@@ -323,8 +366,8 @@ const arbNodeSet: fc.Arbitrary<WorkspaceNode[]> = fc
     const consumers: WorkspaceNode[] = rawEntries.map((entry) =>
       consumerNode({ ...entry, name: `${WORKSPACE_SCOPE}/${entry.dirName}` }, []),
     );
-    const frameworks = frameworkNodes(new Map());
-    const allNodes = [...frameworks, ...consumers];
+    const fixed = nonDiscoveredNodes(new Map());
+    const allNodes = [...fixed, ...consumers];
 
     const spaNames = allNodes
       .filter((node) => node.tier === "spa")
@@ -352,7 +395,7 @@ const arbNodeSet: fc.Arbitrary<WorkspaceNode[]> = fc
     );
 
     return consumerDeps.map((deps) => [
-      ...frameworks,
+      ...fixed,
       ...consumers.map((node, i) => ({
         ...node,
         dependencySpecifiers: [...deps[i]].sort(),
@@ -395,13 +438,13 @@ describe("the Workspace_Build_Order equals the Build_Sequence oracle", () => {
     );
   });
 
-  it("equals the seven-statement Build_Sequence oracle element for element (2.1)", () => {
+  it("equals the eight-statement Build_Sequence oracle element for element (2.1)", () => {
     fc.assert(
       fc.property(arbNodeSet, (nodes) => {
         const order = workspaceBuildOrder(CONTEXT, nodes);
         const oracle = referenceOrder(nodes);
 
-        // The full claim: the order is exactly the seven statements of 2.1,
+        // The full claim: the order is exactly the eight statements of 2.1,
         // restated independently. Equal element for element subsumes the
         // statement order and the within-statement `packageDir` tiebreak at once.
         expect(order.map((n) => n.packageDir)).toEqual(
@@ -438,12 +481,15 @@ describe("the Workspace_Build_Order equals the Build_Sequence oracle", () => {
           }
         }
 
-        // The synthesised Overseer -> Selected_Microservice edges: every
-        // microservice precedes the Overseer, the registry importing each.
-        const overseerIndex = indexOfDir.get(OVERSEER.packageDir)!;
+        // The synthesised Selected_Microservice -> Entry_Package edges: every
+        // microservice precedes the Entry_Package, the Generated_Registry it
+        // compiles statically importing each (registry-inversion R8.4). The
+        // Overseer imports no generated file, so no `microservice -> overseer`
+        // edge is synthesised in their place.
+        const entryIndex = indexOfDir.get(ENTRY_ROOT)!;
         for (const node of nodes) {
           if (node.tier === "microservice") {
-            expect(indexOfDir.get(node.packageDir)!).toBeLessThan(overseerIndex);
+            expect(indexOfDir.get(node.packageDir)!).toBeLessThan(entryIndex);
           }
         }
       }),
@@ -501,7 +547,7 @@ describe("the within-statement tiebreak governs same-statement pairs only (2.3, 
           ),
         (microserviceDirs) => {
           const nodes: WorkspaceNode[] = [
-            ...frameworkNodes(new Map()),
+            ...nonDiscoveredNodes(new Map()),
             ...microserviceDirs.map((d) =>
               consumerNode(
                 {
@@ -528,7 +574,7 @@ describe("the within-statement tiebreak governs same-statement pairs only (2.3, 
     );
   });
 
-  it("orders the Spa_Packages of statement 7 among themselves by ascending packageDir", () => {
+  it("orders the Spa_Packages of statement 8 among themselves by ascending packageDir", () => {
     fc.assert(
       fc.property(
         fc
@@ -538,7 +584,7 @@ describe("the within-statement tiebreak governs same-statement pairs only (2.3, 
           ),
         (spaDirs) => {
           const nodes: WorkspaceNode[] = [
-            ...frameworkNodes(new Map()),
+            ...nonDiscoveredNodes(new Map()),
             ...spaDirs.map((d) =>
               consumerNode(
                 { category: "spa", dirName: d, name: `${WORKSPACE_SCOPE}/${d}` },
@@ -571,7 +617,7 @@ describe("the within-statement tiebreak governs same-statement pairs only (2.3, 
           // that: contracts is statement 1, the Common_Package statement 3.
           const commonName = `${WORKSPACE_SCOPE}/${commonDir}`;
           const nodes: WorkspaceNode[] = [
-            ...frameworkNodes(new Map()),
+            ...nonDiscoveredNodes(new Map()),
             consumerNode(
               { category: "common", dirName: commonDir, name: commonName },
               [],
@@ -621,7 +667,7 @@ describe("the within-statement tiebreak governs same-statement pairs only (2.3, 
             [depName],
           );
 
-          const nodes = [...frameworkNodes(new Map()), dep, declarer];
+          const nodes = [...nonDiscoveredNodes(new Map()), dep, declarer];
           const order = workspaceBuildOrder(CONTEXT, nodes);
           const index = new Map(order.map((n, i) => [n.packageDir, i]));
 
@@ -672,7 +718,7 @@ describe("a cycle among the Common_Packages fails naming exactly the participant
             tier: "common" as const,
           }));
 
-          const nodes = [...frameworkNodes(new Map()), ...ring];
+          const nodes = [...nonDiscoveredNodes(new Map()), ...ring];
           const ringDirSet = new Set(dirs);
 
           let thrown: unknown;

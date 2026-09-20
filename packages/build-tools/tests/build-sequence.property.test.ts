@@ -27,8 +27,10 @@
 //   2. it lets the four Framework_Singletons participate as nodes with their own
 //      declared specifiers (`contracts`, `build-tools`, `overseer`,
 //      `integration-tests`), because the Workspace_Build_Order emits statements
-//      1, 2, 5 and 6 from them and Property 4's statement-number mapping must see
-//      those positions;
+//      1, 2, 5 and 7 from them and Property 4's statement-number mapping must see
+//      those positions — and it carries the Entry_Package's two declared
+//      specifiers alongside them, since statement 6's single member is discovered
+//      by nothing either;
 //   3. it offers a generator variant (`arbLayoutWithIntraStatementEdge`) that
 //      plants a `microservice → peer-microservice` edge on purpose, so the
 //      structural check of the Verification_Pass has an intra-statement (both in
@@ -88,6 +90,13 @@ const FRAMEWORK_DIR_NAMES: readonly string[] = FRAMEWORK_SINGLETONS.map(
   (entry) => entry.dirName,
 );
 
+/** The Entry_Root this run's context threads — statement 6's single member, and
+ *  the one node of every derived order that belongs to no Consumer_Category
+ *  (registry-inversion R8.1). `workspaceNodesFrom` collects it at tier `"entry"`,
+ *  so it appears in the Workspace_Build_Order, and it is a walk root of every
+ *  build plan, so it appears in the Tsc_Root_Order too. */
+const ENTRY_ROOT = CONTEXT.entryRoot;
+
 // ---------------------------------------------------------------------------
 // The widened in-memory layout model
 // ---------------------------------------------------------------------------
@@ -104,7 +113,9 @@ interface Layout {
   readonly microservices: readonly ConsumerPackage[];
   /** Spa_Packages; each may depend on Common and Microservice packages. */
   readonly spas: readonly ConsumerPackage[];
-  /** Framework_Singleton specifiers, keyed by repo-relative package directory. */
+  /** The declared specifiers of every package discovery never records — the four
+   *  Framework_Singletons and the Entry_Package — keyed by repo-relative package
+   *  directory. */
   readonly frameworkDeps: Readonly<Record<string, readonly string[]>>;
 }
 
@@ -226,8 +237,11 @@ const arbDirName: fc.Arbitrary<string> = fc
  *     statements, and a Spa target is never a prerequisite anyway);
  *   - `contracts` declares nothing; `build-tools`, `overseer` and
  *     `integration-tests` may declare `@microservices/contracts` (statement 1 <
- *     2, 5, 6). The Overseer never declares a microservice — that edge is
- *     synthesised by the registry, not declared (1.8, 1.9).
+ *     2, 5, 7), and the Entry_Package declares `contracts` and `overseer`
+ *     (statements 1 and 5 both precede statement 6). No package declares a
+ *     microservice — the `Selected_Microservice → Entry_Package` edge is
+ *     synthesised by the registry, not declared (1.8, 1.9,
+ *     registry-inversion R8.4).
  */
 const arbLayout: fc.Arbitrary<Layout> = fc
   .record({
@@ -291,6 +305,13 @@ const arbLayout: fc.Arbitrary<Layout> = fc
           [BUILD_TOOLS.packageDir]: btContracts ? [CONTRACTS.name] : [],
           [OVERSEER.packageDir]: ovContracts ? [CONTRACTS.name] : [],
           [INTEGRATION_TESTS.packageDir]: itContracts ? [CONTRACTS.name] : [],
+          // The Entry_Package's two declared dependencies, exactly as R1.10
+          // requires its manifest to name them. Both are back-edges (statements
+          // 1 and 5 precede statement 6), so the base graph stays a DAG whose
+          // Workspace_Build_Order carries no Ordering_Violation — and the
+          // `Overseer → Entry_Package` edge reaches the Prerequisite_Graph as an
+          // ordinary declared edge rather than a synthesised one (R8.5).
+          [ENTRY_ROOT]: [CONTRACTS.name, OVERSEER.name],
         };
 
         return {
@@ -374,8 +395,13 @@ const NUM_RUNS = { numRuns: 200 } as const;
 // ---------------------------------------------------------------------------
 //
 // Maps a repo-relative package directory to the statement of 2.1 that must have
-// emitted it, straight from the requirement: 1 contracts, 2 build-tools, 3
-// common, 4 microservice, 5 overseer, 6 integration-tests, 7 spa.
+// emitted it, straight from the requirement as registry-inversion R8.1 renumbered
+// it: 1 contracts, 2 build-tools, 3 common, 4 microservice, 5 overseer, 6 the
+// Entry_Package, 7 integration-tests, 8 spa.
+//
+// The Entry_Package is matched by the threaded Entry_Root, the same way statement
+// 6 names its single member: it is discovered by nothing and belongs to no
+// Consumer_Category, so no category root can classify it.
 
 function oracleStatementOf(layout: Layout, packageDir: string): number {
   if (packageDir === CONTRACTS.packageDir) return 1;
@@ -383,8 +409,9 @@ function oracleStatementOf(layout: Layout, packageDir: string): number {
   if (layout.commons.some((pkg) => pkg.packageDir === packageDir)) return 3;
   if (packageDir.startsWith(`${NAMESPACE_CONTAINER.microservice}/`)) return 4;
   if (packageDir === OVERSEER.packageDir) return 5;
-  if (packageDir === INTEGRATION_TESTS.packageDir) return 6;
-  if (packageDir.startsWith(`${NAMESPACE_CONTAINER.spa}/`)) return 7;
+  if (packageDir === ENTRY_ROOT) return 6;
+  if (packageDir === INTEGRATION_TESTS.packageDir) return 7;
+  if (packageDir.startsWith(`${NAMESPACE_CONTAINER.spa}/`)) return 8;
   throw new Error(`oracle: unclassifiable package directory "${packageDir}"`);
 }
 
@@ -631,7 +658,8 @@ function referenceSelected(
  * required-dependency resolver keeps only reachable ones, but on these layouts
  * every declared common edge is followed, so filtering the Workspace order to
  * this membership and the resolver agree), statement 4 (the Selected_Microservices),
- * statement 5 (the Overseer). Statements 2, 6, 7 contribute nothing.
+ * statement 5 (the Overseer), and statement 6 (the Entry_Package, on every path).
+ * Statements 2, 7, and 8 contribute nothing.
  *
  * The membership is intersected against the actual Tsc_Root_Order below rather
  * than asserted to equal it here — Property 4 asserts the equality against the

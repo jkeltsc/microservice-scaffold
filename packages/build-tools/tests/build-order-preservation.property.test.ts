@@ -94,6 +94,11 @@ const FRAMEWORK_NAMES: readonly string[] = FRAMEWORK_SINGLETONS.map(
   (entry) => entry.name,
 );
 
+/** The Entry_Root this run's context threads: statement 6's single member, the
+ *  last `tsc --build` root, and the walk root that replaced the Overseer
+ *  (registry-inversion R8.1, R9.1). */
+const ENTRY_ROOT = CONTEXT.entryRoot;
+
 // ===========================================================================
 // BLOCK 1 — Property 2: Preservation over prerequisite-forced pairs
 // ===========================================================================
@@ -135,8 +140,9 @@ function consumerNode(
 
 /**
  * The Build_Sequence statement a node falls in, from its tier alone (2.1) — the
- * seven fixed statements: contracts 1, build-tools 2, common 3, microservice 4,
- * overseer 5, integration-tests 6, spa 7. This is what the generator gates edges
+ * eight fixed statements as registry-inversion R8.1 renumbered them: contracts 1,
+ * build-tools 2, common 3, microservice 4, overseer 5, the Entry_Package 6,
+ * integration-tests 7, spa 8. This is what the generator gates edges
  * by: under the post-fix Build_Sequence a package's position IS its statement, so
  * a declared prerequisite only stays STATEMENT-SOUND when its target sits in a
  * strictly earlier statement. A target in the same or a later statement is a
@@ -151,17 +157,34 @@ function statementOf(node: WorkspaceNode): number {
       return 3;
     case "microservice":
       return 4;
+    case "entry":
+      return 6;
     case "spa":
-      return 7;
+      return 8;
     default: {
       // A Framework_Singleton, by its packageDir: contracts 1, build-tools 2,
-      // overseer 5, integration-tests 6.
+      // overseer 5, integration-tests 7.
       if (node.packageDir === CONTRACTS.packageDir) return 1;
       if (node.packageDir === BUILD_TOOLS.packageDir) return 2;
       if (node.packageDir === OVERSEER.packageDir) return 5;
-      return 6;
+      return 7;
     }
   }
+}
+
+/** The Entry_Package node, as `workspaceNodesFrom` collects it: tier `"entry"`,
+ *  the threaded Entry_Root as its directory, and the scope composed with that
+ *  root's last segment as its name (registry-inversion R1.10, R8.5). Every node
+ *  set below carries it, because statement 6 emits it on every path. */
+function entryNode(
+  dependencySpecifiers: readonly string[] = [CONTRACTS.name, OVERSEER.name],
+): WorkspaceNode {
+  return {
+    packageDir: ENTRY_ROOT,
+    name: CONTEXT.scopedName(ENTRY_ROOT.slice(ENTRY_ROOT.lastIndexOf("/") + 1)),
+    dependencySpecifiers: [...dependencySpecifiers].sort(),
+    tier: "entry",
+  };
 }
 
 /**
@@ -207,7 +230,10 @@ const arbNodeSet: fc.Arbitrary<WorkspaceNode[]> = fc
         [],
       ),
     );
-    const allNodes = [...frameworks, ...consumers];
+    // The Entry_Package, with its two declared framework specifiers. It is a node
+    // of every workspace, so every generated set carries it.
+    const entry = entryNode();
+    const allNodes = [...frameworks, entry, ...consumers];
 
     const microserviceNames = allNodes
       .filter((node) => node.tier === "microservice")
@@ -257,6 +283,7 @@ const arbNodeSet: fc.Arbitrary<WorkspaceNode[]> = fc
             ? { ...node, dependencySpecifiers: [...overseerDeps].sort() }
             : node,
         ),
+        entry,
         ...consumers.map((node, i) => ({
           ...node,
           dependencySpecifiers: [...deps[i]].sort(),
@@ -283,6 +310,7 @@ const noSpaOneCommonNodes: readonly WorkspaceNode[] = [
           : [],
     tier: "framework" as const,
   })),
+  entryNode(),
   consumerNode(
     { category: "common", dirName: "config", name: `${WORKSPACE_SCOPE}/config` },
     [CONTRACTS.name],
@@ -365,8 +393,11 @@ function referenceOrder(nodes: readonly WorkspaceNode[]): WorkspaceNode[] {
  *
  *   - a declared `@microservices`-scoped specifier resolving to a NON-Spa
  *     package is a prerequisite edge (2.6 excludes a Spa_Package unconditionally);
- *   - additionally, the Overseer depends on each Selected_Microservice its
- *     generated registry imports — the edge no manifest may declare.
+ *   - additionally, the Entry_Package depends on each Selected_Microservice the
+ *     Generated_Registry it compiles imports — the edge no manifest may declare
+ *     (registry-inversion R8.4). It used to run to the Overseer; the Overseer
+ *     imports no generated file now, so nothing in its compilation reads a
+ *     microservice's output and the edge moved to the package that does.
  *
  * A Spa_Package target is excluded here, which is precisely why F11's two
  * unconstrained counterexamples fall outside the claim.
@@ -394,9 +425,9 @@ function forcedPrerequisitePairs(
     }
   }
 
-  // The Overseer → each Selected_Microservice edge the registry creates.
+  // The each-Selected_Microservice → Entry_Package edge the registry creates.
   for (const dir of selectedMicroserviceDirs) {
-    pairs.push([dir, OVERSEER.packageDir]);
+    pairs.push([dir, ENTRY_ROOT]);
   }
 
   return pairs;
@@ -421,9 +452,9 @@ function hasOrderingViolation(
 
 describe("Property 2: every prerequisite-forced pair keeps its Pre_Fix_Baseline relative order", () => {
   // For the repository-wide Workspace_Build_Order, every workspace package is
-  // present and there is no Selector, so the only Overseer → microservice edges
-  // that can be forced are over EVERY discovered microservice — that is what the
-  // registry names when the whole repository is built. We restate that here.
+  // present and there is no Selector, so the only microservice → Entry_Package
+  // edges that can be forced are over EVERY discovered microservice — that is what
+  // the registry names when the whole repository is built. We restate that here.
   function allMicroserviceDirs(nodes: readonly WorkspaceNode[]): string[] {
     return nodes
       .filter((node) => node.tier === "microservice")
@@ -435,7 +466,7 @@ describe("Property 2: every prerequisite-forced pair keeps its Pre_Fix_Baseline 
   // and post-fix mechanisms break such ties DIFFERENTLY while neither is an
   // Ordering_Violation. F11's two witnesses:
   //   (1) the legal `overseer → spa` edge — pre-fix `spa/demo` precedes the
-  //       Overseer, post-fix the Overseer (statement 5) precedes it (statement 7),
+  //       Overseer, post-fix the Overseer (statement 5) precedes it (statement 8),
   //       and a Spa_Package is not a Compile_Time_Prerequisite (2.6);
   //   (2) a Common_Package declaring no scoped specifier — pre-fix it may lead
   //       the order (`com` < `con`), post-fix `contracts` is statement 1.
@@ -489,7 +520,8 @@ describe("Property 2: every prerequisite-forced pair keeps its Pre_Fix_Baseline 
 // ===========================================================================
 //
 // Uses the in-memory layout model `build-plan.property.test.ts` uses. A layout
-// is a set of discovered Consumer_Packages plus the Overseer's specifiers,
+// is a set of discovered Consumer_Packages plus the Entry_Package's specifiers
+// (the walk root that replaced the Overseer's, registry-inversion R9.1),
 // generated acyclic so the plan derivation succeeds. The Selectors generated are
 // only those whose identifier list is in ASCENDING directory order — every
 // spelling of the all-Selector plus both shipped Container configurations — the
@@ -499,7 +531,7 @@ describe("Property 2: every prerequisite-forced pair keeps its Pre_Fix_Baseline 
 interface Layout {
   readonly libraries: readonly ConsumerPackage[];
   readonly microservices: readonly ConsumerPackage[];
-  readonly overseerDeps: readonly string[];
+  readonly entryDeps: readonly string[];
 }
 
 const LIBRARY_CATEGORIES: readonly ConsumerCategory[] = ["common", "spa"];
@@ -546,7 +578,7 @@ function discoveryOf(layout: Layout): Discovery {
 function readerFor(layout: Layout): ReadDependencies {
   const prefix = `${NAMESPACE_CONTAINER.microservice}/`;
   return (packageDir) => {
-    if (packageDir === OVERSEER.packageDir) return layout.overseerDeps;
+    if (packageDir === ENTRY_ROOT) return layout.entryDeps;
     if (packageDir.startsWith(prefix)) {
       const dirName = packageDir.slice(prefix.length);
       return (
@@ -593,7 +625,7 @@ function referenceSelected(
 
 /**
  * The Required_Dependencies reachability walk restated (R7.1): from the
- * Selected_Microservices' and the Overseer's specifiers, ignore non-scoped
+ * Selected_Microservices' and the Entry_Package's specifiers, ignore non-scoped
  * specifiers, resolve-but-do-not-follow a Framework_Singleton, and follow every
  * discovered Consumer_Package edge.
  */
@@ -603,7 +635,7 @@ function referenceRequiredNames(
 ): Set<string> {
   const byName = new Map(allPackages(layout).map((pkg) => [pkg.name, pkg]));
 
-  const queue: string[] = [...layout.overseerDeps];
+  const queue: string[] = [...layout.entryDeps];
   for (const dirName of selected) {
     const microservice = layout.microservices.find(
       (pkg) => pkg.dirName === dirName,
@@ -666,10 +698,11 @@ function referenceOrderedRequired(
 /**
  * The pre-fix `tscRootsOf` composition restated element for element (F1, F9):
  * `contracts`, then the required Common_Packages in required-dependency order,
- * then the Selected_Microservices in Selector order, then the Overseer. The
- * required set is filtered on `category === "common"` — an independent
- * restatement of "the required Tsc_Projects", where production filters on
- * `buildKind === "tsc-project"`.
+ * then the Selected_Microservices in Selector order, then the Overseer, and
+ * finally the Entry_Package — the one entry registry-inversion R8.1 appends to
+ * the composition. The required set is filtered on `category === "common"` — an
+ * independent restatement of "the required Tsc_Projects", where production filters
+ * on `buildKind === "tsc-project"`.
  */
 function referenceTscRoots(
   layout: Layout,
@@ -683,6 +716,7 @@ function referenceTscRoots(
       .map((pkg) => pkg.packageDir),
     ...selected.map(microserviceDir),
     OVERSEER.packageDir,
+    ENTRY_ROOT,
   ];
 }
 
@@ -739,10 +773,11 @@ function arbMicroservices(
 
 /**
  * A random layout: Common and Spa libraries in a DAG, at least one
- * Microservice_Package, and an Overseer always declaring `@microservices/contracts`.
- * A library-to-library edge only ever targets an earlier Common_Package, so the
- * two forbidden inbound-SPA edges are never generated; microservices and the
- * Overseer may name a Spa_Package (`microservice → spa`, `overseer → spa` legal).
+ * Microservice_Package, and an Entry_Package always declaring
+ * `@microservices/contracts` and `@microservices/overseer`. A library-to-library
+ * edge only ever targets an earlier Common_Package, so the two forbidden
+ * inbound-SPA edges are never generated; microservices and the Entry_Package may
+ * name a Spa_Package (`microservice → spa`, `entry → spa` legal).
  */
 const arbLayout: fc.Arbitrary<Layout> = fc
   .uniqueArray(arbLibraryEntry, {
@@ -766,11 +801,11 @@ const arbLayout: fc.Arbitrary<Layout> = fc
 
       return arbMicroservices(libraryNames, libraryDirNames).chain(
         (microservices) =>
-          fc.subarray([...libraryNames]).map((extraOverseerDeps) => ({
+          fc.subarray([...libraryNames]).map((extraEntryDeps) => ({
             libraries,
             microservices,
-            overseerDeps: [
-              ...new Set([CONTRACTS.name, ...extraOverseerDeps]),
+            entryDeps: [
+              ...new Set([CONTRACTS.name, OVERSEER.name, ...extraEntryDeps]),
             ].sort(),
           })),
       );
@@ -818,7 +853,7 @@ const arbLayoutAndAscendingSelector: fc.Arbitrary<{
 );
 
 describe("Property 11: tscRoots equals the pre-fix tscRootsOf composition element for element", () => {
-  it("equals contracts, required commons in dep order, selected microservices, overseer — over generated layouts and ascending Selectors", () => {
+  it("equals contracts, required commons in dep order, selected microservices, overseer, the Entry_Package — over generated layouts and ascending Selectors", () => {
     fc.assert(
       fc.property(arbLayoutAndAscendingSelector, ({ layout, selector }) => {
         const plan = planOf(layout, selector);
@@ -848,7 +883,7 @@ describe("Property 11: tscRoots equals the pre-fix tscRootsOf composition elemen
         consumerPackage("microservice", "microservice1", [CONTRACTS.name]),
         consumerPackage("microservice", "microservice2", [CONTRACTS.name]),
       ],
-      overseerDeps: [CONTRACTS.name],
+      entryDeps: [CONTRACTS.name, OVERSEER.name],
     };
     const plan = planOf(layout, "microservice1,microservice2");
     expect(plan.tscRoots).toEqual([
@@ -856,6 +891,7 @@ describe("Property 11: tscRoots equals the pre-fix tscRootsOf composition elemen
       microserviceDir("microservice1"),
       microserviceDir("microservice2"),
       OVERSEER.packageDir,
+      ENTRY_ROOT,
     ]);
     expect(plan.tscRoots).toEqual(
       referenceTscRoots(layout, "microservice1,microservice2"),

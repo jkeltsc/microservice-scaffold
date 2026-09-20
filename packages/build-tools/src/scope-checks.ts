@@ -1,12 +1,10 @@
-// The two scope-drift checks the Repo_Invariant_Checker runs alongside the
-// Tsconfig_Verifier: `[scope:template]` and `[scope:literal]`. Neither writes
-// anything — the whole filesystem surface of this module is `readFileSync` and a
-// recursive `readdirSync` walk, and it imports NO write function from `node:fs`,
-// so "leave the Registry_Template byte-identical" (R8.9) and "inspect only"
-// (R12.4) are facts about the module graph rather than promises about a code
-// path.
+// The scope-drift check the Repo_Invariant_Checker runs alongside the
+// Tsconfig_Verifier: `[scope:literal]`. It writes nothing — the whole filesystem
+// surface of this module is `readFileSync` and a recursive `readdirSync` walk,
+// and it imports NO write function from `node:fs`, so "inspect only" (R12.4) is a
+// fact about the module graph rather than a promise about a code path.
 //
-// Both checks parse with the TypeScript compiler in parse-only mode
+// The check parses with the TypeScript compiler in parse-only mode
 // (`ts.createSourceFile`, no `Program`, no type checker, no `lib.d.ts`), because
 // this repository's Build_System sources carry long comments that name the
 // Scope_Default constantly: a regex over source text would report every one of
@@ -17,130 +15,17 @@
 // (R1.8, R12.4) — which is what makes exempting exactly project-config.ts a
 // complete exemption: this check does not itself contain the literal it forbids.
 //
-// (Requirements 8.9, 8.10, 12.4, 12.5, 12.6, 12.7, 7.7, 7.8.)
+// The Scope_Template_Check that once lived here is retired: its subject, the
+// Registry_Template, no longer needs guarding, so no diagnostic replaces it
+// (registry-inversion R6.1).
+//
+// (Requirements 12.4, 12.5, 12.6, 12.7, 7.7, 7.8.)
 
 import { readFileSync, readdirSync } from "node:fs";
 
 import ts from "typescript";
 
 import { SCOPE_DEFAULT } from "./project-config.js";
-import { type ProjectContext } from "./project-context.js";
-
-// --- The Registry_Template scope check (`[scope:template]`, R8.9, R8.10) ---
-
-const SCOPE_TEMPLATE = "[scope:template]";
-
-/** The committed Registry_Template the root `prepare` script copies. It is
- *  inspected, never rewritten or generated (R8.9). */
-const REGISTRY_TEMPLATE_PATH =
-  "packages/overseer/src/generated/microservice-registry.template.ts";
-
-/** The injected Registry_Template reader (R8.10). Its `text`/`unreadable` shapes
- *  keep absence-of-a-reason distinct from a reason, which is what lets the
- *  unreadable branch name why. */
-export type ReadTemplate = (
-  path: string,
-) =>
-  | { readonly kind: "text"; readonly text: string }
-  | { readonly kind: "unreadable"; readonly reason: string };
-
-/** The scope part of a scoped specifier: the text up to the first `/`, or the
- *  whole specifier when it holds none. A specifier is scoped when it begins with
- *  `@`. */
-function scopeOf(specifier: string): string {
-  const slash = specifier.indexOf("/");
-  return slash === -1 ? specifier : specifier.slice(0, slash);
-}
-
-/**
- * Collects every `import`/`export` module specifier of a parsed source, in
- * source order. Parse-only: `moduleSpecifier` is a string literal node whose
- * `.text` is the cooked specifier, so an escaped spelling is already normalised.
- */
-function moduleSpecifiers(source: ts.SourceFile): string[] {
-  const specifiers: string[] = [];
-  const visit = (node: ts.Node): void => {
-    if (
-      (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
-      node.moduleSpecifier !== undefined &&
-      ts.isStringLiteral(node.moduleSpecifier)
-    ) {
-      specifiers.push(node.moduleSpecifier.text);
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
-  return specifiers;
-}
-
-/**
- * Reports whether the committed Registry_Template still imports under the run's
- * Configured_Scope, returning at most one violation ever (R8.9, R8.10).
- *
- * A template fails for one reason — the project changed its scope — so the three
- * failure branches each aggregate to a single message rather than listing every
- * specifier:
- *
- *   - unreadable: one message naming the path and the reason, no inspection.
- *   - no scoped specifier at all: one message saying none was found.
- *   - a scoped specifier whose scope differs from `context.specifierPrefix`: one
- *     message naming the scope the FIRST offending specifier declares.
- *
- * The template is parsed with the same parse-only `createSourceFile` the literal
- * check uses, so a header comment naming the right scope cannot mask an import
- * naming the wrong one.
- */
-export function checkRegistryTemplateScope(
-  context: ProjectContext,
-  readTemplate: ReadTemplate,
-): readonly string[] {
-  const read = readTemplate(REGISTRY_TEMPLATE_PATH);
-  if (read.kind === "unreadable") {
-    return [
-      `${SCOPE_TEMPLATE} "${REGISTRY_TEMPLATE_PATH}" could not be read; ${read.reason}`,
-    ];
-  }
-
-  const source = ts.createSourceFile(
-    REGISTRY_TEMPLATE_PATH,
-    read.text,
-    ts.ScriptTarget.ES2023,
-    /* setParentNodes */ false,
-  );
-
-  const scoped = moduleSpecifiers(source).filter((specifier) =>
-    specifier.startsWith("@"),
-  );
-
-  if (scoped.length === 0) {
-    return [
-      `${SCOPE_TEMPLATE} "${REGISTRY_TEMPLATE_PATH}" declares no scoped import specifier; expected the Configured_Scope "${context.config.scope}"`,
-    ];
-  }
-
-  const offending = scoped.find(
-    (specifier) => !specifier.startsWith(context.specifierPrefix),
-  );
-  if (offending !== undefined) {
-    return [
-      `${SCOPE_TEMPLATE} "${REGISTRY_TEMPLATE_PATH}" imports under scope "${scopeOf(offending)}"; expected the Configured_Scope "${context.config.scope}"`,
-    ];
-  }
-
-  return [];
-}
-
-/** The real Registry_Template reader: one `readFileSync`, no write. */
-export const readRegistryTemplate: ReadTemplate = (path) => {
-  try {
-    return { kind: "text", text: readFileSync(path, "utf8") };
-  } catch (error) {
-    return {
-      kind: "unreadable",
-      reason: error instanceof Error ? error.message : String(error),
-    };
-  }
-};
 
 // --- The scope-literal check (`[scope:literal]`, R12.4, R12.5, R12.6, R12.7) ---
 

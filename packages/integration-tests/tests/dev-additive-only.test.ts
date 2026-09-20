@@ -270,13 +270,21 @@ describe("no paths, baseUrl, or module alias in any tsconfig (R9.2)", () => {
 });
 
 describe("the production runtime and image pipeline are unchanged (R9.5)", () => {
-  it("the root prepare script still copies the registry template verbatim", () => {
+  it("declares no install-time Template_Copy_Step at all", () => {
+    // The registry inversion retired both halves of the old arrangement: the
+    // Registry_Template under the Overseer and the root `prepare` script that
+    // copied it. Neither `npm install` nor `npm ci` writes a Generated_Registry
+    // any more; the Entry_Package's own `build`/`typecheck` generate it, and so do
+    // `npm start`, `npm run dev`, CI, and the image build
+    // (registry-inversion R5.1, R5.2, R3.6). This is the additive-only claim's
+    // remaining content for the install step: nothing was added in its place.
     const root = readRepoJson<{ scripts?: Record<string, string> }>(
       "package.json",
     );
-    expect(root.scripts?.prepare).toBe(
-      "cp packages/overseer/src/generated/microservice-registry.template.ts packages/overseer/src/generated/microservice-registry.ts",
-    );
+    expect(root.scripts).not.toHaveProperty("prepare");
+    const rootText = readRepoText("package.json");
+    expect(rootText).not.toContain("microservice-registry.template.ts");
+    expect(rootText).not.toContain("packages/overseer/src/generated");
   });
 
   it("Dockerfile.template contains no Dev_Server token", () => {
@@ -340,7 +348,7 @@ describe("the ci quality gate is unchanged and adds no dev typecheck script (R9.
 });
 
 describe("no new production dependency, and any new devDependency is pinned (R9.7, R9.8)", () => {
-  it("build-tools depends only on @microservices/contracts, and its one devDependency (typescript) is pinned to the root", () => {
+  it("build-tools depends only on @microservices/contracts, and every devDependency it declares is pinned to the version the repository already declares", () => {
     const manifest = readRepoJson<{
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
@@ -351,15 +359,34 @@ describe("no new production dependency, and any new devDependency is pinned (R9.
     // compiler API in `check:invariants`, so build-tools declares `typescript`
     // as its own devDependency — never a production dependency, so it stays out
     // of the image's `npm ci --omit=dev` tree — pinned to the root's version.
+    //
+    // registry-inversion Step 1 (R11.1, R11.3) moves the shared test-support
+    // Arbitraries_Module into `packages/build-tools/src/testing/`, so build-tools
+    // also declares that module's own needs — `fast-check`, `express`, and
+    // `@types/express` — as devDependencies. All three stay development-only, so
+    // the production dependency set is still the single scoped `contracts` entry.
     expect(manifest.dependencies).toEqual({ "@microservices/contracts": "*" });
 
     const root = readRepoJson<{ devDependencies?: Record<string, string> }>(
       "package.json",
     );
-    const rootTypescript = (root.devDependencies ?? {}).typescript;
+    const rootDev = root.devDependencies ?? {};
+    const rootTypescript = rootDev.typescript;
     expect(rootTypescript).toBeTruthy();
+
+    // `typescript` and `fast-check` are pinned to the root's declared versions;
+    // `express` and `@types/express` are pinned to the versions every other
+    // package of the repository declares for them, so no second major can enter
+    // the tree through this package.
+    const contracts = readRepoJson<{
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    }>("packages/contracts/package.json");
     expect(manifest.devDependencies ?? {}).toEqual({
       typescript: rootTypescript,
+      "fast-check": rootDev["fast-check"],
+      express: (contracts.dependencies ?? {}).express,
+      "@types/express": (contracts.devDependencies ?? {})["@types/express"],
     });
   });
 
@@ -423,9 +450,9 @@ describe("scripts/start.js change is confined to consuming Common_Startup (R9.9)
     ).toBe(false);
   });
 
-  it("preserves the unchanged Production_Start effects: full build and the Overseer one-shot", () => {
+  it("preserves the unchanged Production_Start effects: full build and a one-shot server run", () => {
     // The Production_Start EFFECTS are unchanged: start.js still performs the
-    // full workspace build before the Overseer, and the Overseer run is still
+    // full workspace build before the server, and the server run is still
     // one-shot. The MECHANISM of the full build changed in Step 3 (Task 6.1):
     // the build now goes through the compiled ordered bin, not through npm's
     // `workspaces` traversal. The Declared_Array_Sequence is an order source for
@@ -437,7 +464,12 @@ describe("scripts/start.js change is confined to consuming Common_Startup (R9.9)
     // The full build no longer goes through the `workspaces` array.
     expect(startJs).not.toContain("npm run build --workspaces");
     expect(startJs).not.toContain('"build", "--workspaces"');
-    expect(startJs).toContain("packages/overseer/dist/index.js");
+    // The module spawned is the Entry_Point_Path, read off the compiled
+    // ProjectContext — the single derivation every consumer reads — and no
+    // Framework_Singleton's compiled path stands in that role
+    // (registry-inversion R7.1, R7.2, R10.6).
+    expect(startJs).toContain("context.entryPointPath");
+    expect(startJs).not.toContain("packages/overseer/dist/index.js");
     // One-shot: it uses spawnSync (blocking) and does not watch or restart.
     expect(startJs).toContain("spawnSync");
     expect(startJs).not.toContain("createSolutionBuilderWithWatch");

@@ -22,7 +22,7 @@ dist
 **/*.tsbuildinfo
 
 # Generated registry (build-tools regenerates it in the build stage)
-packages/overseer/src/generated/microservice-registry.ts
+app/src/generated/microservice-registry.ts
 
 # Dockerfile template source (only the generated Dockerfile is needed in-context)
 Dockerfile.template

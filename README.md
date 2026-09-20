@@ -16,7 +16,7 @@ curl http://localhost:8080/
 
 ## Running locally
 
-There are two ways to run the scaffold locally, and both execute the *same* compiled artifacts: the `dist/` output of each package, run through the same `packages/overseer/dist/index.js` entrypoint a container image uses. They differ only in whether a build watcher stays running.
+There are two ways to run the scaffold locally, and both execute the *same* compiled artifacts: the `dist/` output of each package, run through the same `app/dist/index.js` entrypoint a container image uses. That path is the project's own entry module — the committed `app/src/index.ts`, compiled — not a framework package's compiled output: the Overseer is a library the entry module imports. They differ only in whether a build watcher stays running.
 
 ### `npm run dev` — the dev server (recommended)
 
@@ -26,7 +26,7 @@ There are two ways to run the scaffold locally, and both execute the *same* comp
 2. **Bootstrap build** — `packages/contracts` and `packages/build-tools` are compiled so the registry generator can run.
 3. **Registry generation** — the microservice registry is generated once for the current `MICROSERVICES` selector.
 4. **Build watcher start** — a resident TypeScript build watches the sources of the selected microservices, the Overseer, and their shared-package dependencies, recompiling incrementally into each package's `dist/`.
-5. **Overseer start** — the Overseer launches from `packages/overseer/dist/index.js`.
+5. **Entrypoint start** — the session launches `app/dist/index.js`, which wires the generated registry into the Overseer library and starts the server. The supervisor respawns that same path after every clean recompile, and a container `CMD` runs it too.
 
 Once the session is running, it **picks up automatically** any change to a TypeScript source file of a package it is building: the watcher recompiles, and once the compile finishes cleanly, the Overseer restarts against the new output. A failed compile leaves the last good Overseer serving and prints the error with its file, line, and character position, so you can read the error, fix it, and continue without restarting anything.
 
@@ -40,7 +40,7 @@ A dev session runs until you terminate it.
 
 ### `npm start` — one-shot run
 
-`npm start` runs the same compiled artifacts without a build watcher: it loads the environment, bootstrap-builds, generates the registry, builds every package once, then runs the Overseer. It does not watch for changes, so it will not pick up edits — you restart it yourself. `npm start` terminates when the Overseer process it started exits, propagating that exit status. Use it as a one-shot path, or to isolate whether a problem is in the application rather than in the dev server's watch coordination.
+`npm start` runs the same compiled artifacts without a build watcher: it loads the environment, bootstrap-builds, generates the registry, builds every package once, then spawns `app/dist/index.js`. It does not watch for changes, so it will not pick up edits — you restart it yourself. `npm start` terminates when that process exits, propagating its exit status. Use it as a one-shot path, or to isolate whether a problem is in the application rather than in the dev server's watch coordination.
 
 ### The demo page and its bundled output
 
@@ -93,6 +93,7 @@ Add a new common package to the `workspaces` array in the root `package.json` �
 
 ```jsonc
 "workspaces": [
+  "app",
   "packages/contracts",
   "packages/build-tools",
   "packages/common/*",       // covers config, extended-config, and any new common package
@@ -251,12 +252,13 @@ names the JSON key path, the offending value, and why it was rejected.
 
 | Package | Role |
 |---|---|
+| `app` | The project's own entry package: the committed entry module that wires the generated registry into the Overseer and starts the server. Its compiled `app/dist/index.js` is the entrypoint a local run and a container run both execute. |
 | `packages/contracts` | Framework package: shared TypeScript types (request handler contract, exported module shape). |
 | `packages/build-tools` | Registry generator and container image-tree assembler (CLI-only). |
 | `packages/common/*` | Consumer-written common packages: `config` (consumed by `microservice2`) and `extended-config` (consumed by `microservice3`, and itself consuming `config`). |
 | `packages/spa/*` | Bundler-built frontends: `demo`, the demo page `microservice1` serves at `/`; `demo` consumes `@microservices/extended-config`. |
 | `packages/microservices/*` | Individual microservice modules. Each exports a `path` and a `router`. |
-| `packages/overseer` | The routing frontend — mounts enabled microservice routers and serves HTTP. |
+| `packages/overseer` | The routing frontend, as a library — mounts enabled microservice routers and serves HTTP, entered through its barrel by the entry package rather than run directly. |
 | `packages/integration-tests` | Cross-package integration test suites. |
 
 ## Scripts
@@ -264,7 +266,7 @@ names the JSON key path, the offending value, and why it was rejected.
 | Command | Description |
 |---|---|
 | `npm run dev` | Recommended for local development: build, watch, and restart the Overseer on source changes (see [Running locally](#running-locally)). |
-| `npm start` | Run locally once and exit with the Overseer's status (uses dotenvx for `.env` injection). |
+| `npm start` | Run `app/dist/index.js` once and exit with its status (uses dotenvx for `.env` injection). |
 | `npm test` | Run the root test suite. |
 | `npm run test --workspaces` | Run every package's test suite. |
 | `npm run build` | Build all packages in dependency order. |

@@ -330,8 +330,8 @@ and no longer builds containers. The container matrix currently in
 
 Not a decision - revisit as each spec is written. Roughly: config-driven
 discovery and the project config first, because everything else depends on the
-platform no longer assuming it is the repo; then registry inversion and the split of
-`contracts` into its own published package; then the repository re-shape into `packages/`, `fixtures/`, and
+platform no longer assuming it is the repo; then registry inversion and the
+relocation of the test arbitraries out of `contracts`; then the repository re-shape into `packages/`, `fixtures/`, and
 `example/`; then packaging, presets, generator, and the CI/release split.
 
 Prefer writing one spec at a time. This record pins the target, so later specs

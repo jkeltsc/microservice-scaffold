@@ -41,7 +41,8 @@ export interface StagedPackage {
   readonly justification:
     | "framework-singleton" // R5.6, R5.10, R7.7
     | "required-dependency" // R7.3, R7.4
-    | "selected-microservice"; // R7.5
+    | "selected-microservice" // R7.5
+    | "entry-package"; // registry-inversion R9.6, R9.7, R9.9
 }
 
 /** Everything one build consists of, for one MICROSERVICES value. */
@@ -62,8 +63,9 @@ export interface BuildPlan {
    * Spa_Package and each root once (R6.3, R6.6, R13.3–R13.6). It is the
    * Build_Sequence over the Selector-scoped membership: statement 1 (`contracts`),
    * statement 3 (the required Common_Packages), statement 4 (the
-   * Selected_Microservices), statement 5 (the Overseer). Statements 2, 6, and 7
-   * contribute no root on the image path (2.5).
+   * Selected_Microservices), statement 5 (the Overseer_Library), statement 6 (the
+   * Entry_Package). Statements 2, 7, and 8 contribute no root on the image path
+   * (2.5).
    */
   readonly tscRoots: readonly string[];
   /** Everything to stage, in the order it is written (R7.3–R7.5, R5.6). */
@@ -77,8 +79,10 @@ function microserviceDir(context: ProjectContext, identifier: string): string {
 
 /**
  * The Framework_Singletons that ship under the workspace scope whatever the
- * build includes — today exactly `contracts` (R5.6, R5.10). Filtered on what
- * each record the context carries declares, so this module names no singleton.
+ * build includes — today `contracts` and the Overseer_Library (R5.6, R5.10,
+ * registry-inversion R3.7, R9.4). Filtered on what each record the context
+ * carries declares, so this module names no singleton: the Overseer joined this
+ * group by changing its own `staging`, with no change here.
  */
 function alwaysStagedScoped(
   context: ProjectContext,
@@ -89,13 +93,31 @@ function alwaysStagedScoped(
 }
 
 /**
- * The Framework_Singletons that ship at their own package directory — today
- * exactly the Overseer, which the container entrypoint invokes by path.
+ * The one package staged at a package directory rather than under the scope
+ * directory: the Entry_Package, at the Entry_Root, so that the Entry_Point_Path
+ * `<Entry_Root>/dist/index.js` resolves inside the image (registry-inversion
+ * R9.6, R7.7).
+ *
+ * Not a Framework_Singleton record and not a `FrameworkStaging` value — the
+ * Entry_Package belongs to the consumer, and no Framework_Singleton is staged at
+ * its package directory any more. Both paths come from `context.entryRoot`, the
+ * single derivation, so this module composes no path of its own.
+ *
+ * `scopedEntry: undefined` is what keeps the Integrity_Assertion silent about it
+ * (registry-inversion R9.7): the entry is neither enumerated under the scope
+ * directory nor a member of the justified set, so the check does not range over
+ * it rather than exempting it. `copyPackage` stages `package.json` plus `dist`
+ * for every package whatever its category, so no `src` of it is staged and the
+ * Generated_Registry's source file never reaches an Image_Tree (R9.5) while its
+ * compiled form ships inside `dist`.
  */
-function alwaysStagedAtPackageDir(
-  context: ProjectContext,
-): readonly FrameworkSingleton[] {
-  return context.framework.all.filter((entry) => entry.staging === "package-dir");
+function entryPackageStage(context: ProjectContext): StagedPackage {
+  return {
+    sourceDir: context.entryRoot,
+    targetDir: context.entryRoot,
+    scopedEntry: undefined,
+    justification: "entry-package",
+  };
 }
 
 /** A package landing at `node_modules/@microservices/<entry>` as a real directory. */
@@ -116,12 +138,22 @@ function scopedStage(
 /**
  * This function lists everything to stage, in the order it is written.
  *
- * Four groups: the always-staged Framework_Singletons under the scope, the STAGE
+ * Four groups: the always-staged Framework_Singletons under the scope
+ * (`contracts`, then the Overseer_Library, in `framework.all` order), the STAGE
  * set (Common and Spa members alike), the selected microservices, then the
- * Overseer at its own directory (R7.3–R7.5, R5.6). Every entry records why it is
- * there, so the Integrity_Assertion (image-tree.ts) can justify an Image_Tree
- * entry from the plan alone, and nothing reaches the list except through the
- * group that justifies it — minimality needs no prune step (R7.6).
+ * Entry_Package at the Entry_Root (R7.3–R7.5, R5.6, registry-inversion R3.7,
+ * R9.2–R9.4, R9.6). Every entry records why it is there, so the
+ * Integrity_Assertion (image-tree.ts) can justify an Image_Tree entry from the
+ * plan alone, and nothing reaches the list except through the group that
+ * justifies it — minimality needs no prune step (R7.6).
+ *
+ * `build-tools`, `integration-tests`, and the microservice Discovery_Root reach
+ * no group, so they are staged into no Image_Tree (registry-inversion R9.5): the
+ * two singletons declare `"none"` staging, and a microservice is staged from its
+ * identifier into the scope directory, never from its Discovery_Root.
+ *
+ * The recording of an Image_Tree sorts its entries, so this group order is
+ * unobservable in a baseline; it is stated so the list has one definition.
  */
 function stageOf(
   context: ProjectContext,
@@ -148,12 +180,7 @@ function stageOf(
         "selected-microservice",
       ),
     ),
-    ...alwaysStagedAtPackageDir(context).map((entry) => ({
-      sourceDir: entry.packageDir,
-      targetDir: entry.packageDir,
-      scopedEntry: undefined,
-      justification: "framework-singleton" as const,
-    })),
+    entryPackageStage(context),
   ];
 }
 
@@ -192,15 +219,16 @@ export function buildPlanFrom(
   );
 
   // The Tsc_Root_Order is the Build_Sequence primitive over the Selector-scoped
-  // membership: statement 1 (`contracts`) and statement 5 (the Overseer) are named
-  // by the sequence, statement 3 the required Common_Packages, statement 4 the
-  // Selected_Microservices. Both `false` values are a stated decision, not the
-  // emergent consequence F4 describes: `build-tools` (statement 2) and
-  // `integration-tests` (statement 6) are Framework_Singletons that never ship in
-  // an image and are excluded from the image `tsc --build` here on purpose (3.15).
-  // `spa: []` because on the image path statement 7 is handed no members: a
+  // membership: statement 1 (`contracts`) and statement 5 (the Overseer_Library)
+  // are named by the sequence, statement 3 the required Common_Packages, statement
+  // 4 the Selected_Microservices, statement 6 the Entry_Package — unconditionally,
+  // since every Order_Producing_Path compiles it. Both `false` values are a stated
+  // decision, not the emergent consequence F4 describes: `build-tools` (statement
+  // 2) and `integration-tests` (statement 7) are Framework_Singletons that never
+  // ship in an image and are excluded from the image `tsc --build` here on purpose
+  // (3.15). `spa: []` because on the image path statement 8 is handed no members: a
   // Spa_Package is not a `tsc --build` root, so its Spa_Packages live in
-  // `plan.spaBuilds` and are built by their own `npm run build`. Statement 7's
+  // `plan.spaBuilds` and are built by their own `npm run build`. Statement 8's
   // placement and `spaBuilds`' phase are two independent facts that agree, not one
   // claim expressed twice (D7).
   const tscSequence = buildSequence(context, {
@@ -218,7 +246,11 @@ export function buildPlanFrom(
   // manifest reads and no spawned process (D2). `workspaceOrder` is the
   // SequencedPackage[] over the full workspace membership, and `edges` the
   // Prerequisite_Graph over the same nodes and this Selector.
-  const workspaceNodes = workspaceNodesFrom(context, discovery, readDependencies);
+  const workspaceNodes = workspaceNodesFrom(
+    context,
+    discovery,
+    readDependencies,
+  );
   const workspaceOrder = buildSequence(context, {
     common: workspaceNodes
       .filter((node) => node.tier === "common")
@@ -232,7 +264,9 @@ export function buildPlanFrom(
       })),
     microservices: workspaceNodes
       .filter((node) => node.tier === "microservice")
-      .map((node) => node.packageDir.slice(node.packageDir.lastIndexOf("/") + 1)),
+      .map((node) =>
+        node.packageDir.slice(node.packageDir.lastIndexOf("/") + 1),
+      ),
     spa: workspaceNodes
       .filter((node) => node.tier === "spa")
       .map((node) => ({

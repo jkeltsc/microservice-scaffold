@@ -9,6 +9,7 @@
     "packages/microservices/microservice2",
     "packages/microservices/microservice3",
     "packages/overseer",
+    "app",
     "packages/integration-tests",
     "packages/spa/demo"
   ],
@@ -18,6 +19,7 @@
     "packages/common/extended-config",
     "packages/microservices/microservice1",
     "packages/microservices/microservice2",
-    "packages/overseer"
+    "packages/overseer",
+    "app"
   ]
 }

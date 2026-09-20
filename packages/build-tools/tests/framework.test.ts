@@ -2,8 +2,8 @@
 // unit tests": «`framework.ts` surface»).
 //
 // The Framework_Constants_Module is the single declaration site for the four
-// Framework_Singletons' scope-free directory facts and the Overseer entrypoint.
-// Its whole contract is the *shape and content* of a handful of constants, so an
+// Framework_Singletons' scope-free directory facts. Its whole contract is the
+// *shape and content* of a handful of constants, so an
 // example test is the right instrument: there is no input space to quantify
 // over, only a fixed surface to pin.
 //
@@ -19,8 +19,14 @@
 // scope-composed framework name and the per-run roots live on the project
 // context, asserted in `project-context.property.test.ts`. This file keeps only
 // the scope-free surface: the four directory names, the staging classification,
-// the composed entrypoint, and `assertFrameworkDirectoriesPresent` (that last in
+// and `assertFrameworkDirectoriesPresent` (that last in
 // `framework.property.test.ts`).
+//
+// After registry-inversion seam 4 the module declares no entrypoint constant at
+// all: the Entry_Point_Path is derived once on the project context, so there is
+// no `OVERSEER_ENTRYPOINT` left to pin here, and the Overseer — now a library the
+// Entry_Package imports by name — stages under the scope directory rather than at
+// its own package directory (registry-inversion R3.7, R7.1, R7.2).
 //
 // Method: every expectation is stated against an EXPECTED TABLE declared
 // independently in this file, not derived from the module under test. In
@@ -36,7 +42,6 @@ import {
   ALWAYS_STAGED_SCOPED_ENTRIES,
   CONSUMER_CATEGORIES,
   FRAMEWORK_DIRECTORIES,
-  OVERSEER_ENTRYPOINT,
   PACKAGES_DIR,
   type FrameworkDirectory,
 } from "../src/framework.js";
@@ -59,7 +64,7 @@ const EXPECTED_DIRECTORIES: readonly FrameworkDirectory[] = [
   {
     dirName: "overseer",
     packageDir: "packages/overseer",
-    staging: "package-dir",
+    staging: "scoped-node-modules",
   },
   {
     dirName: "build-tools",
@@ -101,25 +106,31 @@ describe("framework.ts surface: FRAMEWORK_DIRECTORIES (R10.1, R10.6)", () => {
     expect(first).toEqual(EXPECTED_DIRECTORIES.map((entry) => entry.dirName));
   });
 
-  it("classifies staging exactly: contracts under the scope, the Overseer at its dir, the rest never", () => {
+  it("classifies staging exactly: contracts and the Overseer_Library under the scope, the rest never", () => {
     const staging = Object.fromEntries(
       FRAMEWORK_DIRECTORIES.map((entry) => [entry.dirName, entry.staging]),
     );
 
     expect(staging).toEqual({
       contracts: "scoped-node-modules",
-      overseer: "package-dir",
+      overseer: "scoped-node-modules",
       "build-tools": "none",
       "integration-tests": "none",
     });
   });
+
+  it("declares no entrypoint constant — the Entry_Point_Path lives on the project context", async () => {
+    // registry-inversion R7.1/R7.2: the retired `OVERSEER_ENTRYPOINT` is what
+    // made a Framework_Singleton's compiled path nameable in the entrypoint role.
+    // Its absence from the module's export surface is the mechanical form of that
+    // retirement, so it is pinned here rather than left to inspection.
+    const surface = await import("../src/framework.js");
+
+    expect(Object.keys(surface)).not.toContain("OVERSEER_ENTRYPOINT");
+  });
 });
 
 describe("framework.ts surface: composed paths and staging (R10.1)", () => {
-  it("composes OVERSEER_ENTRYPOINT as packages/overseer/dist/index.js", () => {
-    expect(OVERSEER_ENTRYPOINT).toBe("packages/overseer/dist/index.js");
-  });
-
   it("holds in ALWAYS_STAGED_SCOPED_ENTRIES exactly the directories staged under the scope", () => {
     // Derived from the scope-free directories table's own `staging` column, not
     // from the module's `filter`: the staging classification lives on
@@ -128,9 +139,10 @@ describe("framework.ts surface: composed paths and staging (R10.1)", () => {
       (entry) => entry.staging === "scoped-node-modules",
     ).map((entry) => entry.dirName);
 
-    // The expected table says that is `contracts` alone (R5.10, R7.7); pinning
-    // the literal too keeps the derivation honest.
-    expect(expected).toEqual(["contracts"]);
+    // The expected table says that is `contracts` and the Overseer_Library, in
+    // FRAMEWORK_DIRECTORIES order (R5.10, R7.7, registry-inversion R3.7); pinning
+    // the literals too keeps the derivation honest.
+    expect(expected).toEqual(["contracts", "overseer"]);
     expect([...ALWAYS_STAGED_SCOPED_ENTRIES]).toEqual(expected);
   });
 });

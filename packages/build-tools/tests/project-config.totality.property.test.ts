@@ -27,7 +27,13 @@
 // against clearly-unparsable inputs, drawn as their own arbitrary so the single
 // diagnostic is exercised directly rather than left to chance.
 //
+// Since registry-inversion the input pool also carries texts declaring `entry`
+// across its accepted, rejected, and wrong-typed spellings, and a parsed outcome
+// is checked to carry the Entry_Root as a non-empty string — so the fourth value
+// is inside the totality quantifier rather than beside it.
+//
 // Validates: Requirements 2.1, 2.3, 2.13, 14.1
+// Validates: registry-inversion Requirements 1.2
 
 import { describe, expect, it } from "vitest";
 import * as fc from "fast-check";
@@ -38,15 +44,22 @@ import {
   type ParseOutcome,
   type ConfigDiagnostic,
 } from "../src/project-config.js";
-import { configText, pathologicalText } from "./arbitraries/config.js";
+import {
+  arbEntryConfigText,
+  configText,
+  pathologicalText,
+} from "./arbitraries/config.js";
 
 /**
  * Every string the totality property must range over: the Requirement 14.1
  * pool, plus well-formed JSON object texts (so the "parsed" outcome and the
- * structured-rejection outcomes are both reached, not only the malformed edge).
+ * structured-rejection outcomes are both reached, not only the malformed edge),
+ * plus texts that always declare `entry` — accepted, rejected, and wrong-typed —
+ * so the parser's fourth per-value block is inside the quantifier rather than
+ * reached only through the `configText()` pool that never declares the key.
  */
 function anyInput(): fc.Arbitrary<string> {
-  return fc.oneof(pathologicalText(), configText());
+  return fc.oneof(pathologicalText(), configText(), arbEntryConfigText());
 }
 
 /**
@@ -68,11 +81,15 @@ function assertExactlyOneOutcome(outcome: ParseOutcome): void {
       assertFourPartsNonEmpty(d);
     }
   } else {
-    // The parsed outcome carries a ParsedConfig with a fully-defaulted config.
+    // The parsed outcome carries a ParsedConfig with a fully-defaulted config:
+    // every value present as a string, the Entry_Root included, whether the
+    // input declared it or left it to the Entry_Root_Default.
     expect(typeof outcome.parsed.config.scope).toBe("string");
     expect(typeof outcome.parsed.config.roots.microservice).toBe("string");
     expect(typeof outcome.parsed.config.roots.common).toBe("string");
     expect(typeof outcome.parsed.config.roots.spa).toBe("string");
+    expect(typeof outcome.parsed.config.entry).toBe("string");
+    expect(outcome.parsed.config.entry.length).toBeGreaterThan(0);
   }
 }
 

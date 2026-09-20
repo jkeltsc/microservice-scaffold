@@ -123,6 +123,11 @@ const FRAMEWORK_DIR_NAMES: readonly string[] = FRAMEWORK_SINGLETONS.map(
 /** The Consumer_Categories eligible to be required dependencies: everything but `microservice`. */
 const LIBRARY_CATEGORIES: readonly ConsumerCategory[] = ["common", "spa"];
 
+/** The Entry_Root this run's context threads: one of the two walk roots a plan
+ *  starts from, the last `tsc --build` root (Build_Sequence statement 6), and the
+ *  one staged target outside the scope directory (registry-inversion R9.1, R9.6). */
+const ENTRY_ROOT = discoveryContext.entryRoot;
+
 // ---------------------------------------------------------------------------
 // Oracle: Build_Kind from category alone
 // ---------------------------------------------------------------------------
@@ -163,8 +168,18 @@ interface Layout {
   readonly libraries: readonly ConsumerPackage[];
   /** Microservice_Packages; their specifiers double as the root specifiers. */
   readonly microservices: readonly ConsumerPackage[];
-  /** The Overseer's declared specifiers (always includes `contracts`). */
-  readonly overseerDeps: readonly string[];
+  /**
+   * The Entry_Package's declared specifiers — the second walk root's, alongside
+   * the Selected_Microservices' (registry-inversion R9.1). Always includes
+   * `contracts` and `overseer`, as R1.10 requires its manifest to name them; both
+   * are Framework_Singletons, so both resolve and neither is followed.
+   *
+   * This replaced the Overseer's specifiers as the layout's non-microservice walk
+   * root: the Overseer is no longer a root of its own and is reached through this
+   * declared dependency instead, so a library named only in the Overseer's own
+   * manifest is no longer walked.
+   */
+  readonly entryDeps: readonly string[];
 }
 
 /** A discovered Consumer_Package placed in its category's Namespace_Container. */
@@ -218,7 +233,7 @@ function discoveryOf(layout: Layout): Discovery {
 function readerFor(layout: Layout): ReadDependencies {
   const prefix = `${NAMESPACE_CONTAINER.microservice}/`;
   return (packageDir) => {
-    if (packageDir === OVERSEER.packageDir) return layout.overseerDeps;
+    if (packageDir === ENTRY_ROOT) return layout.entryDeps;
     if (packageDir.startsWith(prefix)) {
       const dirName = packageDir.slice(prefix.length);
       return (
@@ -277,11 +292,15 @@ function referenceSelected(
 
 /**
  * R7.1 restated as a worklist reachability walk over the declared names: start
- * from the Selected_Microservices' and the Overseer's specifiers, ignore
+ * from the Selected_Microservices' and the Entry_Package's specifiers, ignore
  * anything not `@microservices`-scoped, resolve-but-do-not-follow a
  * Framework_Singleton name, and follow every discovered Consumer_Package edge.
  * The generators produce no peer edge and no dangling name, so nothing is
  * dropped silently.
+ *
+ * The Overseer's own specifiers are NOT a seed of this walk (registry-inversion
+ * R9.1): it is a Framework_Singleton the Entry_Package names, so it resolves and
+ * is not followed, exactly as `contracts` is.
  */
 function referenceRequiredNames(
   layout: Layout,
@@ -290,7 +309,7 @@ function referenceRequiredNames(
   const frameworkNames = FRAMEWORK_SINGLETONS.map((entry) => entry.name);
   const byName = new Map(allPackages(layout).map((pkg) => [pkg.name, pkg]));
 
-  const queue: string[] = [...layout.overseerDeps];
+  const queue: string[] = [...layout.entryDeps];
   for (const dirName of selected) {
     const microservice = layout.microservices.find(
       (pkg) => pkg.dirName === dirName,
@@ -364,9 +383,10 @@ function referenceOrderedRequired(
  *   - statement 3: the required Common_Packages, in required-dependency
  *     (lexicographically-least topological) order;
  *   - statement 4: the Selected_Microservices, in Selector order;
- *   - statement 5: `packages/overseer`, last.
+ *   - statement 5: `packages/overseer`;
+ *   - statement 6: the Entry_Root, last (registry-inversion R8.1).
  *
- * Statements 2, 6, and 7 (`build-tools`, `integration-tests`, and the
+ * Statements 2, 7, and 8 (`build-tools`, `integration-tests`, and the
  * Spa_Packages) contribute no image `tsc --build` root, so they are absent from
  * this concatenation. The Required_Dependencies are filtered on
  * `category === "common"` — an independent restatement of "the Common_Packages
@@ -385,6 +405,7 @@ function referenceTscRoots(
       .map((pkg) => pkg.packageDir),
     ...selected.map(microserviceDir),
     OVERSEER.packageDir,
+    ENTRY_ROOT,
   ];
 }
 
@@ -407,7 +428,7 @@ interface Edge {
 
 /**
  * Every dependency edge a layout declares, expressed over package directories:
- * library edges, the Selected_Microservices' edges, and the Overseer's. A
+ * library edges, the Selected_Microservices' edges, and the Entry_Package's. A
  * specifier naming `contracts` becomes an edge from the Framework_Singleton's
  * directory, so the R5.5/R13.6 "ahead of every Tsc_Project that names it" clause
  * is checked over real edges rather than assumed from contracts being first.
@@ -416,6 +437,10 @@ function edgesOf(layout: Layout, selected: readonly string[]): readonly Edge[] {
   const dirByName = new Map<string, string>([
     ...allPackages(layout).map((pkg) => [pkg.name, pkg.packageDir] as const),
     [CONTRACTS.name, CONTRACTS.packageDir],
+    // The Overseer_Library, so the Entry_Package's declared dependency on it is a
+    // real edge here and the "ahead of every Tsc_Project that names it" clause is
+    // checked over it too (registry-inversion R8.5).
+    [OVERSEER.name, OVERSEER.packageDir],
   ]);
 
   const edges: Edge[] = [];
@@ -437,7 +462,7 @@ function edgesOf(layout: Layout, selected: readonly string[]): readonly Edge[] {
       add(microservice.dependencySpecifiers, microservice.packageDir);
     }
   }
-  add(layout.overseerDeps, OVERSEER.packageDir);
+  add(layout.entryDeps, ENTRY_ROOT);
 
   return edges;
 }
@@ -517,19 +542,20 @@ function arbMicroservices(
 
 /**
  * A random layout: Common and Spa libraries in a DAG, at least one
- * Microservice_Package, and an Overseer that always declares
- * `@microservices/contracts` (the R5.3/R5.4 case — declared, resolved, never a
- * required dependency, still the first build root).
+ * Microservice_Package, and an Entry_Package that always declares
+ * `@microservices/contracts` and `@microservices/overseer` (the R5.3/R5.4 case —
+ * declared, resolved, never a required dependency, still a build root).
  *
  * Edge discipline follows task 13.1's landed rules. A library-to-library edge
  * only ever targets an earlier Common_Package (see `arbEarlierCommonSubsets`),
  * so neither of the two forbidden inbound-SPA edges (`common → spa`,
  * `spa → spa`) is ever generated. Microservices depend on an arbitrary subset of
  * ALL libraries — including Spa_Packages, since `microservice → spa` is legal —
- * and the Overseer's extra dependencies likewise draw from the full library set,
- * since `overseer → spa` is legal too. These `microservice → spa` and
- * `overseer → spa` edges are exactly what make a Spa_Package a required
- * dependency in the random runs.
+ * and the Entry_Package's extra dependencies likewise draw from the full library
+ * set, since `entry → spa` is legal too (a walk root is resolved on the branch
+ * that forbids neither inbound-SPA rule). These `microservice → spa` and
+ * `entry → spa` edges are exactly what make a Spa_Package a required dependency in
+ * the random runs.
  */
 const arbLayout: fc.Arbitrary<Layout> = fc
   .uniqueArray(arbLibraryEntry, {
@@ -553,11 +579,11 @@ const arbLayout: fc.Arbitrary<Layout> = fc
 
       return arbMicroservices(libraryNames, libraryDirNames).chain(
         (microservices) =>
-          fc.subarray([...libraryNames]).map((extraOverseerDeps) => ({
+          fc.subarray([...libraryNames]).map((extraEntryDeps) => ({
             libraries,
             microservices,
-            overseerDeps: [
-              ...new Set([CONTRACTS.name, ...extraOverseerDeps]),
+            entryDeps: [
+              ...new Set([CONTRACTS.name, OVERSEER.name, ...extraEntryDeps]),
             ].sort(),
           })),
       );
@@ -708,10 +734,10 @@ const arbRequiredSpaCase: fc.Arbitrary<{
  *   - `frontend` is a Spa_Package whose only `@microservices` specifier is
  *     `hidden`, giving the single `spa → common` edge along which `hidden` is
  *     reached;
- *   - `entry` is the sole Microservice_Package and the Selector; its only
+ *   - `service` is the sole Microservice_Package and the Selector; its only
  *     specifier is `frontend`, giving the `microservice → spa` edge;
- *   - the Overseer declares only `contracts`, so it reaches neither `frontend`
- *     nor `hidden`.
+ *   - the Entry_Package declares only `contracts` and `overseer`, both
+ *     Framework_Singletons, so it reaches neither `frontend` nor `hidden`.
  *
  * Therefore the ONLY path to `hidden` runs through a Spa_Package. `hidden` is a
  * required dependency and a `tsc --build` root (it is built — its `dist/` is what
@@ -729,15 +755,15 @@ const arbCommonViaSpaCase: fc.Arbitrary<{
 }> = fc.constant(null).map(() => {
   const hidden = consumerPackage("common", "hidden-lib", [CONTRACTS.name]);
   const frontend = consumerPackage("spa", "frontend", [hidden.name]);
-  const entry = consumerPackage("microservice", "entry", [frontend.name]);
+  const service = consumerPackage("microservice", "service", [frontend.name]);
 
   return {
     layout: {
       libraries: [hidden, frontend],
-      microservices: [entry],
-      overseerDeps: [CONTRACTS.name],
+      microservices: [service],
+      entryDeps: [CONTRACTS.name, OVERSEER.name],
     },
-    selector: entry.dirName,
+    selector: service.dirName,
     hiddenDirName: hidden.dirName,
     spaDirName: frontend.dirName,
   };
@@ -970,10 +996,10 @@ describe("Property 15: Build_Kind is total and determined by category alone", ()
         const spaDirs = plan.spaBuilds.map((pkg) => pkg.packageDir);
 
         // `build-tools` (Build_Sequence statement 2) and `integration-tests`
-        // (statement 6) are excluded from the Selector-driven `tsc --build`
-        // (R13.7); `contracts` (statement 1) and the Overseer (statement 5) are
-        // always roots. Stated as an explicit two-name exclusion rather than
-        // read off a per-package field.
+        // (statement 7) are excluded from the Selector-driven `tsc --build`
+        // (R13.7); `contracts` (statement 1) and the Overseer_Library (statement
+        // 5) are always roots. Stated as an explicit two-name exclusion rather
+        // than read off a per-package field.
         const EXCLUDED_FROM_ROOTS: readonly string[] = [
           BUILD_TOOLS.packageDir,
           INTEGRATION_TESTS.packageDir,
@@ -1012,7 +1038,7 @@ describe("Property 16: the tsc --build roots equal the Selector-justified Tsc_Pr
     );
   });
 
-  it("puts packages/contracts first and the Overseer last, for every Selector", () => {
+  it("puts packages/contracts first and the Entry_Package last, with the Overseer immediately before it, for every Selector", () => {
     fc.assert(
       fc.property(arbLayoutAndSelector, ({ layout, selector }) => {
         const roots = planOf(layout, selector).tscRoots;
@@ -1021,22 +1047,33 @@ describe("Property 16: the tsc --build roots equal the Selector-justified Tsc_Pr
         // resolving to a single microservice and one under which nothing else
         // names it — and it is the first root.
         expect(roots[0]).toBe(CONTRACTS.packageDir);
-        expect(roots[roots.length - 1]).toBe(OVERSEER.packageDir);
         expect(roots.indexOf(CONTRACTS.packageDir)).toBe(0);
-        expect(roots.lastIndexOf(OVERSEER.packageDir)).toBe(roots.length - 1);
+
+        // registry-inversion R8.1: statement 6's Entry_Package is the last root,
+        // and statement 5's Overseer_Library the one before it — the position the
+        // Generated_Registry's static imports make necessary.
+        expect(roots[roots.length - 1]).toBe(ENTRY_ROOT);
+        expect(roots.lastIndexOf(ENTRY_ROOT)).toBe(roots.length - 1);
+        expect(roots[roots.length - 2]).toBe(OVERSEER.packageDir);
       }),
       { numRuns: 200 },
     );
   });
 
-  it("contains every root exactly once, each a repo-relative package directory", () => {
+  it("contains every root exactly once, each a Project_Directory-relative POSIX path", () => {
     fc.assert(
       fc.property(arbLayoutAndSelector, ({ layout, selector }) => {
         const roots = planOf(layout, selector).tscRoots;
 
         expect(new Set(roots).size).toBe(roots.length);
         for (const root of roots) {
-          expect(root.startsWith("packages/")).toBe(true);
+          // Every root but the Entry_Root is a `packages/<…>` directory; the
+          // Entry_Package sits outside the Framework_Singleton container, so its
+          // root is the Entry_Root itself (registry-inversion R9.6).
+          expect(
+            root === ENTRY_ROOT || root.startsWith("packages/"),
+          ).toBe(true);
+          expect(root.startsWith("/")).toBe(false);
           expect(root.endsWith("/")).toBe(false);
         }
       }),

@@ -27,7 +27,7 @@ import {
   arbSelectorString,
   arbNamespaceDirectories,
   arbIdentifier,
-} from "@microservices/contracts/testing";
+} from "../src/testing/arbitraries.js";
 
 /**
  * Reference classification of a raw selector, per design "Selector parsing".
@@ -226,6 +226,138 @@ describe("Property 2: the generated registry excludes shared packages", () => {
         },
       ),
       { numRuns: 200 },
+    );
+  });
+});
+
+// ===========================================================================
+// Feature: registry-inversion, Property 1: The emitted import-specifier sequence
+// is the Selected_Microservices.
+//
+// For any Synthesized_Tree holding 1 to 5 Microservice_Packages whose directory
+// names are distinct Microservice_Identifiers, paired with any generated
+// Valid_Scope, any generated Entry_Root the Config_Parser accepts, and any
+// Selector drawn from `*`, blank, and a non-empty comma-separated subset of those
+// directory names, the sequence of import specifiers the Registry_Generator emits
+// equals, element for element, the sequence of the Configured_Scope followed by
+// `/` and each Selected_Microservice's directory name in the order Requirement
+// 4.3 fixes — with no extra and no absent specifier.
+//
+// This half runs ENTIRELY IN MEMORY. `registryText(context, selector, selected)`
+// is the pure composer `generateRegistry` writes through, so the emitted text is a
+// function of its three arguments alone: no temporary directory, no `chdir`, and
+// nothing written anywhere. That is the split the design's Testing Strategy calls
+// the single largest lever on suite cost, and it is why the 100-run floor is
+// affordable here (registry-inversion R13.12).
+//
+// The expected sequence is the test's OWN statement of R4.3's order — the
+// discovery order for `*` and blank, the list order for a comma-separated list —
+// not a second read of the code under test. `resolveSelected` supplies the
+// selection (its own behaviour is Property 3 above), and the property then asserts
+// the emitted specifier sequence against that independently stated expectation.
+//
+// Validates: Requirements 4.3, 13.1
+
+import { registryText } from "../src/generate-registry.js";
+import { projectContext } from "../src/project-context.js";
+import {
+  arbSynthesizedTreeWithEntry,
+  effectiveConfigOf,
+  microserviceIdentifiersOf,
+  type EntryTreeDescription,
+} from "./arbitraries/tree.js";
+
+/** One generated (tree, Selector) pair together with the Selected_Microservices
+ *  R4.3 fixes for it — the test's own statement of the order, stated once here
+ *  and consumed by the property below. */
+interface SelectorCase {
+  readonly description: EntryTreeDescription;
+  readonly selector: string;
+  /** The identifiers R4.3 fixes, in order: discovery order for `*` and blank, the
+   *  list order for a comma-separated list. */
+  readonly expected: readonly string[];
+}
+
+/**
+ * The three Selector spellings Requirement 13.1 names, over one tree's own
+ * identifiers: `*`, blank, and a non-empty comma-separated subset.
+ *
+ * The subset is drawn as a SHUFFLED subarray of distinct identifiers, so the list
+ * order is genuinely arbitrary rather than the discovery order — which is what
+ * makes "the order the identifiers appear in that list" a real claim — and
+ * distinct, since `resolveSelected` does not deduplicate and a repeated
+ * identifier would make the expected sequence ambiguous.
+ */
+function arbSelectorCase(
+  description: EntryTreeDescription,
+): fc.Arbitrary<SelectorCase> {
+  const identifiers = microserviceIdentifiersOf(description);
+  return fc.oneof(
+    fc.constant<SelectorCase>({ description, selector: "*", expected: identifiers }),
+    fc.constant<SelectorCase>({ description, selector: "", expected: identifiers }),
+    fc
+      .shuffledSubarray([...identifiers], { minLength: 1 })
+      .map((subset): SelectorCase => ({
+        description,
+        selector: subset.join(","),
+        expected: subset,
+      })),
+  );
+}
+
+/** The microservice import specifiers of an emitted registry, in source order:
+ *  one per `import * as mN from "<specifier>";` declaration. The `contracts` type
+ *  import is deliberately not matched — it is not a Selected_Microservice. */
+function moduleImportSpecifiers(source: string): readonly string[] {
+  return [...source.matchAll(/^import \* as m\d+ from "([^"]+)";$/gm)].map(
+    (match) => match[1] as string,
+  );
+}
+
+/** The `sourcePackage` values of an emitted registry's entries, in source order. */
+function sourcePackages(source: string): readonly string[] {
+  return [...source.matchAll(/sourcePackage: "([^"]+)"/g)].map(
+    (match) => match[1] as string,
+  );
+}
+
+/** The `identifier` values of an emitted registry's entries, in source order. */
+function entryIdentifiers(source: string): readonly string[] {
+  return [...source.matchAll(/\{ identifier: "([^"]+)"/g)].map(
+    (match) => match[1] as string,
+  );
+}
+
+describe("Feature: registry-inversion, Property 1: the emitted import-specifier sequence is the Selected_Microservices", () => {
+  it("emits the Configured_Scope + directory name of each Selected_Microservice, in R4.3 order, with no extra and no absent specifier", () => {
+    fc.assert(
+      fc.property(
+        arbSynthesizedTreeWithEntry().chain(arbSelectorCase),
+        ({ description, selector, expected }) => {
+          const context = projectContext(effectiveConfigOf(description));
+          const identifiers = microserviceIdentifiersOf(description);
+
+          // The selection itself, through the one function both the generator and
+          // the plan compose. Asserted against the independently stated order so a
+          // selection that silently reordered would fail here rather than hide.
+          const selected = resolveSelected(selector, identifiers);
+          expect(selected).toStrictEqual([...expected]);
+
+          const text = registryText(context, selector, selected);
+          const specifiers = expected.map(
+            (id) => `${description.scope}/${id}`,
+          );
+
+          // R4.3 / R13.1: the import-specifier sequence, element for element.
+          expect(moduleImportSpecifiers(text)).toStrictEqual(specifiers);
+          // R4.4: the entry sequence carries the same specifiers and identifiers,
+          // in the same order — the "no extra and no absent" half, stated over both
+          // emission sites rather than over the imports alone.
+          expect(sourcePackages(text)).toStrictEqual(specifiers);
+          expect(entryIdentifiers(text)).toStrictEqual([...expected]);
+        },
+      ),
+      { numRuns: 100 },
     );
   });
 });

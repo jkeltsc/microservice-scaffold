@@ -8,10 +8,12 @@
 // Demo_Spa — never its two libraries. This suite assembles that once and asserts,
 // across the reused assembly:
 //
-//   1. The five Tsc_Build_Pass roots are exactly `contracts`, `config`,
-//      `extended-config`, `microservice1`, `overseer`, in Build_Sequence order,
-//      with no other Microservice_Package among them, and each root's `dist/`
-//      non-empty once the pass has exited 0 (R5.1).
+//   1. The six Tsc_Build_Pass roots are exactly `contracts`, `config`,
+//      `extended-config`, `microservice1`, `overseer`, and the Entry_Package, in
+//      Build_Sequence order, with no other Microservice_Package among them, and
+//      each root's `dist/` non-empty once the pass has exited 0 (R5.1). The
+//      Entry_Package is the Build_Sequence's statement-6 member since the registry
+//      inversion (registry-inversion R8.1).
 //
 //   2. A recording CommandRunner over the real plan records exactly one
 //      `npm run build` with cwd `packages/spa/demo`, ordered AFTER the single
@@ -19,8 +21,11 @@
 //      (R5.2).
 //
 //   3. The assembled scope directory holds exactly `contracts`, `demo`,
-//      `microservice1` as real (non-symlink) directories, `packages/overseer` is
-//      present, and `packages/microservices` is absent (R5.4). The assembly
+//      `microservice1`, `overseer` as real (non-symlink) directories — the
+//      Overseer is now a library the Entry_Package imports by name
+//      (registry-inversion R9.4) — the Entry_Package is present at its Entry_Root,
+//      and `packages/overseer` and `packages/microservices` are both absent
+//      (R5.4). The assembly
 //      completing without throwing IS the Integrity_Assertion's own result — it
 //      runs inside `stageImageTree` and throws on any unjustified or missing
 //      entry — so a clean assembly is the R5.5 observable.
@@ -103,12 +108,17 @@ const ASSEMBLE_TIMEOUT_MS = 300_000;
 /** The Spa_Only_Container Selector under test. */
 const SELECTOR = "microservice1";
 
+/** This repository's Entry_Root. Unconfigured, so the Entry_Root_Default `app`. */
+const ENTRY_ROOT = projectContext(defaultEffectiveConfig()).entryRoot;
+
 /**
- * The five Tsc_Build_Pass roots R5.1 fixes, in Build_Sequence order:
+ * The six Tsc_Build_Pass roots R5.1 fixes, in Build_Sequence order:
  * statement 1 (`contracts`), statement 3 (the required Common_Packages in
  * dependency order — `config` before `extended-config`), statement 4 (the
- * Selected_Microservice), statement 5 (the Overseer). No Spa_Package is a root,
- * and no Microservice_Package other than `microservice1`.
+ * Selected_Microservice), statement 5 (the Overseer), statement 6 (the
+ * Entry_Package, which the registry inversion placed strictly after both —
+ * registry-inversion R8.1). No Spa_Package is a root, and no Microservice_Package
+ * other than `microservice1`.
  */
 const EXPECTED_TSC_ROOTS: readonly string[] = [
   "packages/contracts",
@@ -116,6 +126,7 @@ const EXPECTED_TSC_ROOTS: readonly string[] = [
   "packages/common/extended-config",
   "packages/microservices/microservice1",
   "packages/overseer",
+  ENTRY_ROOT,
 ];
 
 /** One recorded event in the build/stage sequence. */
@@ -181,7 +192,13 @@ beforeAll(() => {
       stageImageTree(p, dir);
     };
 
-    executeBuildPlan(plan, outDir, recordingRunner, recordingStage);
+    executeBuildPlan(
+      projectContext(defaultEffectiveConfig()),
+      plan,
+      outDir,
+      recordingRunner,
+      recordingStage,
+    );
   });
 }, ASSEMBLE_TIMEOUT_MS);
 
@@ -196,7 +213,7 @@ afterAll(() => {
 // ---------------------------------------------------------------------------
 
 describe("Tsc_Build_Pass roots for Selector microservice1 (R5.1)", () => {
-  it("holds exactly [contracts, config, extended-config, microservice1, overseer] in Build_Sequence order", () => {
+  it("holds exactly [contracts, config, extended-config, microservice1, overseer, <Entry_Root>] in Build_Sequence order", () => {
     expect(plan.tscRoots).toEqual(EXPECTED_TSC_ROOTS);
   });
 
@@ -213,7 +230,7 @@ describe("Tsc_Build_Pass roots for Selector microservice1 (R5.1)", () => {
     expect(plan.tscRoots).not.toContain("packages/spa/demo");
   });
 
-  it("leaves each of the five roots' dist/ non-empty once the pass has exited 0", () => {
+  it("leaves each of the six roots' dist/ non-empty once the pass has exited 0", () => {
     for (const rootDir of EXPECTED_TSC_ROOTS) {
       const distDir = resolve(repoRoot, rootDir, "dist");
       expect(
@@ -280,11 +297,14 @@ describe("Image_Tree contents for Selector microservice1 (R5.4, R5.5)", () => {
   const scopeRoot = (): string =>
     join(outDir, "node_modules", "@microservices");
 
-  it("holds exactly [contracts, demo, microservice1] under node_modules/@microservices/, each a real directory", () => {
+  it("holds exactly [contracts, demo, microservice1, overseer] under node_modules/@microservices/, each a real directory", () => {
     // The "holds" half: each justified package is present as a real
     // (non-symlink) directory. Asserted per named package via `lstatSync` so no
-    // directory-enumeration anchor is needed.
-    for (const name of ["contracts", "demo", "microservice1"]) {
+    // directory-enumeration anchor is needed. `overseer` joined this set with the
+    // registry inversion: it is a library the Entry_Package imports BY NAME, so it
+    // stages under the scope root like any other imported-by-name package
+    // (registry-inversion R3.7, R9.4).
+    for (const name of ["contracts", "demo", "microservice1", "overseer"]) {
       const st = lstatSync(join(scopeRoot(), name));
       expect(st.isDirectory(), `${name} should be a directory`).toBe(true);
       expect(
@@ -296,14 +316,12 @@ describe("Image_Tree contents for Selector microservice1 (R5.4, R5.5)", () => {
     // The "and nothing else" half, asserted anchor-free: every package the
     // Selector does NOT justify must be absent from the scope root. `config`
     // and `extended-config` are reached only through the Demo_Spa's bundle and
-    // are never staged; `microservice2`/`microservice3` are unselected; the
-    // Overseer ships at `packages/overseer`, never under the scope root.
+    // are never staged; `microservice2`/`microservice3` are unselected.
     for (const name of [
       "config",
       "extended-config",
       "microservice2",
       "microservice3",
-      "overseer",
     ]) {
       expect(
         () => lstatSync(join(scopeRoot(), name)),
@@ -312,12 +330,24 @@ describe("Image_Tree contents for Selector microservice1 (R5.4, R5.5)", () => {
     }
   });
 
-  it("stages packages/overseer as a real directory and no packages/microservices entry", () => {
-    const overseerDir = join(outDir, "packages", "overseer");
-    const overseerStat = lstatSync(overseerDir);
-    expect(overseerStat.isDirectory()).toBe(true);
-    expect(overseerStat.isSymbolicLink()).toBe(false);
+  it("stages the Entry_Package at its Entry_Root, with no packages/overseer and no packages/microservices entry", () => {
+    // The single package-directory staging in the tree is the Entry_Package's:
+    // the entrypoint is invoked by path (registry-inversion R9.6).
+    const entryDir = join(outDir, ENTRY_ROOT);
+    const entryStat = lstatSync(entryDir);
+    expect(entryStat.isDirectory()).toBe(true);
+    expect(entryStat.isSymbolicLink()).toBe(false);
+    expect(lstatSync(join(entryDir, "package.json")).isFile()).toBe(true);
+    expect(lstatSync(join(entryDir, "dist")).isDirectory()).toBe(true);
+    expect(
+      () => lstatSync(join(entryDir, "src")),
+      "the Entry_Package ships its manifest and compiled dist, never its src",
+    ).toThrow();
 
+    expect(
+      () => lstatSync(join(outDir, "packages", "overseer")),
+      "the Overseer is staged under the scope root, never at packages/overseer/",
+    ).toThrow();
     expect(
       () => lstatSync(join(outDir, "packages", "microservices")),
       "packages/microservices/ must be absent from the Image_Tree",

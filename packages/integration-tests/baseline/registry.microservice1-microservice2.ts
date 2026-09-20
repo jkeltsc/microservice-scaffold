@@ -4,10 +4,6 @@ import * as m0 from "@microservices/microservice1";
 import * as m1 from "@microservices/microservice2";
 import type { MicroserviceRegistry } from "@microservices/contracts";
 
-// COUPLING NOTE: the empty template at
-// packages/overseer/src/generated/microservice-registry.template.ts must match
-// this file's export name, type import, and shape. Keep them in sync; the
-// typechecker is the safety net.
 export const microserviceRegistry: MicroserviceRegistry = [
   { identifier: "microservice1", module: m0, sourcePackage: "@microservices/microservice1" },
   { identifier: "microservice2", module: m1, sourcePackage: "@microservices/microservice2" },

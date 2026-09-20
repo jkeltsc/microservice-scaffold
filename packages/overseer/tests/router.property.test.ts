@@ -31,7 +31,7 @@ import type {
   RegistryEntry,
   ToggleMap,
 } from "@microservices/contracts";
-import { buildExpressRouter } from "@microservices/contracts/testing";
+import { buildExpressRouter } from "@microservices/build-tools/dist/testing/index.js";
 
 import { buildApp } from "../src/router.js";
 

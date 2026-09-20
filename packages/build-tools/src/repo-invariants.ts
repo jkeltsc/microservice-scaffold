@@ -22,7 +22,7 @@
 // section 6 is the CLI the bin calls.
 // Framework and category directory names all come from framework.ts (R10.5).
 //
-// (Requirements R8.9, R12.15–R12.20, R14.4, R14.5, R14.10, R14.13, R14.14, 2.15.)
+// (Requirements R12.15–R12.20, R14.4, R14.5, R14.10, R14.13, R14.14, 2.15.)
 
 import { readFileSync, readdirSync, statSync } from "node:fs";
 
@@ -38,11 +38,7 @@ import {
   type Discovery,
 } from "./discovery.js";
 import { type ProjectContext } from "./project-context.js";
-import {
-  checkRegistryTemplateScope,
-  checkScopeLiterals,
-  readRegistryTemplate,
-} from "./scope-checks.js";
+import { checkScopeLiterals } from "./scope-checks.js";
 import {
   renderTsconfigViolation,
   resolveTsconfigWithCompiler,
@@ -892,7 +888,6 @@ export function collectViolations(
       discovery,
       resolveTsconfigWithCompiler,
     ).map(renderTsconfigViolation),
-    ...checkRegistryTemplateScope(context, readRegistryTemplate),
     ...checkScopeLiterals(),
   ];
 }

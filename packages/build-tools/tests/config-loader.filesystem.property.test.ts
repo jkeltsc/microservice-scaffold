@@ -55,6 +55,16 @@ import {
 // Obtaining a ParsedConfig the sanctioned way
 // ---------------------------------------------------------------------------
 
+/**
+ * The Entry_Root every config built here declares. This suite is about the
+ * Filesystem_Validation of the three Discovery_Roots, so the Entry_Root only has
+ * to be one the parser accepts alongside any generated triple: a single segment
+ * longer than the eight characters `validSegment()` ever produces, so no
+ * generated root can equal it, lie inside it, or contain it — the Entry_Root
+ * cannot accidentally become the reason a config is rejected.
+ */
+const ENTRY_ROOT = "entry-package-root";
+
 /** A valid scope paired with three non-overlapping, non-framework roots. */
 function validConfig(): fc.Arbitrary<{
   readonly scope: string;
@@ -73,6 +83,7 @@ function parseValid(scope: string, roots: RootTriple): ParsedConfig {
   const config: EffectiveConfig = {
     scope,
     roots: { microservice: roots[0], common: roots[1], spa: roots[2] },
+    entry: ENTRY_ROOT,
   };
   const text = serializeProjectConfig(config);
   const outcome = parseProjectConfig(text, "scaffold.config.json");
@@ -271,6 +282,7 @@ describe("Property 10: the Config_Loader accepts exactly the root sets passing e
           const config: EffectiveConfig = {
             scope,
             roots: { microservice: roots[0], common: roots[1], spa: roots[2] },
+            entry: ENTRY_ROOT,
           };
           const text = serializeProjectConfig(config);
           const rootPaths = rootPathsOf(config);

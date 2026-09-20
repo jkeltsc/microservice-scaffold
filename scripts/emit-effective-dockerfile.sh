@@ -11,13 +11,15 @@
 # installed dependency directory, no completed install, and no completed
 # compile.
 #
-# It fills three things into Dockerfile.template:
+# It fills four things into Dockerfile.template:
 #   * the # --- MANIFEST_COPY_BUILD --- anchor, with per-workspace package.json
 #     COPY lines (build stage);
 #   * the # --- MANIFEST_COPY_PRODDEPS --- anchor, with the SAME COPY lines
 #     (prod-deps stage);
 #   * the per-microservice ENV MICROSERVICE_<X>_ENABLED=enabled toggle defaults,
-#     injected before the last ENTRYPOINT.
+#     injected before the last ENTRYPOINT;
+#   * the # --- CMD --- anchor, with the single CMD instruction naming the
+#     Entry_Point_Path (R7.3).
 #
 # CONFIG-DRIVEN DISCOVERY (R11.1, R11.3, R11.4, R11.5). The three Discovery_Roots
 # — microservice, common, spa — are no longer fixed literals. They are read from
@@ -26,6 +28,17 @@
 # absent or declares no `roots` member. The Manifest_Copy_Block iterates the
 # CONFIGURED roots, and the top-level Exclusion_List is DERIVED as the first path
 # segment of each configured root plus the by-name test-only `integration-tests`.
+#
+# THE ENTRY_ROOT (R7.3, R7.4, R7.5, R7.6). The `entry` key is read from the same
+# Project_Config_File, the same way and with the same discipline as the three
+# roots — the character sequence delimited by the surrounding double quotes, no
+# trimming, no normalisation, checked against the same Valid_Root_Path predicate
+# — and defaults to the Entry_Root_Default `app` when the key or the file is
+# absent. It contributes exactly one manifest COPY line (the Entry_Package's
+# package.json, appended last) and the single CMD instruction, whose
+# Entry_Point_Path is the Entry_Root joined to `dist/index.js` by one `/`. The
+# Exclusion_List derivation is untouched: the Entry_Root is not a
+# `packages/<name>` path, so no top-level entry gains or loses an exclusion.
 #
 # The scope is NOT read here (R11.12): this script reads the three roots and no
 # other value. The Configured_Scope reaches the container build as the
@@ -52,12 +65,15 @@
 # KNOWN, REQUIREMENT-SANCTIONED DUPLICATION — cross-reference:
 # packages/build-tools/src/project-config.ts is the single declaration site for
 # the three Root_Defaults (packages/microservices, packages/common,
-# packages/spa) and the Scope_Default. This script restates the three
-# Root_Defaults as awk literals (pass 1) because it cannot import that module: it
+# packages/spa), the Entry_Root_Default (app) and the Scope_Default. This script
+# restates the three Root_Defaults and the Entry_Root_Default as awk literals
+# (pass 1) because it cannot import that module: it
 # must run on a freshly cloned repository before anything is installed or
-# compiled (R11.1). R1.8's single-declaration rule and R10.5's single-declaration
-# convention are both scoped to packages/build-tools/src/, deliberately leaving
-# this script outside them. When a Root_Default changes in project-config.ts,
+# compiled (R11.1). R1.8's single-declaration rule, R7.1's single-derivation rule
+# and R10.5's single-declaration
+# convention are all scoped to packages/build-tools/src/, deliberately leaving
+# this script outside them. When a Root_Default or the Entry_Root_Default changes
+# in project-config.ts,
 # this script must be updated in the same change. The Scope_Default is NOT among
 # the duplicated literals: this script no longer restates it — the only place
 # outside project-config.ts that carries it is the ARG WORKSPACE_SCOPE default in
@@ -105,10 +121,13 @@ if [ ! -f "$DOCKERFILE" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Pass 1: read the three Discovery_Roots from the Project_Config_File.
+# Pass 1: read the three Discovery_Roots and the Entry_Root from the
+# Project_Config_File.
 #
-# Prints exactly three lines (MS_ROOT=, COMMON_ROOT=, SPA_ROOT=), each already
-# defaulted. An absent file is not an error (R11.2): getline returns -1 and every
+# Prints exactly four lines (MS_ROOT=, COMMON_ROOT=, SPA_ROOT=, ENTRY_ROOT=), each
+# already
+# defaulted. An absent file is not an error (R11.2, R7.4): getline returns -1 and
+# every
 # value keeps its default. On a value it cannot read as a one-line unescaped
 # JSON string it writes the R11.7 message to stderr and exits 1; `set -e` then
 # aborts this command substitution before the temp file for pass 2 is ever
@@ -124,6 +143,10 @@ BEGIN {
   root["common"]       = "packages/common"
   root["spa"]          = "packages/spa"
 
+  # The Entry_Root_Default, restated here for the same reason (R7.4). An absent
+  # file, or a file declaring no `entry` key, leaves this default in place.
+  entry_root = "app"
+
   depth = 0; in_roots = 0
   while ((getline line < cfg) > 0) scan(line)
   close(cfg)
@@ -131,6 +154,7 @@ BEGIN {
   print "MS_ROOT=" root["microservice"]
   print "COMMON_ROOT=" root["common"]
   print "SPA_ROOT=" root["spa"]
+  print "ENTRY_ROOT=" entry_root
 }
 
 # One line, character by character. Tracks object depth, remembers the key seen
@@ -165,6 +189,17 @@ function assign(key, s, i,   c, j) {
   if (depth == 1 && key == "roots") {
     if (c != "{") fail("roots")           # not an object -> R11.7
     in_roots = 1; return
+  }
+  # The Entry_Root (R7.4): a depth-1 key read with exactly the discipline the
+  # three roots get — a one-line `"`-delimited run, no trimming, no
+  # normalisation, checked against the same Valid_Root_Path predicate. Anything
+  # else is unreadable and calls fail("entry") (R7.5).
+  if (depth == 1 && !in_roots && key == "entry") {
+    if (c != "\"") fail("entry")                  # not a one-line quoted string
+    j = indexOfNonBlank(s, i)
+    readString(s, j); if (G_next < 0) fail("entry")
+    if (!validRoot(G_str)) fail("entry")          # Valid_Root_Path set (R4.3)
+    entry_root = G_str; return                    # a later duplicate wins, as JSON.parse does
   }
   if (in_roots && depth == 2 && (key == "microservice" || key == "common" || key == "spa")) {
     if (c != "\"") fail("roots." key)             # not a one-line quoted string
@@ -249,12 +284,13 @@ AWK
 # (R11.1). A config value never reaches the shell as code; the values were
 # already validated against the Valid_Root_Path set in pass 1, so they hold no
 # metacharacter, but this shape keeps that from being load-bearing.
-MS_ROOT=""; COMMON_ROOT=""; SPA_ROOT=""
+MS_ROOT=""; COMMON_ROOT=""; SPA_ROOT=""; ENTRY_ROOT=""
 while IFS='=' read -r k v; do
   case $k in
     MS_ROOT) MS_ROOT=$v ;;
     COMMON_ROOT) COMMON_ROOT=$v ;;
     SPA_ROOT) SPA_ROOT=$v ;;
+    ENTRY_ROOT) ENTRY_ROOT=$v ;;
   esac
 done <<EOF
 $config_lines
@@ -334,7 +370,7 @@ for dir in "$SPA_ROOT"/*/; do
 done
 
 export SELECTOR PKG_DIRS MS_DIRS COMMON_DIRS SPA_DIRS DOCKERFILE
-export MS_ROOT COMMON_ROOT SPA_ROOT
+export MS_ROOT COMMON_ROOT SPA_ROOT ENTRY_ROOT
 
 # ---------------------------------------------------------------------------
 # Pass 2: build the whole document from the environment.
@@ -356,6 +392,12 @@ BEGIN {
   ms_root     = ENVIRON["MS_ROOT"]
   common_root = ENVIRON["COMMON_ROOT"]
   spa_root    = ENVIRON["SPA_ROOT"]
+  entry_root  = ENVIRON["ENTRY_ROOT"]
+
+  # The Entry_Point_Path (R7.1's value, composed here for the reason the
+  # Root_Defaults are duplicated here): the Entry_Root joined to `dist/index.js`
+  # by a single `/`, with no normalisation of either part.
+  entry_point = entry_root "/dist/index.js"
 
   n_pkg    = split(ENVIRON["PKG_DIRS"], pkg, ",")
   n_ms     = split(ENVIRON["MS_DIRS"], ms, ",")
@@ -441,6 +483,13 @@ BEGIN {
     if (name == "") continue
     manifest = manifest "\n" "COPY " spa_root "/" name "/package.json " spa_root "/" name "/"
   }
+  # The Entry_Package's manifest (R7.4), appended LAST and unconditionally — no
+  # `-f` existence test, unlike the four discovered groups. The Entry_Package is
+  # one known path rather than a discovered set, and an absent manifest should
+  # fail `docker build` at the COPY rather than silently produce an image with no
+  # entrypoint. Appending it last keeps every retained COPY line at its existing
+  # index inside the block.
+  manifest = manifest "\n" "COPY " entry_root "/package.json " entry_root "/"
 
   # ENV toggle-default block (R11.6): header naming the RAW selector, then one
   # ENV line per resolved identifier, uppercased (ASCII only, via toupper).
@@ -456,7 +505,12 @@ BEGIN {
 { line[NR] = $0 }
 $0 ~ /^[[:space:]]*# --- MANIFEST_COPY_BUILD ---[[:space:]]*$/    { build_anchor = NR }
 $0 ~ /^[[:space:]]*# --- MANIFEST_COPY_PRODDEPS ---[[:space:]]*$/ { prod_anchor  = NR }
+$0 ~ /^[[:space:]]*# --- CMD ---[[:space:]]*$/                    { cmd_anchor   = NR }
 $0 ~ /^[[:space:]]*ENTRYPOINT([[:space:]]|\[)/                    { last_entry  = NR }
+# A CMD instruction of the template's own — a comment line such as the anchor
+# above never matches, because the instruction must start the line. The FIRST one
+# found is the one the failure names (R7.3).
+$0 ~ /^[[:space:]]*CMD([[:space:]]|\[)/                           { if (!own_cmd) own_cmd = NR }
 
 END {
   # Validate before ANY output (mirrors the baseline's order: ENTRYPOINT, then
@@ -474,6 +528,16 @@ END {
     print "[emit-effective-dockerfile] " df " is missing the '# --- MANIFEST_COPY_PRODDEPS ---' anchor" > "/dev/stderr"
     exit 1
   }
+  if (!cmd_anchor) {
+    print "[emit-effective-dockerfile] " df " is missing the '# --- CMD ---' anchor" > "/dev/stderr"
+    exit 1
+  }
+  # A retained CMD would give the generated file a second one (R7.3), so the
+  # template must declare none of its own.
+  if (own_cmd) {
+    print "[emit-effective-dockerfile] " df " declares its own CMD instruction at line " own_cmd ": " line[own_cmd] > "/dev/stderr"
+    exit 1
+  }
   if (id_count == 0) {
     print "[emit-effective-dockerfile] selector '" raw "' resolved to no microservices" > "/dev/stderr"
     exit 1
@@ -483,6 +547,9 @@ END {
   print header2
   for (i = 1; i <= NR; i++) {
     if (i == build_anchor || i == prod_anchor) { print manifest; continue }
+    # The single CMD instruction (R7.3): the anchor line is REPLACED by it, and
+    # nothing else is printed there.
+    if (i == cmd_anchor) { print "CMD [\"node\", \"" entry_point "\"]"; continue }
     if (i == last_entry)                        { print env_block }
     print line[i]
   }

@@ -6,14 +6,26 @@
 // point of putting the generators in one place is that two properties drawing
 // from `synthesizedTree()` genuinely draw from the *same* inputs.
 //
-// IN-MEMORY ONLY. Nothing here is ever materialised on disk. A Synthesized_Tree
-// is a plain description object plus the two injected functions the pure core of
-// Package_Discovery takes — `ListRoot` and `ReadManifest` — so every property
-// runs `discoverPackagesFrom(context, listRoot, readManifest)` against values
-// held in memory, with no filesystem at all. This is exactly what Requirements
-// 13.5 and 13.6 mean by "a Synthesized_Tree is either in-memory inputs to a pure
+// EVERY GENERATOR IS PURE; only one exported FUNCTION touches disk. A
+// Synthesized_Tree is a plain description object, and for the category-discovery
+// properties it becomes the two injected functions the pure core of
+// Package_Discovery takes — `ListRoot` and `ReadManifest` — so those properties
+// run `discoverPackagesFrom(context, listRoot, readManifest)` against values held
+// in memory, with no filesystem at all. This is exactly what Requirements 13.5
+// and 13.6 mean by "a Synthesized_Tree is either in-memory inputs to a pure
 // function or a directory inside an OS temporary directory": these are the pure
 // half.
+//
+// The registry-inversion half below (`arbSynthesizedTreeWithEntry`,
+// `arbWorkspacesPermutation`) adds the OTHER half for the two properties that
+// genuinely need files on disk — Property 5's whole-file replacement and
+// Property 9's staged file at the Entry_Point_Path. The split is deliberate:
+// `arbSynthesizedTreeWithEntry` is still a pure arbitrary over a DESCRIPTION, and
+// `materializeEntryTree(description, parentDir)` is the one function that writes,
+// refusing any destination outside the operating system's temporary directory
+// (registry-inversion R12.4, R12.5). A fast-check generator must stay
+// side-effect-free — it is re-run during shrinking — so materialisation cannot
+// live inside one, and the suite keeps ownership of creation and removal.
 //
 // The design's Testing Strategy fixes the surface:
 //
@@ -31,6 +43,16 @@
 //     specifiers as labelled positives, so the expected violation set is known
 //     by construction rather than recomputed by a second checker.
 
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve, sep } from "node:path";
+
 import * as fc from "fast-check";
 
 import {
@@ -38,12 +60,23 @@ import {
   type ConsumerCategory,
 } from "../../src/framework.js";
 import {
+  buildKindOf,
+  type ConsumerPackage,
   type ListRoot,
   type PackageManifest,
   type ReadManifest,
   type RootEntry,
 } from "../../src/discovery.js";
-import { SCOPE_DEFAULT } from "../../src/project-config.js";
+import {
+  PROJECT_CONFIG_FILE,
+  SCOPE_DEFAULT,
+  serializeProjectConfig,
+  type EffectiveConfig,
+} from "../../src/project-config.js";
+import {
+  arbAcceptedEntryRoot,
+  DEFAULT_RESERVED_ENTRY_PATHS,
+} from "./config.js";
 
 // ---------------------------------------------------------------------------
 // The description model
@@ -190,7 +223,10 @@ export interface TreeInputs {
  */
 export function treeInputs(description: TreeDescription): TreeInputs {
   const rootToCategory = new Map<string, ConsumerCategory>(
-    CONSUMER_CATEGORIES.map((category) => [description.roots[category], category]),
+    CONSUMER_CATEGORIES.map((category) => [
+      description.roots[category],
+      category,
+    ]),
   );
 
   const packageDirOf = (spec: PackageSpec): string =>
@@ -349,10 +385,13 @@ export function relocatedRoots(): fc.Arbitrary<RootAssignment> {
 /** A Valid_Scope: `@` followed by 1 to 12 characters from `[a-z0-9-]`. */
 export function validScope(): fc.Arbitrary<string> {
   return fc
-    .array(fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz0123456789-".split("")), {
-      minLength: 1,
-      maxLength: 12,
-    })
+    .array(
+      fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz0123456789-".split("")),
+      {
+        minLength: 1,
+        maxLength: 12,
+      },
+    )
     .map((chars) => `@${chars.join("")}`);
 }
 
@@ -608,7 +647,9 @@ export function importLayout(): fc.Arbitrary<ImportLayoutDescription> {
           .map((perFile) =>
             perFile.map((specifiers, index) => ({
               relPathInPackage:
-                index === 0 ? "src/index.ts" : `src/deep/mod${String(index)}.ts`,
+                index === 0
+                  ? "src/index.ts"
+                  : `src/deep/mod${String(index)}.ts`,
               specifiers,
             })),
           );
@@ -636,13 +677,11 @@ export function importLayout(): fc.Arbitrary<ImportLayoutDescription> {
           fc.tuple(...commonPkgs),
           fc.tuple(...spaPkgs),
         )
-        .map(
-          ([microservices, commons, spaList]): ImportLayoutDescription => ({
-            packages: [...microservices, ...commons, ...spaList],
-            roots: DEFAULT_ROOTS,
-            scope: SCOPE_DEFAULT,
-          }),
-        );
+        .map(([microservices, commons, spaList]): ImportLayoutDescription => ({
+          packages: [...microservices, ...commons, ...spaList],
+          roots: DEFAULT_ROOTS,
+          scope: SCOPE_DEFAULT,
+        }));
     });
 }
 
@@ -660,4 +699,516 @@ export function importLayoutRescopedAs(
   scope: string,
 ): ImportLayoutDescription {
   return { ...layout, scope };
+}
+// ---------------------------------------------------------------------------
+// The Entry_Package layout (registry-inversion Properties 1, 2, 5, 6, 7, 9)
+// ---------------------------------------------------------------------------
+//
+// One description model, two consumers. `arbSynthesizedTreeWithEntry` generates a
+// layout description — 1 to 5 Microservice_Packages, 0 to 3 Common_Packages, and
+// an Entry_Package at a generated Entry_Root, under a generated Valid_Scope — and
+// the pure derivations below turn that one description into whichever shape a
+// property needs: an `EffectiveConfig` (and through it a `ProjectContext`), the
+// `ConsumerPackage` records a `SequenceMembership` is built from, the Root_Manifest
+// `workspaces` entries, or a real directory tree. No property composes any of
+// those inline, which is the point of the two generators existing (R13.12).
+//
+// Why 1 to 5 microservices and 0 to 3 commons rather than the wider bounds
+// `synthesizedTree()` uses: Properties 1, 2 and 7 quantify over a Selector drawn
+// from the tree's own identifiers, and both bounds are what Requirement 13.1
+// states. The lower bound of 1 matters — a tree with no microservice admits no
+// non-empty Selector list, so an empty draw would silently narrow those
+// properties to the wildcard case.
+
+/**
+ * A Synthesized_Tree that also has an Entry_Package, at `entryRoot`.
+ *
+ * Extends {@link TreeDescription} rather than restating it, so `treeInputs`,
+ * `packageDirOf`, `relocatedAs` and `rescopedAs` are all total over it — the
+ * Entry_Package changes none of their behaviour, being discovered by nothing
+ * (registry-inversion R1.9) and therefore absent from every category's entry
+ * list.
+ */
+export interface EntryTreeDescription extends TreeDescription {
+  /** The Entry_Root: the Entry_Package's Project_Directory-relative POSIX path. */
+  readonly entryRoot: string;
+}
+
+/**
+ * The four Framework_Singleton directory names, in `FRAMEWORK_DIRECTORIES` order.
+ *
+ * Spelled here rather than imported on purpose, the same way `config.ts` spells
+ * them: a property over a synthesized layout must state the layout rule itself
+ * rather than read it from the module it is testing.
+ */
+const FRAMEWORK_DIR_NAMES: readonly string[] = [
+  "contracts",
+  "overseer",
+  "build-tools",
+  "integration-tests",
+];
+
+/** The last `/`-separated segment of a path — the Entry_Root's own directory
+ *  name, which is what registry-inversion R1.10 composes the Entry_Package's
+ *  declared name from. A root with no `/` (the default `app`) is its own last
+ *  segment. */
+function lastSegmentOf(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
+/** The Entry_Package's declared name: the Configured_Scope, `/`, and the
+ *  Entry_Root's last segment (registry-inversion R1.10). */
+export function entryPackageNameOf(description: EntryTreeDescription): string {
+  return `${description.scope}/${lastSegmentOf(description.entryRoot)}`;
+}
+
+/** The Entry_Point_Path: the Entry_Root joined to `dist/index.js` by a single
+ *  `/` (registry-inversion R7.1). Stated here as the test's own mirror of the
+ *  rule, so a property comparing against `context.entryPointPath` compares two
+ *  independent derivations rather than one value with itself. */
+export function entryPointPathOf(description: EntryTreeDescription): string {
+  return `${description.entryRoot}/dist/index.js`;
+}
+
+/** The repo-relative path of the Generated_Registry under this description's
+ *  Entry_Root (registry-inversion R4.1). */
+export function generatedRegistryPathOf(
+  description: EntryTreeDescription,
+): string {
+  return `${description.entryRoot}/src/generated/microservice-registry.ts`;
+}
+
+/** The Effective_Config a description denotes — the input `projectContext` takes,
+ *  so a property needs no config literal of its own. */
+export function effectiveConfigOf(
+  description: EntryTreeDescription,
+): EffectiveConfig {
+  return {
+    scope: description.scope,
+    roots: {
+      microservice: description.roots.microservice,
+      common: description.roots.common,
+      spa: description.roots.spa,
+    },
+    entry: description.entryRoot,
+  };
+}
+
+/**
+ * The `ConsumerPackage` records a description's packages denote, in ascending
+ * code-point order of `packageDir` within each category — the shape
+ * `SequenceMembership` and `Discovery` are both built from.
+ *
+ * Every package of one of these trees is conforming (`defect: undefined`), so
+ * each declared name mirrors its directory under the description's scope and each
+ * `dependencySpecifiers` list is that package's scoped dependency keys, sorted as
+ * `ConsumerPackage` requires.
+ */
+export function consumerPackagesOf(
+  description: EntryTreeDescription,
+  category: ConsumerCategory,
+): readonly ConsumerPackage[] {
+  return description.packages
+    .filter((spec) => spec.category === category)
+    .map((spec): ConsumerPackage => ({
+      category: spec.category,
+      dirName: spec.dirName,
+      packageDir: packageDirOf(description, spec),
+      name: `${description.scope}/${spec.dirName}`,
+      dependencySpecifiers: [
+        ...dependencySpecifiersOf(spec, description.scope),
+      ].sort(),
+      buildKind: buildKindOf(spec.category),
+    }))
+    .sort((a, b) =>
+      a.packageDir < b.packageDir ? -1 : a.packageDir > b.packageDir ? 1 : 0,
+    );
+}
+
+/** The Microservice_Identifiers of a description, ascending — the identifier
+ *  pool a generated Selector is drawn from. */
+export function microserviceIdentifiersOf(
+  description: EntryTreeDescription,
+): readonly string[] {
+  return consumerPackagesOf(description, "microservice").map(
+    (pkg) => pkg.dirName,
+  );
+}
+
+/**
+ * The Root_Manifest `workspaces` entries a description denotes, in the shape this
+ * repository's own Root_Manifest declares them: the Entry_Root first, the
+ * non-globbed Framework_Singletons by path, and one glob per configured
+ * Discovery_Root.
+ *
+ * The ORDER returned here is the unpermuted baseline Property 7 compares against.
+ * It carries no meaning to the Build_System — the order is load-bearing for
+ * nothing — which is exactly what that property exists to establish.
+ */
+export function workspacesEntriesOf(
+  description: EntryTreeDescription,
+): readonly string[] {
+  return [
+    description.entryRoot,
+    "packages/contracts",
+    "packages/build-tools",
+    `${description.roots.common}/*`,
+    `${description.roots.spa}/*`,
+    `${description.roots.microservice}/*`,
+    "packages/overseer",
+    "packages/integration-tests",
+  ];
+}
+
+/**
+ * Moves a description's Entry_Package to another Entry_Root, changing nothing
+ * else — the third metamorphic transformation of this module, alongside
+ * {@link relocatedAs} and {@link rescopedAs}, and the one Property 6 applies:
+ * every derived path must differ only in the Entry_Root prefix, while the emitted
+ * Generated_Registry text is byte-identical across the pair.
+ */
+export function entryRootRelocatedAs(
+  description: EntryTreeDescription,
+  entryRoot: string,
+): EntryTreeDescription {
+  return { ...description, entryRoot };
+}
+
+/**
+ * A Synthesized_Tree with an Entry_Package: 1 to 5 Microservice_Packages with
+ * distinct identifiers, 0 to 3 Common_Packages, no Spa_Package, under a generated
+ * Valid_Scope, at the default Discovery_Roots, with an Entry_Root the Config_Parser
+ * accepts (registry-inversion R1.4, R1.6 — drawn from `config.ts`'s
+ * `arbAcceptedEntryRoot`, never a second Entry_Root generator written here).
+ *
+ * The dependency edges are drawn so the graph has no cycle AND no
+ * Ordering_Violation under the Build_Sequence's fixed statement order, which is
+ * what Property 7 quantifies over: a microservice (statement 4) may depend on any
+ * Common_Package (statement 3), and a Common_Package on a lower-indexed
+ * Common_Package only. An edge pointing at a later statement is acyclic yet an
+ * Ordering_Violation the Verification_Pass rejects, so drawing one would make the
+ * property fail on its own generator rather than on the code.
+ *
+ * The Entry_Root's last segment is held distinct from every package directory
+ * name, because that segment composes the Entry_Package's declared name: sharing
+ * it with a Common_Package would make two packages declare one name, a duplicate
+ * that fails discovery for a reason the property is not about.
+ *
+ * No Spa_Package: every property consuming this generator is about the registry,
+ * the derived order, or the staged tree, and the Build_Sequence's trailing
+ * bundler phase is already covered by `build-sequence-spa-phase.property.test.ts`
+ * over `synthesizedTree()`. A Spa_Package here would add a `npm run build` to
+ * every materialised tree and nothing else.
+ */
+export function arbSynthesizedTreeWithEntry(): fc.Arbitrary<EntryTreeDescription> {
+  const arbCounts = fc.record({
+    microservice: fc.integer({ min: 1, max: 5 }),
+    common: fc.integer({ min: 0, max: 3 }),
+  });
+
+  return arbCounts
+    .chain((counts) => {
+      const total = counts.microservice + counts.common;
+      return fc
+        .uniqueArray(fc.constantFrom(...DIR_POOL), {
+          minLength: total,
+          maxLength: total,
+        })
+        .chain((dirNames) => {
+          const commonDirs = dirNames.slice(0, counts.common);
+          const microserviceDirs = dirNames.slice(counts.common);
+
+          // Statement 3's members may depend on a LOWER-INDEXED member of their
+          // own statement; statement 4's members may depend on any of them.
+          const commonEdges = commonDirs.map((_dirName, index) =>
+            fc.subarray(commonDirs.slice(0, index)),
+          );
+          const microserviceEdges = microserviceDirs.map(() =>
+            fc.subarray(commonDirs),
+          );
+
+          return fc
+            .tuple(fc.tuple(...commonEdges), fc.tuple(...microserviceEdges))
+            .map((edges): readonly PackageSpec[] => {
+              const [commonDeps, microserviceDeps] = edges;
+              return [
+                ...commonDirs.map((dirName, index): PackageSpec => ({
+                  category: "common",
+                  dirName,
+                  dependencyDirNames: commonDeps[index] as readonly string[],
+                  defect: undefined,
+                })),
+                ...microserviceDirs.map((dirName, index): PackageSpec => ({
+                  category: "microservice",
+                  dirName,
+                  dependencyDirNames: microserviceDeps[
+                    index
+                  ] as readonly string[],
+                  defect: undefined,
+                })),
+              ];
+            });
+        });
+    })
+    .chain((packages) => {
+      const dirNames = new Set(packages.map((spec) => spec.dirName));
+      return fc
+        .tuple(
+          validScope(),
+          // The reserved set of a project at the default roots, which is what
+          // DEFAULT_ROOTS below makes this description. A relocated variant must
+          // pass `reservedEntryPaths([...])` of its own triple instead.
+          arbAcceptedEntryRoot(DEFAULT_RESERVED_ENTRY_PATHS).filter(
+            (entryRoot) =>
+              !dirNames.has(lastSegmentOf(entryRoot)) &&
+              !FRAMEWORK_DIR_NAMES.includes(lastSegmentOf(entryRoot)),
+          ),
+        )
+        .map(([scope, entryRoot]): EntryTreeDescription => ({
+          packages,
+          roots: DEFAULT_ROOTS,
+          scope,
+          entryRoot,
+        }));
+    });
+}
+
+/**
+ * A permutation of a Root_Manifest's `workspaces` entries — every entry present
+ * exactly once, in a generated order, the identity permutation included.
+ *
+ * `fc.shuffledSubarray` with both length bounds pinned to the input length is a
+ * permutation generator: no entry is dropped and none is duplicated. Pinning both
+ * bounds is what makes that true, so Property 7 compares two derivations over the
+ * SAME membership in different orders, which is the whole claim — a dropped entry
+ * would change membership and the property would be asserting something else.
+ *
+ * @param entries the unpermuted baseline, conventionally {@link workspacesEntriesOf}.
+ */
+export function arbWorkspacesPermutation(
+  entries: readonly string[],
+): fc.Arbitrary<readonly string[]> {
+  return fc.shuffledSubarray([...entries], {
+    minLength: entries.length,
+    maxLength: entries.length,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Materialisation — the one function here that writes (R12.4, R12.5)
+// ---------------------------------------------------------------------------
+
+/** What {@link materializeEntryTree} wrote, and where. */
+export interface MaterializedEntryTree {
+  /** Absolute path of the materialised tree's root — the Project_Directory a
+   *  spawned process would take as its working directory. */
+  readonly dir: string;
+  /** The description it was written from. */
+  readonly description: EntryTreeDescription;
+  /** Absolute path of the written `scaffold.config.json`. */
+  readonly configPath: string;
+  /** Absolute path of the written root `package.json`. */
+  readonly rootManifestPath: string;
+  /** Absolute path of the Entry_Package's directory. */
+  readonly entryDir: string;
+  /** Absolute path of the seeded file at the Entry_Point_Path. */
+  readonly entryPointPath: string;
+}
+
+/**
+ * Refuses any destination outside the operating system's temporary directory.
+ *
+ * This is the hard worktree rule made mechanical rather than remembered
+ * (registry-inversion R12.4, R12.5): the one writing function in this module
+ * cannot be pointed at the checked-out tree by a mistaken argument, so no test
+ * using it can create a package, a directory, or a `node_modules` symlink inside
+ * the repository. Both the raw and the real path of each side are compared,
+ * because `os.tmpdir()` is itself a symlink on macOS.
+ */
+function assertInsideTempDirectory(parentDir: string): void {
+  const roots = new Set<string>([resolve(tmpdir())]);
+  try {
+    roots.add(resolve(realpathSync(tmpdir())));
+  } catch {
+    // An unreadable tmpdir is the caller's problem; the raw path still guards.
+  }
+
+  const candidates = new Set<string>([resolve(parentDir)]);
+  try {
+    candidates.add(resolve(realpathSync(parentDir)));
+  } catch {
+    // Not yet created is fine — the resolved path is what is being judged.
+  }
+
+  for (const candidate of candidates) {
+    for (const root of roots) {
+      if (candidate === root || candidate.startsWith(`${root}${sep}`)) return;
+    }
+  }
+
+  throw new Error(
+    `refusing to materialize a Synthesized_Tree outside the OS temporary directory: "${resolve(parentDir)}"`,
+  );
+}
+
+/** Writes one file, creating every absent parent directory. */
+function writeFileAt(absolutePath: string, contents: string): void {
+  mkdirSync(dirname(absolutePath), { recursive: true });
+  writeFileSync(absolutePath, contents, "utf8");
+}
+
+/** A minimal package manifest, rendered the way npm writes one. */
+function renderManifest(manifest: Record<string, unknown>): string {
+  return `${JSON.stringify(manifest, null, 2)}\n`;
+}
+
+/**
+ * The seeded one-line `dist/index.js` of a materialised package. Deterministic in
+ * the package's own name, so two materialisations of one description write
+ * byte-identical files — which is what lets Property 5 compare bytes at all.
+ */
+function seededDistLine(dirName: string): string {
+  return `export const id = ${JSON.stringify(dirName)};\n`;
+}
+
+/**
+ * Materialises a description as a real directory tree inside `parentDir`, which
+ * MUST be inside the operating system's temporary directory.
+ *
+ * Each call creates its own uniquely-named subdirectory of `parentDir` through
+ * `mkdtempSync`, so a suite creates ONE temporary root in `beforeAll`, calls this
+ * once per generated input, and removes that one root in `afterAll` — the cost is
+ * one `mkdtempSync` per input and no `npm ci` at all. Removal stays the suite's,
+ * because a fast-check generator is re-run while shrinking and must not own a
+ * lifecycle; {@link removeMaterializedTree} is the removal side of the
+ * convention.
+ *
+ * What is written, and why each piece is needed:
+ *   - the root `package.json`, declaring {@link workspacesEntriesOf} in baseline
+ *     order (a property wanting a permuted array rewrites just this file);
+ *   - `scaffold.config.json`, through `serializeProjectConfig`, so a spawned
+ *     Build_System process reads the same scope, roots and Entry_Root the
+ *     in-memory derivations used;
+ *   - the four Framework_Singleton directories, each with a manifest and a
+ *     one-line `dist/`, because the Image_Assembler stages `contracts` and the
+ *     Overseer under every Selector and asserts every staged package has compiled
+ *     output;
+ *   - each Microservice_Package and Common_Package under its configured
+ *     Discovery_Root, manifest plus one-line `dist/`;
+ *   - the Entry_Package at the Entry_Root: a manifest declaring the scoped
+ *     Overseer and `contracts` and NO Microservice_Package, with neither `main`
+ *     nor `types` (registry-inversion R1.10 to R1.14), plus a one-line `dist/`
+ *     whose file IS the Entry_Point_Path — which is the file Property 9 looks for
+ *     in the staged tree.
+ *
+ * No `src/` is written and no `node_modules` is created: nothing here compiles,
+ * and every property consuming these trees reads manifests, derives paths, or
+ * copies `package.json` plus `dist/`.
+ */
+export function materializeEntryTree(
+  description: EntryTreeDescription,
+  parentDir: string,
+): MaterializedEntryTree {
+  assertInsideTempDirectory(parentDir);
+  mkdirSync(parentDir, { recursive: true });
+  const dir = mkdtempSync(join(parentDir, "entry-tree-"));
+
+  const at = (relative: string): string => join(dir, ...relative.split("/"));
+
+  const rootManifestPath = at("package.json");
+  writeFileAt(
+    rootManifestPath,
+    renderManifest({
+      name: "synthesized-tree",
+      version: "0.0.0",
+      private: true,
+      type: "module",
+      workspaces: [...workspacesEntriesOf(description)],
+    }),
+  );
+
+  const configPath = at(PROJECT_CONFIG_FILE);
+  writeFileAt(
+    configPath,
+    serializeProjectConfig(effectiveConfigOf(description)),
+  );
+
+  for (const dirName of FRAMEWORK_DIR_NAMES) {
+    const packageDir = `packages/${dirName}`;
+    writeFileAt(
+      at(`${packageDir}/package.json`),
+      renderManifest({
+        name: `${description.scope}/${dirName}`,
+        version: "0.0.0",
+        type: "module",
+      }),
+    );
+    writeFileAt(at(`${packageDir}/dist/index.js`), seededDistLine(dirName));
+  }
+
+  for (const spec of description.packages) {
+    const packageDir = packageDirOf(description, spec);
+    writeFileAt(
+      at(`${packageDir}/package.json`),
+      renderManifest({
+        ...conformingManifest(spec, description.scope),
+        version: "0.0.0",
+        type: "module",
+      }),
+    );
+    writeFileAt(
+      at(`${packageDir}/dist/index.js`),
+      seededDistLine(spec.dirName),
+    );
+  }
+
+  // The Entry_Package. Its dependencies name the scoped Overseer and `contracts`
+  // and no Microservice_Package (R1.12), and it declares neither `main` nor
+  // `types` (R1.13) — the Entry_Point_Path is its interface, not a barrel.
+  writeFileAt(
+    at(`${description.entryRoot}/package.json`),
+    renderManifest({
+      name: entryPackageNameOf(description),
+      version: "0.0.0",
+      type: "module",
+      scripts: {
+        build: "tsc --build",
+        test: "vitest --run",
+        lint: "eslint .",
+        typecheck: "tsc --noEmit",
+      },
+      dependencies: {
+        [`${description.scope}/overseer`]: "*",
+        [`${description.scope}/contracts`]: "*",
+      },
+    }),
+  );
+  const entryPointPath = at(entryPointPathOf(description));
+  writeFileAt(
+    entryPointPath,
+    seededDistLine(lastSegmentOf(description.entryRoot)),
+  );
+
+  return {
+    dir,
+    description,
+    configPath,
+    rootManifestPath,
+    entryDir: at(description.entryRoot),
+    entryPointPath,
+  };
+}
+
+/**
+ * Removes a materialised tree, or a suite's whole temporary root.
+ *
+ * The removal half of the convention {@link materializeEntryTree} describes, and
+ * it refuses a destination outside the temporary directory for the same reason
+ * the writing half does — a recursive remove aimed at the checked-out tree is the
+ * one mistake with no undo. Safe to call on a path that no longer exists, so an
+ * `afterAll` runs it whether the suite's assertions passed or failed (R12.4).
+ */
+export function removeMaterializedTree(dir: string): void {
+  assertInsideTempDirectory(dir);
+  rmSync(dir, { recursive: true, force: true });
 }

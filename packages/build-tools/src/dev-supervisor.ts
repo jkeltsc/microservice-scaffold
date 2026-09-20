@@ -363,6 +363,7 @@ export function reduceDevEvents(
 
 import { buildPlan, buildPlanFrom, type BuildPlan } from "./build-plan.js";
 import { requireProjectContext } from "./config-loader.js";
+import { assertRegistryPresent } from "./entry-registry.js";
 import type { ReadDependencies } from "./required-dependencies.js";
 import { type Discovery } from "./discovery.js";
 import { type ProjectContext } from "./project-context.js";
@@ -403,6 +404,15 @@ export function projectListFrom(
  * roots an image build compiles (R13.8). The context is threaded for R1.9
  * uniformity; the roots are wholly determined by the plan.
  *
+ * The Entry_Package is in the returned set, and is in it for that same reason:
+ * `plan.tscRoots` is the Build_Sequence's produced order, which carries the
+ * Entry_Package as statement 6's single member, unconditionally on every
+ * Order_Producing_Path. So the watched projects are the Selected_Microservices,
+ * the Overseer_Library, their Required_Dependencies and the Entry_Package — one
+ * derivation shared with the image path rather than a set assembled here, which
+ * is what makes an edit to `<Entry_Root>/src/index.ts` a watched change
+ * (registry-inversion R10.2).
+ *
  * @param context the per-run derivation of this run's Effective_Config (R1.9).
  * @param plan the plan derived for the current `MICROSERVICES` value.
  */
@@ -431,9 +441,9 @@ import { spawn, type ChildProcess } from "node:child_process";
 
 import ts from "typescript";
 
-// The compiled Overseer entrypoint the child is spawned from (R4.1, R9.1).
-// framework.ts composes it, so that path is declared once (R10.3, R10.5).
-import { OVERSEER_ENTRYPOINT } from "./framework.js";
+// The path the child is spawned from is not composed here: it is the
+// Entry_Point_Path, derived once on the project context and threaded in as a
+// parameter (registry-inversion R7.1, R7.2, R10.1).
 
 /**
  * The Overseer's own boot line, scanned for in the child's stdout. It is the only
@@ -473,11 +483,15 @@ function trackedWatcher(
  * child exits, whereupon the process exits 0. If the watcher cannot start it throws
  * unframed, for the caller to report.
  *
+ * @param entryPointPath the Entry_Point_Path this session spawns, read from the
+ *   project context by the caller so this module composes no path of its own
+ *   (registry-inversion R7.1, R7.2, R10.1).
  * @param projectList the projects to compile, in build order.
  * @param env the session-start environment, passed to every child unmodified
  *   (R8.1, R8.2).
  */
 export function runDevSupervisor(
+  entryPointPath: string,
   projectList: readonly string[],
   env: NodeJS.ProcessEnv,
 ): void {
@@ -535,15 +549,28 @@ export function runDevSupervisor(
   }
 
   /**
-   * Spawn the Overseer from its compiled entrypoint, with the session-start
+   * Spawn the session's child from the Entry_Point_Path, with the session-start
    * environment passed through unmodified (R4.1, R8.1, R8.2). stdout is piped so the
    * readiness marker can be scanned and forwarded verbatim; stderr is inherited. The
    * `exit` handler here is the only source of `overseer-exited`, which is what keeps
    * a restart strictly sequential.
+   *
+   * This is the session's only `spawn`, so the first child and every replacement
+   * run the same `entryPointPath` — the respawn after a clean recompilation is
+   * this same call, reached through a second `start-overseer`
+   * (registry-inversion R10.1).
+   *
+   * At most one child exists at a time, and the previous one has exited before
+   * its replacement is spawned, so the replacement binds the same port
+   * (registry-inversion R10.9). That holds by construction rather than by a check
+   * here: `decide` emits `start-overseer` only from phase `none`, and a live child
+   * is first moved to `stopping` with a restart owed, the replacement being
+   * started from the `overseer-exited` handler below — which fires only after the
+   * process is gone.
    */
   function startOverseer(): void {
     childStdoutTail = "";
-    const spawned = spawn(process.execPath, [OVERSEER_ENTRYPOINT], {
+    const spawned = spawn(process.execPath, [entryPointPath], {
       env,
       stdio: ["ignore", "pipe", "inherit"],
     });
@@ -573,7 +600,11 @@ export function runDevSupervisor(
     });
   }
 
-  /** Ask the child to stop. Its `exit` handler raises the deciding event. */
+  /**
+   * Ask the child to stop, and do nothing else. Its `exit` handler raises the
+   * deciding event, so a replacement is spawned from there and never from here:
+   * the wait for the previous child's exit is that handler (R10.9).
+   */
   function stopOverseer(): void {
     child?.kill("SIGTERM");
   }
@@ -771,6 +802,11 @@ export function runDevSupervisor(
  * their own prefixes and the dev path fails with exactly the text an image build
  * fails with (R2.4). A watcher that fails to start is framed here instead. Both
  * exit 1, and on success this function does not return.
+ *
+ * The registry-presence guard sits between those two steps: after the list is
+ * derived and before the shell installs the builder, so it is one of the failure
+ * points ahead of the builder's first pass and ahead of any Overseer child
+ * (registry-inversion R5.5, R10.8).
  */
 export function runDevSupervisorCli(): void {
   // The config load reports Config_Diagnostics and exits 1 on its own (R1.10).
@@ -789,8 +825,18 @@ export function runDevSupervisorCli(): void {
     process.exit(1);
   }
 
+  // The Entry_Package is one of the watched projects, so the builder's FIRST pass
+  // compiles the Entry_Module and its static import of the Generated_Registry.
+  // The guard runs ahead of that pass — and therefore ahead of the watcher and of
+  // any Overseer child — so a dev startup whose Registry_Generation_Step was
+  // skipped writes the named diagnostic and exits non-zero with nothing started,
+  // instead of opening a watch session on an unresolved module
+  // (registry-inversion R5.3, R5.5, R10.8).
+  assertRegistryPresent(context);
+
   try {
-    runDevSupervisor(projectList, process.env);
+    // The spawned path comes from the context's single derivation (R7.1, R7.2).
+    runDevSupervisor(context.entryPointPath, projectList, process.env);
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     process.stderr.write(

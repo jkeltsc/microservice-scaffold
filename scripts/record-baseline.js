@@ -49,12 +49,6 @@ const BASELINE_DIR = resolve(
 /** The compiled build-tools module directory the entry points are imported from. */
 const DIST = resolve(repoRoot, "packages/build-tools/dist");
 
-/** The generated (gitignored) registry file `generateRegistry` writes. */
-const REGISTRY_PATH = resolve(
-  repoRoot,
-  "packages/overseer/src/generated/microservice-registry.ts",
-);
-
 /** The generated (gitignored) Dockerfile the Emit_Script writes. */
 const DOCKERFILE_PATH = resolve(repoRoot, "Dockerfile");
 
@@ -125,12 +119,20 @@ async function loadDefaultContext() {
 
 /**
  * Calls a stable entry point, prepending the default context as the first
- * argument only when the function's arity says it expects one. Lets the same
+ * argument only when the function's arity says it can accept one. Lets the same
  * call site drive both the baseline signature `fn(...args)` and the threaded
  * signature `fn(context, ...args)`.
+ *
+ * The test is `>=`, not `>`, because `Function.length` counts only the
+ * parameters before the first defaulted one: a threaded
+ * `buildPlan(context, selector = process.env.MICROSERVICES)` and a threaded
+ * `generateRegistry(context, selector = process.env.MICROSERVICES)` both report
+ * a length of 1, so a `>` test would drop the context and pass the Selector
+ * string in its place. On the Pre_Change_Baseline `context` is `undefined` and
+ * the comparison never runs, so widening it changes no recorded byte.
  */
 function withContext(fn, context, ...args) {
-  return context !== undefined && fn.length > args.length
+  return context !== undefined && fn.length >= args.length
     ? fn(context, ...args)
     : fn(...args);
 }
@@ -206,8 +208,13 @@ async function recordDiscovery(context) {
 // Entry points: `workspaceBuildOrder(workspaceNodesFrom(...))` for the
 // repository-wide build order — which is Selector-independent, but recorded per
 // Selector so the fixture set mirrors the comparison the test performs — and
-// `devProjectList(selector)` for the Selector-scoped Project_List (the plan's
-// `tscRoots`). Both are read through the compiled dev/workspace modules.
+// `devProjectList` for the Selector-scoped Project_List (the plan's `tscRoots`).
+// Both are read through the compiled dev/workspace modules.
+//
+// `devProjectList` takes the Build_Plan derived for the current `MICROSERVICES`
+// value, not the Selector string, so the recorder derives that plan through
+// `buildPlan` and hands it over. That is a repair of the call only: the recorded
+// observable is still exactly what `devProjectList` returns.
 // ---------------------------------------------------------------------------
 async function recordBuildOrders(context) {
   const { discoverPackages, readDependencySpecifiers } =
@@ -215,7 +222,19 @@ async function recordBuildOrders(context) {
   const { workspaceBuildOrder, workspaceNodesFrom } = await distModule(
     "workspace-build-order.js",
   );
+  const { buildPlan } = await distModule("build-plan.js");
   const { devProjectList } = await distModule("dev-supervisor.js");
+
+  // `readDependencySpecifiers` is a context-taking factory once the config is
+  // threaded — `readDependencySpecifiers(context)` returns the
+  // `(packageDir) => readonly string[]` reader `workspaceNodesFrom` calls — and
+  // is that reader itself on the Pre_Change_Baseline. Applying it here keeps the
+  // recorder's two-module-shape tolerance; either way each node's
+  // `dependencySpecifiers` is the same array, so no recorded byte changes.
+  const readDependencies =
+    context === undefined
+      ? readDependencySpecifiers
+      : readDependencySpecifiers(context);
 
   for (const { slug, value } of SELECTORS.buildAndRegistry) {
     const record = withSelectorEnv(value, () => {
@@ -224,12 +243,13 @@ async function recordBuildOrders(context) {
         workspaceNodesFrom,
         context,
         discovery,
-        readDependencySpecifiers,
+        readDependencies,
       );
       const buildOrder = withContext(workspaceBuildOrder, context, nodes).map(
         (node) => node.packageDir,
       );
-      const projectList = [...withContext(devProjectList, context, value)];
+      const plan = withContext(buildPlan, context, value);
+      const projectList = [...withContext(devProjectList, context, plan)];
       return { selector: value, buildOrder, projectList };
     });
     writeFixture(`build-order.${slug}.json`, record);
@@ -265,14 +285,32 @@ async function recordImageTrees(context) {
 // module. It writes the gitignored registry file as a side effect; the recorder
 // reads those bytes straight back into the fixture. Task 1.2 owns snapshotting
 // and restoring that file's prior contents around the whole recording run.
+//
+// The path those bytes are read from is derived, not spelled: `generateRegistry`
+// writes through `generatedRegistryPath(context)` — the single derivation of the
+// Generated_Registry's location — so the recorder reads it from there rather
+// than repeating a literal that would silently go stale. On the
+// Pre_Change_Baseline that export does not exist, so the same
+// `context === undefined`-shaped tolerance the rest of this script uses falls
+// back to the location the baseline generator wrote to. `generatedRegistryPath`
+// returns a Project_Directory-relative POSIX path, so it is resolved against
+// `repoRoot` exactly as the retired literal was.
 // ---------------------------------------------------------------------------
 async function recordRegistries(context) {
-  const { generateRegistry } = await distModule("generate-registry.js");
+  const { generateRegistry, generatedRegistryPath } =
+    await distModule("generate-registry.js");
+  const registryPath =
+    generatedRegistryPath === undefined
+      ? resolve(
+          repoRoot,
+          "packages/overseer/src/generated/microservice-registry.ts",
+        )
+      : resolve(repoRoot, generatedRegistryPath(context));
 
   for (const { slug, value } of SELECTORS.buildAndRegistry) {
     const bytes = withSelectorEnv(value, () => {
       withContext(generateRegistry, context, value);
-      return readFileSync(REGISTRY_PATH, "utf8");
+      return readFileSync(registryPath, "utf8");
     });
     writeFixture(`registry.${slug}.ts`, bytes);
   }

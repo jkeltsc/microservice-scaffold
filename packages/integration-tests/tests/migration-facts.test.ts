@@ -307,6 +307,104 @@ describe("no stale reference to the former path survives the move (R8.2, R8.4, R
 });
 
 // ---------------------------------------------------------------------------
+// Registry-inversion migration facts (task 9.16).
+//
+// The same source-of-truth shape as the relocation facts above, for the second
+// migration this suite records: the Registry_Template and the Template_Copy_Step
+// are gone, and the Entry_Package is present at its Entry_Root.
+//
+// Validates: Requirements 6.4, 6.5
+// ---------------------------------------------------------------------------
+
+/**
+ * The Registry_Template's retired path, assembled from fragments so this source
+ * never holds it contiguously — the same technique the stale-path scan above uses,
+ * and what keeps the later stale-documentation guard from reading this file as a
+ * stale reference.
+ */
+const RETIRED_GENERATED_DIR = `packages/${"overseer"}/src/generated`;
+const RETIRED_TEMPLATE = `${RETIRED_GENERATED_DIR}/microservice-registry.template.ts`;
+
+/** This repository's Entry_Root — unconfigured, so the Entry_Root_Default. */
+const ENTRY_ROOT = projectContext(defaultEffectiveConfig()).entryRoot;
+
+describe("the Registry_Template and the Template_Copy_Step are gone (R6.4)", () => {
+  it("no file exists at the Registry_Template's retired path", () => {
+    expect(existsSync(resolve(repoRoot, RETIRED_TEMPLATE))).toBe(false);
+  });
+
+  it("the Overseer declares no generated directory at all", () => {
+    // R3.3/R3.5: the Overseer_Library imports no generated file, so the directory
+    // that held one is removed rather than emptied.
+    expect(existsSync(resolve(repoRoot, RETIRED_GENERATED_DIR))).toBe(false);
+  });
+
+  it("the Root_Manifest declares no prepare script performing the Template_Copy_Step", () => {
+    const root = readManifest("package.json") as {
+      readonly scripts?: Readonly<Record<string, string>>;
+    };
+    expect(root.scripts ?? {}).not.toHaveProperty("prepare");
+    // And no other root script performs the copy under a different name.
+    for (const command of Object.values(root.scripts ?? {})) {
+      expect(command).not.toContain("microservice-registry.template");
+    }
+  });
+
+  it("no Build_System source, repo-level script, Dockerfile.template, or Root_Manifest names the Registry_Template", () => {
+    // Test sources are deliberately out of scope for THIS token: a guard has to
+    // spell the string it forbids, and several suites (this one included) name the
+    // retired template precisely in order to assert its absence. The production
+    // surfaces below have no such excuse.
+    const productionSources = [
+      ...collectFiles(resolve(repoRoot, "packages/build-tools/src"), () => true),
+      ...collectFiles(resolve(repoRoot, "scripts"), () => true),
+      "Dockerfile.template",
+      "package.json",
+    ];
+    const offenders = productionSources.filter((file) =>
+      readText(file).includes("microservice-registry.template"),
+    );
+    expect(
+      offenders,
+      `a stale reference to the retired Registry_Template survives in:\n${offenders.join("\n")}`,
+    ).toEqual([]);
+  });
+});
+
+describe("the Entry_Package is present at its Entry_Root (R6.5)", () => {
+  it("holds its manifest, tsconfig, Entry_Module, and Registry_Generation_Step shim", () => {
+    for (const relativePath of [
+      "package.json",
+      "tsconfig.json",
+      "src/index.ts",
+      "scripts/generate-registry.mjs",
+    ]) {
+      expect(
+        existsSync(resolve(repoRoot, ENTRY_ROOT, relativePath)),
+        `the Entry_Package must hold ${ENTRY_ROOT}/${relativePath}`,
+      ).toBe(true);
+    }
+  });
+
+  it("is a workspace member of the Root_Manifest", () => {
+    // npm reads `workspaces` statically to create the scoped symlinks, so the
+    // Entry_Package must appear there. Membership only — its position is load-bearing
+    // for nothing.
+    const workspaces =
+      (readManifest("package.json") as { workspaces?: readonly string[] })
+        .workspaces ?? [];
+    expect(workspaces).toContain(ENTRY_ROOT);
+  });
+
+  it("sits outside the directory holding the Framework_Singletons", () => {
+    // The Entry_Package belongs to no Consumer_Category and is discovered by no
+    // Discovery_Root; it is a direct child of the Project_Directory.
+    expect(ENTRY_ROOT.startsWith("packages/")).toBe(false);
+    expect(ENTRY_ROOT.includes("/")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 6. Image_Tree staged entry set equivalence (R15.5).
 //
 // Entry point: `buildPlan(selector)` from the compiled build-plan module — the

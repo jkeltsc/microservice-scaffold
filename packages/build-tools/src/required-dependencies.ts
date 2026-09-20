@@ -129,10 +129,19 @@ function byDirName(a: ConsumerPackage, b: ConsumerPackage): number {
 
 /**
  * Lists the directories the walk starts from: each microservice this build
- * includes, in the order `selector.ts` resolved them, then the Overseer. These
- * are consumers only — none is itself a required dependency (R7.1); the
- * microservice Discovery_Root and the Overseer's package directory both come
- * from the run's context (R10.5).
+ * includes, in the order `selector.ts` resolved them, then the Entry_Package.
+ * These are consumers only — none is itself a required dependency (R7.1); the
+ * microservice Discovery_Root and the Entry_Root both come from the run's
+ * context (R10.5, registry-inversion R9.1).
+ *
+ * The Overseer is no root of its own (registry-inversion R9.1). It is reached
+ * through the Entry_Package's declared dependency on the scoped `overseer`
+ * package, which — by the Framework_Singleton rule in {@link resolveSpecifiers}
+ * — resolves but is not followed, so it becomes no member of either set and is
+ * staged on Framework_Singleton grounds as `contracts` is. The consequence to
+ * remember is the other direction: a Common_Package reachable only from the
+ * Overseer's own manifest is no longer walked, while a Common_Package the
+ * Entry_Module imports now is.
  */
 function rootDirectories(
   context: ProjectContext,
@@ -140,7 +149,7 @@ function rootDirectories(
 ): readonly string[] {
   return [
     ...selected.map((id) => `${context.roots.microservice}/${id}`),
-    context.framework.overseer.packageDir,
+    context.entryRoot,
   ];
 }
 
@@ -248,9 +257,9 @@ interface Subgraph {
 
 /**
  * Phase 1 — collects the reachable part of the dependency graph and its edges,
- * walking out from the microservices this build includes plus the Overseer, and
- * fails on a cycle. Every failure of the resolve is raised here; phases 2 and 3
- * cannot fail.
+ * walking out from the microservices this build includes plus the Entry_Package,
+ * and fails on a cycle. Every failure of the resolve is raised here; phases 2 and
+ * 3 cannot fail.
  *
  * Re-entering a `grey` (in-progress) package proves a cycle; `greyNodes` keeps
  * enough of the graph to name its participants in cycle order (R7.10).
@@ -310,8 +319,8 @@ function reachableSubgraph(
   };
 
   for (const packageDir of rootDirectories(context, selected)) {
-    // A root is a microservice or the Overseer, so neither inbound-SPA rule can
-    // apply to it; `"microservice"` is the branch that forbids neither.
+    // A root is a microservice or the Entry_Package, so neither inbound-SPA rule
+    // can apply to it; `"microservice"` is the branch that forbids neither.
     const roots = resolveSpecifiers(
       context,
       "microservice",
@@ -352,7 +361,7 @@ function topologicalOrder(subgraph: Subgraph): readonly ConsumerPackage[] {
  * R7.2), for callers that do not need the stage set as well.
  *
  * @param context the run's project context; supplies the microservice
- *   Discovery_Root, the Overseer directory, the Dependency_Specifier prefix, the
+ *   Discovery_Root, the Entry_Root, the Dependency_Specifier prefix, the
  *   framework lookup, and the scope named in the failure messages (R10.7).
  * @param selected the microservices this build includes.
  * @param discovery the discovery result; supplies members and the name index.
@@ -435,7 +444,7 @@ export interface DependencySets {
  * calls. Every failure below is raised in phase 1 ({@link reachableSubgraph}).
  *
  * @param context the run's project context; supplies the microservice
- *   Discovery_Root, the Overseer directory, the Dependency_Specifier prefix, the
+ *   Discovery_Root, the Entry_Root, the Dependency_Specifier prefix, the
  *   framework lookup, and the scope named in the failure messages (R10.7).
  * @param selected the microservices this build includes.
  * @param discovery the discovery result; supplies members and the name index.

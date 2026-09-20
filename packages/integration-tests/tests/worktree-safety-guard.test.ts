@@ -43,8 +43,11 @@
 // mutating fs call's whole argument span — which may cross lines — and flags a
 // write whose destination is INSIDE the checked-out repository and OUTSIDE the
 // three permitted locations (a gitignored `dist/`, a `*.tsbuildinfo`, and the
-// generated Microservice_Registry). A `scaffold.config.json` written into the
-// checked-out tree is a violation in particular: this repository deliberately
+// generated Microservice_Registry at `<Entry_Root>/src/generated/
+// microservice-registry.ts` — the path taken from the Build_System's single
+// derivation, so no location under a Framework_Singleton is permitted). A
+// `scaffold.config.json` written into the checked-out tree is a violation in
+// particular: this repository deliberately
 // has no Project_Config_File, so a test needing one puts it in a
 // pristineWorktree() copy and passes that directory as the Project_Directory.
 // The classification is positive — a call is flagged only when its span carries
@@ -60,7 +63,34 @@ import { readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { defaultEffectiveConfig } from "@microservices/build-tools/dist/project-config.js";
+import { projectContext } from "@microservices/build-tools/dist/project-context.js";
+import { generatedRegistryPath } from "@microservices/build-tools/dist/generate-registry.js";
+
 const TESTS_DIR = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * The Generated_Registry's path — the third permitted in-place write. Taken from
+ * the SINGLE derivation `generatedRegistryPath` rather than spelled here, so it is
+ * `<Entry_Root>/src/generated/microservice-registry.ts` for this project's
+ * Effective_Config and moves with a relocated Entry_Root. No path under a
+ * Framework_Singleton's directory is permitted by this guard: the registry lives in
+ * the consumer's tree since the registry inversion (R4.1, R12.1).
+ */
+const GENERATED_REGISTRY_PATH = generatedRegistryPath(
+  projectContext(defaultEffectiveConfig()),
+);
+
+/** This project's Entry_Root, for the permitted-set self-check below. */
+const ENTRY_ROOT = projectContext(defaultEffectiveConfig()).entryRoot;
+
+/**
+ * The directory the Generated_Registry used to occupy, under the Overseer
+ * Framework_Singleton. Assembled from fragments, like every other forbidden token
+ * in this file, so this source never holds it contiguously; it exists only so the
+ * permitted-set self-check can prove a write there is rejected.
+ */
+const RETIRED_REGISTRY_DIR = "packages/" + "overseer" + "/src/generated";
 
 /** This guard's own file name, excluded from the scanned set. */
 const SELF = basename(fileURLToPath(import.meta.url));
@@ -259,9 +289,28 @@ const TEMP_ANCHORS: readonly string[] = [
   "outPath",
 ];
 
-/** The three permitted checked-out write locations (R13.6). A destination whose
- *  text names one of these is allowed even inside the checked-out tree. */
-const PERMITTED_LOCATION = /\bdist\b|tsbuildinfo|microservice-registry(?!\.template)/;
+/** Escapes a literal path for inclusion in a regular expression. */
+function escapeForRegExp(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * The three permitted checked-out write locations (R13.6; registry-inversion
+ * R12.1), and EXACTLY those: a package's gitignored `dist/`, a `*.tsbuildinfo`,
+ * and the Generated_Registry at `<Entry_Root>/src/generated/
+ * microservice-registry.ts`. A destination whose text names one of these is
+ * allowed even inside the checked-out tree.
+ *
+ * The registry entry is the full Entry_Root-prefixed path, not the bare file
+ * name: the retired location under the Overseer shared that file name, so a bare
+ * `microservice-registry` token would keep permitting a write there. Naming the
+ * derived path is what makes the retired location a violation again.
+ */
+const PERMITTED_LOCATION = new RegExp(
+  ["\\bdist\\b", "tsbuildinfo", escapeForRegExp(GENERATED_REGISTRY_PATH)].join(
+    "|",
+  ),
+);
 
 /** The Project_Config_File name — writing one into the checked-out tree is a
  *  violation, assembled from fragments so this source never holds it whole. */
@@ -442,5 +491,34 @@ describe("no test mutates the real working tree", () => {
       `a test wrote inside the checked-out tree outside the permitted locations; ` +
         `write into a pristineWorktree() copy instead.\n${report(offences)}`,
     ).toEqual([]);
+  });
+
+  it("permits exactly the three in-place write locations, the registry at its Entry_Root path", () => {
+    // The permitted set is a gitignored `dist/`, a `*.tsbuildinfo`, and the
+    // Generated_Registry — and the registry entry names the path the Build_System
+    // actually writes, under the Entry_Root (registry-inversion R4.1, R12.1). Held
+    // explicitly so a widened or stale set cannot pass unnoticed through the scan
+    // above, which reports nothing when every write is permitted.
+    expect(GENERATED_REGISTRY_PATH).toBe(
+      `${ENTRY_ROOT}/src/generated/microservice-registry.ts`,
+    );
+    expect(PERMITTED_LOCATION.test(`packages/contracts/${"dist"}/index.js`)).toBe(
+      true,
+    );
+    expect(PERMITTED_LOCATION.test(`packages/contracts/tsconfig.tsbuildinfo`)).toBe(
+      true,
+    );
+    expect(PERMITTED_LOCATION.test(GENERATED_REGISTRY_PATH)).toBe(true);
+
+    // And the RETIRED location is not permitted: a write aimed under the Overseer's
+    // former generated directory is a violation again, which is the whole point of
+    // naming the derived path rather than the bare file name.
+    const retired = `${RETIRED_REGISTRY_DIR}/microservice-registry.ts`;
+    expect(PERMITTED_LOCATION.test(retired)).toBe(false);
+    // Neither is an arbitrary tracked source, nor the Project_Config_File.
+    expect(
+      PERMITTED_LOCATION.test("packages/microservices/microservice1/src/index.ts"),
+    ).toBe(false);
+    expect(PERMITTED_LOCATION.test(CONFIG_FILE)).toBe(false);
   });
 });

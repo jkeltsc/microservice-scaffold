@@ -21,12 +21,12 @@
 // Framework_Singleton's own scoped dependencies — neither is discovered, so its
 // specifiers come from its manifest by directory.
 //
-// The order is the Build_Sequence's seven statements applied to the committed
-// tree (design Data Models table, 2.21). Each position below cites the STATEMENT
-// that emitted it, not a graph consequence — the derivation is the statement
-// scaffold of 2.1, and the Verification_Pass, not the sort, is what honours a
-// declared edge. Over the committed tree the ten `packageDir`s come out in
-// exactly this order:
+// The order is the Build_Sequence's eight statements applied to the committed
+// tree (design Data Models table, 2.21, as registry-inversion R8.1 renumbered
+// it). Each position below cites the STATEMENT that emitted it, not a graph
+// consequence — the derivation is the statement scaffold of 2.1, and the
+// Verification_Pass, not the sort, is what honours a declared edge. Over the
+// committed tree the eleven `packageDir`s come out in exactly this order:
 //
 //   1   packages/contracts                       (statement 1: contracts, first)
 //   2   packages/build-tools                      (statement 2: build-tools)
@@ -36,8 +36,14 @@
 //   6   packages/microservices/microservice2      (statement 4: Microservice_Packages)
 //   7   packages/microservices/microservice3      (statement 4: Microservice_Packages)
 //   8   packages/overseer                         (statement 5: overseer)
-//   9   packages/integration-tests                (statement 6: integration-tests)
-//   10  packages/spa/demo                         (statement 7: Spa_Packages, last)
+//   9   app                                       (statement 6: the Entry_Package)
+//   10  packages/integration-tests                (statement 7: integration-tests)
+//   11  packages/spa/demo                         (statement 8: Spa_Packages, last)
+//
+// Position 9 is the one entry that is not a `packages/…` directory: the
+// Entry_Package sits at the Entry_Root, outside the Framework_Singleton container,
+// and this repository declares no `scaffold.config.json`, so that root is the
+// Entry_Root_Default `app`.
 //
 // Statement 3 (positions 3 and 4) is its own calculated order: `extended-config`
 // declares `@microservices/config` as its sole scoped specifier, so the one
@@ -47,17 +53,17 @@
 // `packageDir` code-point order: microservice1, microservice2, microservice3.
 // This is 2.3's within-statement tiebreak, not a dependency consequence.
 //
-// `packages/contracts` first and `packages/integration-tests` last are NOT graph
-// consequences under the Build_Sequence — they are statements 1 and 6, emitted at
-// those positions by the statement scaffold itself regardless of what any
-// manifest declares. The two focused assertions below record those positions
+// `packages/contracts` first and `packages/integration-tests` next-to-last are NOT
+// graph consequences under the Build_Sequence — they are statements 1 and 7,
+// emitted at those positions by the statement scaffold itself regardless of what
+// any manifest declares. The focused assertions below record those positions
 // against the primitive's fixed statement order.
 //
 // `packages/spa/demo` is the sole entry following `integration-tests`: it is the
-// only member of statement 7 (the trailing Spa_Package phase), so it lands last
-// at 10. Microservice1 declaring `@microservices/demo` (it serves the Demo_Spa)
+// only member of statement 8 (the trailing Spa_Package phase), so it lands last
+// at 11. Microservice1 declaring `@microservices/demo` (it serves the Demo_Spa)
 // no longer pulls the Demo_Spa forward — a Spa_Package is never a
-// Compile_Time_Prerequisite, so statement 7 emits it after everything else, and
+// Compile_Time_Prerequisite, so statement 8 emits it after everything else, and
 // the demo→microservice1 edge imposes no ordering on the tsc pass.
 //
 // `discoverPackages()` and `readDependencySpecifiers` resolve their paths
@@ -92,12 +98,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..", "..", "..");
 
 /**
- * The ten `packageDir`s of the design's "Build_Sequence over the committed tree"
- * table (2.21), in table order. This is the whole oracle. The three
+ * The eleven `packageDir`s of the design's "Build_Sequence over the committed
+ * tree" table (2.21), in table order. This is the whole oracle. The three
  * Microservice_Packages occupy positions 5 to 7 in `packageDir` order (statement
- * 4), `packages/overseer` is at 8 (statement 5), `packages/integration-tests` at
- * 9 (statement 6), and `packages/spa/demo` last at 10 as the sole member of the
- * trailing Spa_Package statement 7.
+ * 4), `packages/overseer` is at 8 (statement 5), `app` at 9 (statement 6, the
+ * Entry_Package), `packages/integration-tests` at 10 (statement 7), and
+ * `packages/spa/demo` last at 11 as the sole member of the trailing Spa_Package
+ * statement 8.
  */
 const EXPECTED_ORDER: readonly string[] = [
   "packages/contracts",
@@ -108,6 +115,7 @@ const EXPECTED_ORDER: readonly string[] = [
   "packages/microservices/microservice2",
   "packages/microservices/microservice3",
   "packages/overseer",
+  "app",
   "packages/integration-tests",
   "packages/spa/demo",
 ];
@@ -196,7 +204,7 @@ describe("Workspace_Build_Order over the committed repository (Data Models table
     process.chdir(originalCwd);
   });
 
-  it("yields exactly the ten entries of the design's table, in that order", () => {
+  it("yields exactly the eleven entries of the design's table, in that order", () => {
     expect(deriveOrder()).toEqual(EXPECTED_ORDER);
   });
 
@@ -206,16 +214,30 @@ describe("Workspace_Build_Order over the committed repository (Data Models table
     expect(deriveOrder()[0]).toBe("packages/contracts");
   });
 
-  it("records that statement 6 places packages/integration-tests before the Spa phase", () => {
-    // integration-tests is statement 6, emitted after the Overseer (statement 5)
-    // and before the trailing Spa_Package statement 7. With packages/spa/demo the
-    // sole member of statement 7, integration-tests sits at position 9 — second to
-    // last — and spa/demo is the only entry that follows it.
+  it("records that statement 7 places packages/integration-tests before the Spa phase", () => {
+    // integration-tests is statement 7, emitted after the Entry_Package
+    // (statement 6) and before the trailing Spa_Package statement 8. With
+    // packages/spa/demo the sole member of statement 8, integration-tests sits at
+    // position 10 — second to last — and spa/demo is the only entry after it.
     const order = deriveOrder();
     const integrationIdx = order.indexOf("packages/integration-tests");
     const demoIdx = order.indexOf("packages/spa/demo");
     expect(integrationIdx).toBeGreaterThanOrEqual(0);
     expect(demoIdx).toBe(integrationIdx + 1);
     expect(demoIdx).toBe(order.length - 1);
+  });
+
+  it("records that statement 6 places the Entry_Package after the Overseer and before integration-tests", () => {
+    // The Entry_Package's position is statement 6's, not a graph consequence: it
+    // follows every Selected_Microservice and the Overseer because the
+    // Generated_Registry it compiles imports each of them, and it precedes the
+    // test-only Framework_Singleton (registry-inversion R8.1).
+    const order = deriveOrder();
+    const overseerIdx = order.indexOf("packages/overseer");
+    const entryIdx = order.indexOf("app");
+    const integrationIdx = order.indexOf("packages/integration-tests");
+
+    expect(entryIdx).toBe(overseerIdx + 1);
+    expect(integrationIdx).toBe(entryIdx + 1);
   });
 });

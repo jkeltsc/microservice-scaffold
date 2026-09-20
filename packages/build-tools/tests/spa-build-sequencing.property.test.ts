@@ -52,8 +52,11 @@ import { defaultEffectiveConfig } from "../src/project-config.js";
 import { projectContext } from "../src/project-context.js";
 import { executeBuildPlan, type CommandRunner } from "../src/image-tree.js";
 
+/** The default-config context, threaded into `executeBuildPlan`. */
+const CONTEXT = projectContext(defaultEffectiveConfig());
+
 /** The Image_Tree scope directory, derived from the default-config context. */
-const SCOPE_DIR = projectContext(defaultEffectiveConfig()).scopeDir;
+const SCOPE_DIR = CONTEXT.scopeDir;
 
 /** One recorded runner invocation, captured before any throw. */
 interface Invocation {
@@ -211,7 +214,7 @@ describe("Property 18: the Bundler_Build_Phase runs entirely after the Tsc_Build
         const { run, invocations } = recordingRunner();
         const staging = stagingSpy();
 
-        executeBuildPlan(plan, "/out", run, staging.stage);
+        executeBuildPlan(CONTEXT, plan, "/out", run, staging.stage);
 
         // Total invocations: the one tsc --build plus one per required Spa build.
         expect(invocations).toHaveLength(1 + plan.spaBuilds.length);
@@ -261,7 +264,7 @@ describe("Property 18: the Bundler_Build_Phase runs entirely after the Tsc_Build
         const { run, invocations } = recordingRunner({ command: "npx", exitCode });
         const staging = stagingSpy();
 
-        expect(() => executeBuildPlan(plan, "/out", run, staging.stage)).toThrow(
+        expect(() => executeBuildPlan(CONTEXT, plan, "/out", run, staging.stage)).toThrow(
           /\[image-tree\] "npx tsc --build.*" failed with exit code/,
         );
 
@@ -285,7 +288,7 @@ describe("Property 18: the Bundler_Build_Phase runs entirely after the Tsc_Build
         const { run, invocations } = recordingRunner({ command: "npm", exitCode });
         const staging = stagingSpy();
 
-        expect(() => executeBuildPlan(plan, "/out", run, staging.stage)).toThrow(
+        expect(() => executeBuildPlan(CONTEXT, plan, "/out", run, staging.stage)).toThrow(
           /\[image-tree\] "npm run build" failed with exit code/,
         );
 
@@ -375,7 +378,7 @@ describe("Property 9: a SPA with Common_Package dependencies bundles only after 
         const { run, invocations } = recordingRunner();
         const staging = stagingSpy();
 
-        executeBuildPlan(plan, "/out", run, staging.stage);
+        executeBuildPlan(CONTEXT, plan, "/out", run, staging.stage);
 
         // One tsc --build over the roots, and the SPA's Common_Packages are
         // among those roots (built before the bundler inlines them).
@@ -412,7 +415,7 @@ describe("Property 9: a SPA with Common_Package dependencies bundles only after 
           const staging = stagingSpy();
 
           expect(() =>
-            executeBuildPlan(plan, "/out", run, staging.stage),
+            executeBuildPlan(CONTEXT, plan, "/out", run, staging.stage),
           ).toThrow(/\[image-tree\] "npx tsc --build.*" failed with exit code/);
 
           // The compile of the SPA's Common_Packages failed, so the bundler
@@ -440,7 +443,7 @@ describe("Property 9: a SPA with Common_Package dependencies bundles only after 
           const staging = stagingSpy();
 
           expect(() =>
-            executeBuildPlan(plan, "/out", run, staging.stage),
+            executeBuildPlan(CONTEXT, plan, "/out", run, staging.stage),
           ).toThrow(/\[image-tree\] "npm run build" failed with exit code/);
 
           // The commons compiled (the tsc --build ran first and succeeded),

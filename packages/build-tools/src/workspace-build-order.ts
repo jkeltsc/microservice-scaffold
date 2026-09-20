@@ -10,9 +10,9 @@
 // always.
 //
 // The order comes from the Build_Sequence primitive (build-sequence.ts), the one
-// place the seven-statement order is written. `packages/contracts` comes out
+// place the eight-statement order is written. `packages/contracts` comes out
 // first because it is statement 1 and `packages/integration-tests` next-to-last
-// because it is statement 6 — those positions are the sequence's, not a
+// because it is statement 7 — those positions are the sequence's, not a
 // consequence of a declared dependency. A package's declared `@microservices`
 // dependency is honoured by the Verification_Pass, not by the ordering sort: the
 // pass rejects any produced order that places a package ahead of one of its own
@@ -56,9 +56,13 @@ export interface WorkspaceNode {
   readonly name: string;
   /** This package's own `@microservices`-scoped `dependencies` keys (R12.4). */
   readonly dependencySpecifiers: readonly string[];
-  /** Framework tier, or the Consumer_Category. Partitions the nodes into the
-   *  Build_Sequence's statements — its `common`, `spa`, and microservice members. */
-  readonly tier: "framework" | ConsumerCategory;
+  /** Framework tier, the Consumer_Category, or `"entry"` for the Entry_Package,
+   *  which belongs to neither (registry-inversion R8.5). Partitions the nodes into
+   *  the Build_Sequence's statements — its `common`, `spa`, and microservice
+   *  members. Every filter over `tier` tests for `"common"`, `"microservice"`, or
+   *  `"spa"`, so each excludes `"entry"` unchanged: the Entry_Package reaches
+   *  `buildSequence` through statement 6 and through nothing else. */
+  readonly tier: "framework" | ConsumerCategory | "entry";
 }
 
 /**
@@ -76,15 +80,21 @@ function orderedBuildFailedError(packageDir: string, status: number): Error {
 /**
  * Collects every workspace package as a node of the build graph (R12.1).
  *
- * That is the four packages the scaffold owns, plus every package discovery
- * found under the three category directories. Called from
+ * That is the four packages the scaffold owns, plus the Entry_Package, plus every
+ * package discovery found under the three category directories. Called from
  * {@link runOrderedBuildCli}.
  *
+ * The Entry_Package is collected here, at tier `"entry"`, because it is discovered
+ * by nothing and yet its declared specifiers must resolve to ordinary
+ * Prerequisite_Edges — `Overseer → Entry_Package` and `contracts → Entry_Package`
+ * arrive that way rather than being synthesised (registry-inversion R8.5).
+ *
  * @param context the run's per-run derivation of its Effective_Config; supplies
- *   the four Framework_Singletons with their scope-composed names (R1.9, R3.7).
+ *   the four Framework_Singletons with their scope-composed names and the
+ *   Entry_Root (R1.9, R3.7, registry-inversion R8.5).
  * @param discovery the discovery result; supplies every Consumer_Package.
- * @param readDependencies reads a Framework_Singleton's own specifiers, which
- *   discovery never records.
+ * @param readDependencies reads a Framework_Singleton's or the Entry_Package's own
+ *   specifiers, which discovery never records.
  */
 export function workspaceNodesFrom(
   context: ProjectContext,
@@ -100,6 +110,17 @@ export function workspaceNodesFrom(
     }),
   );
 
+  // The Entry_Package: named by the Entry_Root, as statement 6 names it, so the
+  // node's name and the sequence entry's name are composed the same way (R1.10).
+  const entryNode: WorkspaceNode = {
+    packageDir: context.entryRoot,
+    name: context.scopedName(
+      context.entryRoot.slice(context.entryRoot.lastIndexOf("/") + 1),
+    ),
+    dependencySpecifiers: readDependencies(context.entryRoot),
+    tier: "entry",
+  };
+
   const consumerNodes: WorkspaceNode[] = [
     ...discovery.byName.values(),
   ].map((pkg: ConsumerPackage) => ({
@@ -109,7 +130,7 @@ export function workspaceNodesFrom(
     tier: pkg.category,
   }));
 
-  return [...frameworkNodes, ...consumerNodes];
+  return [...frameworkNodes, entryNode, ...consumerNodes];
 }
 
 /**
@@ -119,7 +140,8 @@ export function workspaceNodesFrom(
  * package takes part, so `buildTools` and `testOnly` are both true, and no
  * Selector narrows the membership — the repository-wide build always builds every
  * package (R12.1). `contracts` leads as statement 1 and `integration-tests`
- * follows the microservices and the Overseer as statement 6; within a statement,
+ * follows the microservices, the Overseer and the Entry_Package as statement 7;
+ * within a statement,
  * members are ordered by `packageDir`, so two runs over an unchanged repository
  * agree (R12.5).
  *
@@ -140,7 +162,7 @@ export function workspaceBuildOrder(
   nodes: readonly WorkspaceNode[],
 ): readonly WorkspaceNode[] {
   // Partition the workspace by tier and category. Statement 3 (common) and
-  // statement 7 (spa) want ConsumerPackage-shaped members; reconstruct the fields
+  // statement 8 (spa) want ConsumerPackage-shaped members; reconstruct the fields
   // buildSequence reads from each node — its category is its tier, and its
   // buildKind derives from that category alone (discovery.ts). Statement 4 wants
   // the microservice directory names, which are the last path segment of each

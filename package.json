@@ -9,6 +9,7 @@
     "npm": ">=10"
   },
   "workspaces": [
+    "app",
     "packages/contracts",
     "packages/build-tools",
     "packages/common/*",
@@ -29,7 +30,6 @@
     "ci": "npm run build && npm run check:invariants && npm run typecheck --workspaces && npm run lint --workspaces && npm test && npm run test:types",
     "start": "dotenvx run -- node scripts/start.js",
     "dev": "dotenvx run -- node scripts/dev.js",
-    "prepare": "cp packages/overseer/src/generated/microservice-registry.template.ts packages/overseer/src/generated/microservice-registry.ts",
     "docker:build:generic": "MICROSERVICES='*' sh scripts/emit-effective-dockerfile.sh && docker build --build-arg MICROSERVICES='*' -t scaffold:generic .",
     "docker:build:microservice1-microservice2": "MICROSERVICES=microservice1,microservice2 sh scripts/emit-effective-dockerfile.sh && docker build --build-arg MICROSERVICES=microservice1,microservice2 -t scaffold:microservice1-microservice2 .",
     "docker:build:microservice1": "MICROSERVICES=microservice1 sh scripts/emit-effective-dockerfile.sh && docker build --build-arg MICROSERVICES=microservice1 -t scaffold:microservice1 .",

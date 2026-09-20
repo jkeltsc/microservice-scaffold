@@ -7,16 +7,31 @@ Every workspace package under `packages/` belongs to exactly one **Package_Categ
 > **The framework knows its own parts by name; it discovers the consumer's parts by location.**
 
 - **Framework_Singleton** — a package that is part of the scaffold itself. The Build_System knows each one **by name**; none is ever discovered. There are exactly four, all direct subdirectories of `packages/`:
-  - `packages/contracts/` — shared TS types (request handler contract, exported shape)
-  - `packages/overseer/` — the routing frontend application
-  - `packages/build-tools/` — registry generator, dependency resolver, image-tree assembler
+  - `packages/contracts/` — shared TS types, and types only (request handler contract, exported shape)
+  - `packages/overseer/` — the Overseer_Library: the routing frontend as a library, consumed by package name through its barrel
+  - `packages/build-tools/` — registry generator, dependency resolver, image-tree assembler, and the shared `fast-check` arbitraries
   - `packages/integration-tests/` — cross-package integration test suite
 - **Consumer_Category** — a kind of package a *user of this template* writes. The Build_System discovers these **by location**: **the members of a Consumer_Category are the direct subdirectories of that category's configured Discovery_Root** — the path declared for that category under `roots` in `scaffold.config.json` (see `tech.md`). A Discovery_Root is not itself a package and declares no `package.json`. There are exactly three categories, each with a **Root_Default** a project uses when it declares none:
   - **microservice** → default `packages/microservices/`
   - **common** → default `packages/common/`
   - **spa** → default `packages/spa/`
 
-The layout below is the **result of those three defaults**, not a fixed path: a project that declares a different root for a category discovers that category's members under the declared directory instead. This repository declares no `scaffold.config.json`, so it takes all three defaults, and the four Framework_Singleton directories plus the three default Discovery_Root directories are the only direct children of `packages/`, with nothing else. No Build_System check validates *that* set; it is a convention code review upholds. A direct subdirectory of `packages/` that is neither a Framework_Singleton nor a configured Discovery_Root has no category, and that is not an error — the build ignores it and exits zero.
+There is one package that is neither: the **Entry_Package**.
+
+## The Entry_Package
+
+The **Entry_Package** is this project's own process entrypoint, and it is the third kind of package in the repository — **in no Consumer_Category and no Framework_Singleton**. It lives at the **Entry_Root**, a directory *outside* `packages/` (the directory holding the Framework_Singletons), whose **Entry_Root_Default is `app`** and which a project may relocate through the `entry` key of `scaffold.config.json` (see `tech.md`). It is **discovered by no category's Discovery_Root**: the Build_System knows the Entry_Root from the Effective_Config, and no category scan can reach it, because an Entry_Root equal to, inside, or containing a Discovery_Root is rejected before any discovery runs.
+
+What it holds is the division of ownership this scaffold is built around:
+
+- **The committed Entry_Module** — `<Entry_Root>/src/index.ts`, consumer-owned source. It imports the Overseer_Library by package name, calls `boot` and `startServer`, and is the only module in the repository that writes to stderr, calls `process.exit`, or binds the HTTP socket. The Build_System reads none of its content.
+- **The generated registry it receives** — `<Entry_Root>/src/generated/microservice-registry.ts`, written by the registry generator (see "Build-time registry"). It is **gitignored generated output**, and the Entry_Module is the **only** module that statically imports it. No Framework_Singleton imports a generated file.
+
+Its manifest is named for the scope plus the last segment of the Entry_Root (`@microservices/app` at the default), declares `"type": "module"`, the four standard scripts, and a dependency on the scoped `overseer` and `contracts` only — never a Microservice_Package, since the selected set is Selector-dependent and the generated registry's imports resolve through the workspace symlinks instead. It declares **no `main` and no `types`**: nothing imports it by name, and both a local run and a container invoke it by path at `<Entry_Root>/dist/index.js`. It also owns `<Entry_Root>/scripts/generate-registry.mjs`, a dependency-free ESM shim its own `build` and `typecheck` scripts run before the compiler so that compiling in that directory never depends on some other command having generated the registry first.
+
+Like every workspace package, the Entry_Package must appear in the root `workspaces` array, and it is a Tsc_Project built through `tsc`.
+
+The layout below is the **result of those three category defaults and the Entry_Root_Default**, not a fixed path: a project that declares a different root for a category discovers that category's members under the declared directory instead. This repository declares no `scaffold.config.json`, so it takes every default, and the four Framework_Singleton directories plus the three default Discovery_Root directories are the only direct children of `packages/`, with nothing else. No Build_System check validates *that* set; it is a convention code review upholds. A direct subdirectory of `packages/` that is neither a Framework_Singleton nor a configured Discovery_Root has no category, and that is not an error — the build ignores it and exits zero.
 
 ## Layout
 
@@ -27,13 +42,17 @@ The layout below is the **result of those three defaults**, not a fixed path: a 
 ├─ Dockerfile.template       # committed source: three-stage, selector-parameterized image build with COPY/ENV anchors
 ├─ .dockerignore             # keeps host node_modules/, dist/ and generated code out of the context
 ├─ scripts/                  # repo-level scripts not owned by any package
-│  ├─ start.js               # npm start: generate microservice registry, build, run the Overseer
-│  └─ emit-effective-dockerfile.sh   # reads Dockerfile.template, writes the generated Dockerfile with manifest COPY lines + toggle-default ENV lines
+│  ├─ start.js               # npm start: build, generate the microservice registry, run the Entry_Package's compiled entrypoint
+│  └─ emit-effective-dockerfile.sh   # reads Dockerfile.template, writes the generated Dockerfile with manifest COPY lines + toggle-default ENV lines + the CMD naming the entrypoint
 ├─ .kiro/                    # specs, steering, hooks
+├─ app/                      # Entry_Package at the Entry_Root_Default: in no Consumer_Category, discovered by no Discovery_Root
+│  ├─ src/index.ts           # the committed Entry_Module — imports @microservices/overseer by name; the only static importer of the generated registry
+│  ├─ src/generated/microservice-registry.ts   # the generated registry (gitignored)
+│  └─ scripts/generate-registry.mjs            # dependency-free shim: generates the registry ahead of this package's own build/typecheck
 └─ packages/
-   ├─ contracts/             # Framework_Singleton: shared TS types (request handler contract, exported shape)
-   ├─ overseer/              # Framework_Singleton: the routing frontend application
-   ├─ build-tools/           # Framework_Singleton: registry generator, dependency resolver, image-tree assembler
+   ├─ contracts/             # Framework_Singleton: shared TS types only (request handler contract, exported shape)
+   ├─ overseer/              # Framework_Singleton: the Overseer_Library — routing frontend as a library; src/index.ts is its whole public API
+   ├─ build-tools/           # Framework_Singleton: registry generator, dependency resolver, image-tree assembler, shared test arbitraries (src/testing/)
    ├─ integration-tests/     # Framework_Singleton: cross-package integration test suite
    ├─ common/                # Namespace_Container for the common Consumer_Category (consumer-written shared libraries)
    │  ├─ config/             # Common_Package: config data/shape/helper consumed by microservice2 and by extended-config
@@ -46,15 +65,17 @@ The layout below is the **result of those three defaults**, not a fixed path: a 
       └─ microservice3/
 ```
 
-Under the default roots, the four Framework_Singletons and the three Discovery_Root directories are the only direct children of `packages/`. Category members live *inside* their category's configured Discovery_Root: at the defaults, a microservice at `packages/microservices/<identifier>/`, a common library at `packages/common/<name>/`, a SPA at `packages/spa/<name>/`. A directory two or more levels below a Discovery_Root (for example a SPA source folder kept inside a microservice) is private content of its nearest enclosing member, never a discovered package of its own.
+The Entry_Root is a direct child of the Project_Directory, a sibling of `packages/` rather than a child of it. Under the default roots, the four Framework_Singletons and the three Discovery_Root directories are the only direct children of `packages/`. Category members live *inside* their category's configured Discovery_Root: at the defaults, a microservice at `packages/microservices/<identifier>/`, a common library at `packages/common/<name>/`, a SPA at `packages/spa/<name>/`. A directory two or more levels below a Discovery_Root (for example a SPA source folder kept inside a microservice) is private content of its nearest enclosing member, never a discovered package of its own.
 
-### Relocating a Discovery_Root
+### Relocating a Discovery_Root or the Entry_Root
 
 A project may point a category's Discovery_Root elsewhere — say `microservice` at `packages/services` — by declaring it under `roots` in `scaffold.config.json`. **Relocating a root requires updating the root `package.json` `workspaces` array in the same change** so its globs cover the new location, because npm reads `workspaces` statically — before any repository code, and therefore before the Build_System reads the config — to discover the workspaces and create the scoped symlinks. If the `workspaces` array is not updated to match the configured roots, `check:invariants` reports the Workspace_Coverage mismatch. The `workspaces` array declares *membership* only; its order is load-bearing for nothing (see `tech.md`).
 
+**Relocating the Entry_Root carries the same obligation.** Moving the Entry_Package — say from `app` to `entrypoint` — is a directory move plus the `entry` edit in `scaffold.config.json` plus, **in the same change**, the matching root `workspaces` entry, for exactly the reason a relocated Discovery_Root needs one: npm reads `workspaces` before any repository code runs. Everything else follows the config: the generated registry moves to `<Entry_Root>/src/generated/microservice-registry.ts`, and the path a local run, the Build_Sequence, the image tree, and the generated `Dockerfile`'s `CMD` each name moves with it. Nothing else in the repository spells the Entry_Root.
+
 ## Package conventions
 
-Each package under `packages/` (whether a Framework_Singleton or a Consumer_Package) is a standalone npm workspace and follows these rules:
+Each package under `packages/` (whether a Framework_Singleton or a Consumer_Package), and the Entry_Package at the Entry_Root, is a standalone npm workspace and follows these rules:
 
 - Own `package.json` with `"type": "module"`, `"main"` pointing at compiled JS under `dist/`, and a `"types"` field.
 - Own `tsconfig.json` extending `../../tsconfig.base.json` (add one `../` per extra directory level — `../../../tsconfig.base.json` for a package one level deeper, such as a microservice, common, or spa member).
@@ -62,8 +83,19 @@ Each package under `packages/` (whether a Framework_Singleton or a Consumer_Pack
 - Own `tests/` (or colocated `*.test.ts`) using vitest.
 - Public API is limited to what `index.ts` re-exports. Nothing else is stable.
 - **Exception — bin-only tooling packages.** A package whose entire interface is its CLI entry points may omit the barrel, and with it `main` and `types`; its `bin` block is the interface, and its modules are imported by path. `packages/build-tools/` is one: nothing imports it by package name, so a barrel would advertise an API no consumer has. A test that needs one of its functions deep-imports the compiled module (`@microservices/build-tools/dist/selector.js`).
+- **Exception — the Entry_Package.** It omits `main` and `types` too, for the mirror-image reason: nothing imports it at all, by name or by path into its modules. It is invoked as a process, by path, at `<Entry_Root>/dist/index.js`. Sitting at the Entry_Root rather than under `packages/`, its `tsconfig.json` extends `../tsconfig.base.json` — one `../` fewer than a top-level package under `packages/`.
 
 Membership in a category is decided by **location alone**. A package's `main`/`types` (or their absence) never decides *which* category it belongs to; those fields are a per-category *contract* a package must satisfy once its category is fixed, not what makes it a member. Adding `main`/`types` to a bin-only tooling package does not turn it into a shared library, and removing them from a common library does not make it vanish — it fails the build loudly instead.
+
+### Shared test arbitraries live in `build-tools`
+
+The shared `fast-check` arbitraries live under **`packages/build-tools/`**, at `src/testing/`, compiled to `dist/testing/`. `packages/contracts/` carries **types only** — no test helpers and no `fast-check` dependency.
+
+A package whose tests import the arbitraries declares **`@microservices/build-tools` as a *development* dependency** — never a runtime one, since no shipped code path reaches them — and imports them the way every consumer of a bin-only tooling package does, by compiled path:
+
+```ts
+import { arbHttpMethod } from "@microservices/build-tools/dist/testing/index.js";
+```
 
 ### Bins are thin wrappers
 
@@ -153,20 +185,24 @@ As a consequence, a microservice mounted at `/` owns the whole origin, so the Ov
 
 ## Build-time registry
 
-- `packages/build-tools/` owns the registry generator. It reads the `MICROSERVICES` build variable (`*` for all discovered candidates, or a comma-separated list of identifiers), lists the subdirectories of the configured microservice Discovery_Root (default `packages/microservices/`) without inspecting their contents, and emits a generated TypeScript manifest that statically imports the selected microservices. A subdirectory that is not a usable microservice module fails the subsequent `tsc` build rather than being detected during discovery.
-- The generated manifest is written to a well-known location consumed by the Overseer at build time.
+- `packages/build-tools/` owns the registry generator. It reads the `MICROSERVICES` build variable (`*` for all discovered candidates, or a comma-separated list of identifiers), lists the subdirectories of the configured microservice Discovery_Root (default `packages/microservices/`) without inspecting their contents, and emits a generated TypeScript manifest that statically imports the selected microservices by their scoped package names. A subdirectory that is not a usable microservice module fails the subsequent `tsc` build rather than being detected during discovery.
+- **The generated registry is written into the Entry_Package, at `<Entry_Root>/src/generated/microservice-registry.ts`** (`app/src/generated/microservice-registry.ts` at the default). It is gitignored generated output: the generator is the only party that writes it, and every path that compiles the Entry_Package generates it first (see `tech.md`).
+- **The Entry_Module is the only module that statically imports it.** No Framework_Singleton does — the Overseer_Library takes the registry as an argument to `boot`, so nothing under `packages/` imports a generated file. The import stays static rather than dynamic so the registry's shape is type-checked against the contract at compile time.
 
-## Framework_Singletons and `contracts`
+## Framework_Singletons, the Overseer_Library, and `contracts`
 
 - The four Framework_Singletons are known **by name**, excluded from every Consumer_Category's discovered set, and never subject to consumer-package discovery or barrel validation. A bin-only Framework_Singleton (`build-tools`) declaring neither `main` nor `types` is fine.
+- **`packages/overseer/` is a library, not a process.** Its **public API is its barrel**, `src/index.ts`, and nothing else: it exports `boot`, `startServer`, and the types those two name in their signatures (`BootOptions`, `BootResult`, `RegisteredMicroserviceInfo`, `AppConfig`). Everything else — config loading, app building, toggle parsing — is internal, and a module reached only by a relative path into `src/` is not stable. The library **imports no generated file**, holds no generated directory of its own, and performs no process effect: no stderr write, no `process.exit`, no socket bind. Those belong to the Entry_Module, which consumes the barrel by package name. A consumer of this scaffold replaces the Entry_Module; it does not edit the library.
 - `packages/contracts/` is a Framework_Singleton, not a discovered library. It is excluded from every Consumer_Category set and is **built and staged for every Selector**: always the first `tsc --build` root (ahead of every other Tsc_Project), and always staged as a real directory at `node_modules/@microservices/contracts`. A `@microservices/contracts` dependency specifier resolves to the Framework_Singleton, is not followed, and never becomes one of the Required_Dependencies.
-- **Open question (deliberately deferred):** whether a types-only Framework_Singleton like `contracts` actually needs to ship into a runtime image at all. This feature does **not** change its staging behavior — `contracts` still ships, byte-identical to before (its `dist/`, including `dist/testing/`).
+- **Open question (deliberately deferred):** whether a types-only Framework_Singleton like `contracts` actually needs to ship into a runtime image at all. Nothing has changed its staging — it is built and staged for every Selector, as stated above — and the question stays open.
 
 ## Container image contents
 
 - `packages/build-tools/` also owns the image-tree assembler, which stages everything a runtime image contains into a single tree that the Dockerfile's runtime stage copies once. Only the packages a Selector justifies are compiled and staged, so image minimality holds by construction.
 - Inside an image, microservices ship as `node_modules/@microservices/<identifier>` (real directories, not workspace symlinks), because the generated registry imports them by package name. `packages/microservices/` is absent from images entirely.
-- The Overseer ships at `packages/overseer/` because the entrypoint invokes it by path.
+- **The Overseer ships as a library, at `node_modules/@microservices/overseer`** — under the scope like every other package consumed by name, because the Entry_Module imports it by name. It no longer occupies a package directory.
+- **The Entry_Package is the one package staged at its package directory**, `<Entry_Root>/` (`app/` at the default): its `package.json` plus its compiled `dist/`, and no `src/`. It stays at a package directory for the reason it always was — the entrypoint is invoked **by path**, at `<Entry_Root>/dist/index.js`, which is what the generated `Dockerfile`'s `CMD` names.
+- `build-tools` and `integration-tests` are never staged: nothing an image runs invokes either, and nothing imports either by name at run time.
 - A Common_Package and a Spa_Package ship the same way microservices do: inside an image a required consumer library is a real directory at `node_modules/@microservices/<name>` (its `package.json` + compiled `dist/`), not a workspace symlink into `packages/`. The assembler stages such a package **only when a selected microservice or the Overseer depends on it** (directly or transitively), so a Specific_Container never ships a library none of its selected microservices consume. Minimality holds by construction — only required, compiled packages are staged, never staged-then-pruned. `packages/common/config/`, for example, is staged whenever `microservice2` or `microservice3` is selected and omitted otherwise. A Spa_Package is built via its own `npm run build` before staging (never through `tsc --build`).
 - `packages/contracts/` is always staged at `node_modules/@microservices/contracts`, for every Selector, on Framework_Singleton grounds rather than being a required dependency (see above).
 - Per-microservice default toggles (`MICROSERVICE_<IDENTIFIER>_ENABLED=enabled`) are baked by building the generated `Dockerfile`, produced from the committed `Dockerfile.template` by `scripts/emit-effective-dockerfile.sh` for the current selector. The generated `Dockerfile` is generated output and gitignored; `Dockerfile.template` is the committed source.
@@ -179,6 +215,7 @@ As a consequence, a microservice mounted at `/` owns the whole origin, so the Ov
 
 - **A Consumer_Package's package name is the Configured_Scope followed by `/` and its own directory name** — at the default scope, a package in directory `config` is named `@microservices/config`. Common and spa package names must mirror their directory this way exactly (a mismatch fails discovery); a project with a different Configured_Scope composes the same names under that scope instead.
 - **The four Framework_Singleton directories stay fixed** — `contracts`, `overseer`, `build-tools`, `integration-tests`, always directly under `packages/` — **while their package names follow the Configured_Scope**, composed the same way as a Consumer_Package's: the scope followed by `/` and the fixed directory name.
+- **The Entry_Package's name is composed the same way**, from the Configured_Scope and the **last path segment of the Entry_Root** — `@microservices/app` at both defaults. Nothing imports it by that name; the name exists so npm treats it as a workspace.
 - Package names use kebab-case and mirror the directory name.
 - Microservice identifiers are the directory names under `packages/microservices/`, and MUST be lowercase and alphanumeric. Nothing in the toolchain validates this — the identifier is not a declared value anywhere, so the convention is enforced by review. A name that uppercases into an invalid shell variable would break its `MICROSERVICE_<IDENTIFIER>_ENABLED` toggle.
 - Microservice paths are HTTP paths starting with `/` and are declared by each microservice module.
@@ -188,8 +225,11 @@ As a consequence, a microservice mounted at `/` owns the whole origin, so the Ov
 - **New microservice:** `packages/microservices/<identifier>/`. No changes to existing microservices are required, and no change to `Dockerfile.template`; the Build_System picks it up on the next build if included in the `MICROSERVICES` selector.
 - **New common package** (a leaf library consumed by name by a microservice and/or the Overseer): `packages/common/<name>/`, following the Common_Package guidance above. Add it to the root `workspaces` array in topological position — before every consumer — and add the `@microservices/<name>` dependency to each consuming microservice's `package.json`. No change to existing non-consuming microservices and no change to `Dockerfile.template`: the emit script's globs pick up the new manifest automatically, and the assembler stages it only when a consumer is selected.
 - **New SPA package** (a bundler-built frontend): `packages/spa/<name>/`, with a `scripts.build` and a name mirroring its directory. Add it to `workspaces` in topological position. No Build_System, emit-script, or `Dockerfile.template` change is needed — `packages/spa/*` is already a workspace entry, discovery finds it by location, and it is built via its own `npm run build`.
-- **Cross-cutting types** (request handler contract): `packages/contracts/` (a Framework_Singleton).
+- **Cross-cutting types** (request handler contract): `packages/contracts/` (a Framework_Singleton, types only).
 - **Build tooling that needs the TypeScript workspace** (registry generator, dependency resolver, image-tree assembler): `packages/build-tools/` (a Framework_Singleton).
+- **Shared `fast-check` arbitraries** used by more than one package's tests: `packages/build-tools/src/testing/`, imported from `@microservices/build-tools/dist/testing/index.js` by a package declaring `@microservices/build-tools` as a development dependency. Not in `packages/contracts/`, which stays types-only.
+- **Process-entrypoint code** (composing the Overseer_Library and starting it): the Entry_Module at `<Entry_Root>/src/index.ts`. This is the file a consumer of the scaffold owns and edits; the routing library under `packages/overseer/` is not.
+- **A generated registry consumer:** nowhere else. `<Entry_Root>/src/generated/microservice-registry.ts` is written by the generator and statically imported by the Entry_Module alone — do not add a second importer, and do not commit it.
 - **Repo-level scripts** that must run before anything is installed, or that wrap npm lifecycle commands: `scripts/`.
 - **Spec documents:** `.kiro/specs/<feature-name>/`.
 - **Project-wide conventions like these:** `.kiro/steering/`.
@@ -197,10 +237,12 @@ As a consequence, a microservice mounted at `/` owns the whole origin, so the Ov
 
 ## The Exclusion_List
 
-**The emit script derives both its manifest `COPY` globs and its Exclusion_List from the configured Discovery_Roots** rather than from three hard-coded literals. It reads the three roots from `scaffold.config.json` (falling back to the defaults when none is declared) and emits a `COPY` line for every manifest under each configured root as well as for the top-level Framework_Singletons — so relocating a root moves the emitted globs with it, needing no edit to the emit script or to `Dockerfile.template`.
+**The emit script derives both its manifest `COPY` globs and its Exclusion_List from the configured Discovery_Roots** rather than from three hard-coded literals. It reads the three roots from `scaffold.config.json` (falling back to the defaults when none is declared) and emits a `COPY` line for every manifest under each configured root as well as for the top-level Framework_Singletons — so relocating a root moves the emitted globs with it, needing no edit to the emit script or to `Dockerfile.template`. It reads the configured `entry` value the same way, and emits the Entry_Package's own manifest `COPY` line plus the `CMD` naming `<Entry_Root>/dist/index.js` (see `tech.md`).
 
 The Exclusion_List is the set of top-level `packages/<name>` entries that contribute no `COPY` line, and it too is derived from the configured roots: it is **the first path segment of each configured Discovery_Root that is itself a top-level `packages/<name>` entry** (at the defaults, `microservices`, `common`, and `spa`), **plus the by-name `integration-tests`**. A configured root's top-level container is excluded at the *top level* only — its *members* (each microservice, common package, and spa package) are always emitted through the per-root globs, because those members ship.
 
 A genuinely test-only top-level package (such as `integration-tests`) is still excluded **by name**: nothing auto-detects a test-only package. A Common_Package and a Spa_Package are **never** added to the Exclusion_List — they ship into images, so they must contribute a `COPY` line.
 
-**The Configured_Scope is not among the values the emit script reads.** The emit script reads only the three `roots` — never `scope` — and never carries the scope into the generated `Dockerfile`; the scope reaches a container build through the `WORKSPACE_SCOPE` build argument instead (see `tech.md`).
+The Entry_Root is **not** part of the Exclusion_List and has nothing to do with it: it is not a `packages/<name>` entry at all, and the Entry_Package ships.
+
+**The Configured_Scope is not among the values the emit script reads.** The emit script reads the three `roots` and `entry` — never `scope` — and never carries the scope into the generated `Dockerfile`; the scope reaches a container build through the `WORKSPACE_SCOPE` build argument instead (see `tech.md`).

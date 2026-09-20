@@ -1,0 +1,775 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Repair `recordBuildOrders`' `devProjectList` call in `scripts/record-baseline.js`": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859239966
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859251505
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859517765
+      }
+    ],
+    "2. Checkpoint — Step 0 gate": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240073
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859521497
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859948204
+      }
+    ],
+    "3.1 Move the Arbitraries_Module into `packages/build-tools/src/testing/`": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240123
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859951820
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789863769646
+      }
+    ],
+    "3.2 Retarget every importer of the Retired_Testing_Specifier and add the dev dependency": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240218
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789863780605
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789867480002
+      }
+    ],
+    "3.3 Strip the testing surface from `packages/contracts/`": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240267
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789863783990
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789867484483
+      }
+    ],
+    "3.4 Add `packages/integration-tests/tests/retired-testing-specifier.test.ts`": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240357
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789867491264
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789871517716
+      }
+    ],
+    "3.5 Add `packages/integration-tests/tests/shipped-import-reachability.test.ts`": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240403
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789867494949
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789871521267
+      }
+    ],
+    "4. Checkpoint — Step 1 gate": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240449
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789871524667
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789887234715
+      }
+    ],
+    "5.1 Add the `entry` key to `packages/build-tools/src/project-config.ts`": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240491
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789887250505
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789888556758
+      }
+    ],
+    "5.2 Add `entryRoot` and `entryPointPath` to `packages/build-tools/src/project-context.ts`": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240536
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789888560430
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789888788131
+      }
+    ],
+    "5.3 Add the three entry arbitraries to `packages/build-tools/tests/arbitraries/config.ts`": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240587
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789888563889
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789888792012
+      }
+    ],
+    "5.4 Write `packages/build-tools/tests/project-config.entry.property.test.ts`": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240636
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789888795964
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789890377482
+      }
+    ],
+    "5.5 Update the existing config and context suites": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240730
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789888799807
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789890381257
+      }
+    ],
+    "6. Checkpoint — Step 2 gate": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240771
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789890385461
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789890721207
+      }
+    ],
+    "7.1 Remove the `[scope:template]` check from `packages/build-tools/src/repo-invariants.ts`": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240821
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789890725496
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789891087112
+      }
+    ],
+    "7.2 Delete the check's test and its expectations": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240868
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789891091044
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789891685245
+      }
+    ],
+    "8. Checkpoint — Step 3 gate": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240919
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789891689086
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789892035903
+      }
+    ],
+    "9.1 Seam 1 — the Registry_Generator writes into the consumer's tree": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859240967
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789892050454
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789892302260
+      }
+    ],
+    "9.2 Seam 2 — create the Entry_Package": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241017
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789892306342
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789893694768
+      }
+    ],
+    "9.3 Seam 3 — the Overseer becomes a library": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241064
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789893698603
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789894317884
+      }
+    ],
+    "9.4 Seam 4 — `framework.ts`": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241104
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789894322189
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789894506854
+      }
+    ],
+    "9.5 Seam 5 — ordering": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241150
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789894510708
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789895250452
+      }
+    ],
+    "9.6 Seam 6 — image staging": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241255
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789895254315
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789895604858
+      }
+    ],
+    "9.7 Seam 7 — the registry-presence guard": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241303
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789895608599
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789896150684
+      }
+    ],
+    "9.8 Seam 8 — startup": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241349
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789896154404
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789896453150
+      }
+    ],
+    "9.9 Seam 9 — install and ignore": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241387
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789896457217
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789896568728
+      }
+    ],
+    "9.10 Seam 10 — the Emit_Script and the template": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241431
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789896574852
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789897723596
+      }
+    ],
+    "9.11 Seam 11 — the recorder's registry path": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241470
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789896578656
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789897727560
+      }
+    ],
+    "9.12 Seam 12a — add the two layout arbitraries": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241516
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789896582388
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789897731544
+      }
+    ],
+    "9.13 Seam 12b — the `build-tools` property suites": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241569
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789897741289
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789898972422
+      }
+    ],
+    "9.14 Seam 12c — the boot-pipeline property suites": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241617
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789897745447
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789898976613
+      }
+    ],
+    "9.15 Seam 12d — the example-based suites": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241666
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789898980591
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789904031379
+      }
+    ],
+    "9.16 Seam 12e — update every suite the relocations force": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241704
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789904047786
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789913722410
+      }
+    ],
+    "9.17 Seam 13 — re-record the baselines": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241754
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789913727364
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789913788094
+      }
+    ],
+    "9.18 Confirm the `registry.<slug>.ts` ×3 confinement": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241838
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789913792187
+      }
+    ],
+    "9.19 Confirm the `dockerfile.<slug>` ×3 confinement": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241887
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789913796261
+      }
+    ],
+    "9.20 Confirm the `image-tree.<slug>.json` ×2 confinement": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859241984
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789913800282
+      }
+    ],
+    "9.21 Confirm the `build-order.<slug>.json` ×3 confinement": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859242032
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789913804222
+      }
+    ],
+    "10. Checkpoint — Step 4 gate": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859242080
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789913808869
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789914297928
+      }
+    ],
+    "11.1 Update `.kiro/steering/structure.md`": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859242124
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789914303232
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789914740593
+      }
+    ],
+    "11.2 Update `.kiro/steering/tech.md`": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859242170
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789914307367
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789914745401
+      }
+    ],
+    "11.3 Update `README.md`": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859242222
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789914311452
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789914749596
+      }
+    ],
+    "11.4 Widen `stale-documentation-guard.test.ts`'s forbidden-string set": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859242271
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789914753858
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789918593406
+      }
+    ],
+    "12. Final checkpoint": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859242324
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789918597905
+      },
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789918978227
+      }
+    ],
+    "1. Step 0 — repair the baseline recorder before any fixture is trusted": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789859517819
+      }
+    ],
+    "3. Step 1 — relocate the shared test-support arbitraries": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789871521320
+      }
+    ],
+    "5. Step 2 — the `entry` configuration key and the two ProjectContext fields": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789890381333
+      }
+    ],
+    "7. Step 3 — retire the Scope_Template_Check": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789891685365
+      }
+    ],
+    "9. Step 4 — the inversion": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789913804341
+      }
+    ],
+    "11. Step 5 — steering and the README": [
+      {
+        "executionId": "a73f1899-3541-4902-aa6e-6d2b18bbc8f0",
+        "chatSessionId": "sess_431f0c8e-3798-4d00-bc38-f380e89a3ddd",
+        "timestamp": 1789918593587
+      }
+    ]
+  }
+}

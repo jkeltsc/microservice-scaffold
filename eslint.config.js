@@ -66,6 +66,20 @@ export default tseslint.config(
     },
   },
 
+  // The Entry_Package's own dependency-free ESM shim
+  // (`app/scripts/generate-registry.mjs`) runs directly under Node before
+  // anything is installed or compiled, so it uses `process` the same way the
+  // repo-level scripts above do. Declared separately because it lives in the
+  // consumer's tree rather than at the repo root, and because it is `.mjs`.
+  {
+    files: ["app/scripts/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
+  },
+
   // Browser globals for the Demo_Spa's source, scoped to the `spa` category.
   // The Demo_Spa is the only package whose code runs in a browser, so it is the
   // only place `document`, `window`, and `fetch` are legitimate globals. This

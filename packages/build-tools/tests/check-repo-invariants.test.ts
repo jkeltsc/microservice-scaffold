@@ -13,14 +13,14 @@
 // generated Tsc_Project carries a `tsconfig.json` that satisfies the
 // Load_Bearing_Settings judged for it — all four for a shipping package,
 // `composite`/`declaration` alone for a Non_Shipping_Singleton (`build-tools`,
-// `integration-tests`). Likewise the `[scope:template]` check (task 10.1) is one
-// of the bin's checks, so every generated tree carries a Registry_Template whose
-// import is scoped under this tree's scope; the `[scope:literal]` check (task
-// 10.2) scans `packages/build-tools/src/`, which these trees populate only with
-// a trivial `index.ts` naming no scope literal. Both scope checks are therefore
-// silent over both trees, and the violating tree still produces exactly the five
-// messages of the original four checks, so this suite keeps testing the bin
-// boundary rather than the new checks' own logic.
+// `integration-tests`). Likewise the `[scope:literal]` check (task 10.2) scans
+// `packages/build-tools/src/`, which these trees populate only with a trivial
+// `index.ts` naming no scope literal. That check is therefore silent over both
+// trees, and the violating tree still produces exactly the five messages of the
+// original four checks, so this suite keeps testing the bin boundary rather than
+// the new checks' own logic. (The `[scope:template]` check that once required
+// every generated tree to carry a Registry_Template is retired — its subject no
+// longer exists, so no tree seeds one and no diagnostic replaces it.)
 //
 // An example test rather than a property test: the observable contract is two
 // exit statuses and the message set that accompanies them, and the interesting
@@ -168,15 +168,6 @@ const frameworkFiles: Readonly<Record<string, string>> = {
   "packages/integration-tests/tsconfig.json": nonShippingTsconfig,
   "packages/integration-tests/src/index.ts":
     "export const integrationTests = true;\n",
-  // The committed Registry_Template the `[scope:template]` check inspects (task
-  // 10.1). It must carry a scoped import under this tree's scope so the check is
-  // silent; without it the check would report an unreadable-template violation
-  // in every generated tree.
-  "packages/overseer/src/generated/microservice-registry.template.ts": [
-    `import type { MicroserviceRegistry } from "${CONTRACTS}";`,
-    `export const microserviceRegistry: MicroserviceRegistry = [];`,
-    "",
-  ].join("\n"),
 };
 
 /**

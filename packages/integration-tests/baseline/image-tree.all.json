@@ -1,4 +1,5 @@
 [
+  "app",
   "node_modules/@microservices/config",
   "node_modules/@microservices/contracts",
   "node_modules/@microservices/demo",
@@ -6,5 +7,5 @@
   "node_modules/@microservices/microservice1",
   "node_modules/@microservices/microservice2",
   "node_modules/@microservices/microservice3",
-  "packages/overseer"
+  "node_modules/@microservices/overseer"
 ]

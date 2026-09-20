@@ -4,19 +4,20 @@
 // validation-and-composition steps (module paths → path collisions → toggles →
 // build app) against an INJECTED microservice registry, environment, and config,
 // and returns a discriminated result. It performs NO process.exit and NO stderr
-// writes — that side-effecting shell lives in `src/index.ts`, which also owns
-// the static import of the generated microservice registry and the final
-// `startServer` call. Keeping `boot` pure of process effects makes the whole
-// pipeline unit-testable with a synthetic registry and environment.
+// writes — no module of this library does (R3.5). That side-effecting shell is
+// the consumer's entrypoint, which imports this package by name, owns the static
+// import of its own generated registry, and makes the final `startServer` call.
+// Keeping `boot` pure of process effects makes the whole pipeline unit-testable
+// with a synthetic registry and environment.
 //
-// Note the deliberate absence of a static top-level import of
-// `./generated/microservice-registry.js`: that file is gitignored and emitted
-// by build-tools, so it may be absent at typecheck time. `index.ts` imports it
-// and passes the `microserviceRegistry` array in through `boot`'s options, so
-// `boot.ts` depends only on types from `@microservices/contracts`.
+// The registry is INJECTED by the consumer's entrypoint rather than imported
+// here: no module of this library imports a generated file at all (R3.4). The
+// registry is generated into the consumer's own tree, and the entrypoint passes
+// the `microserviceRegistry` array in through `boot`'s options, so `boot.ts`
+// depends only on types from `@microservices/contracts`.
 //
 // Ordered composition (design "Overseer Startup Sequence"):
-//   1. load generated registry            — done by the caller (index.ts)
+//   1. load the registry                  — done by the consumer's entrypoint
 //   2. validate module paths (R8.5)       — inline startsWith("/") check
 //   3. reject duplicate paths (R9.4)      — inline exact-equality check
 //   4. validate toggles (R4.3, R7.1, R7.3)— validateToggles (batched errors)
@@ -38,9 +39,9 @@ import { buildApp } from "./router.js";
 /** Options for {@link boot}; every dependency is injectable for testing. */
 export interface BootOptions {
   /**
-   * The loaded microservice registry. In production this is the statically
-   * imported `microserviceRegistry` from `./generated/microservice-registry.js`;
-   * in tests it is a synthetic array.
+   * The loaded microservice registry. In production this is the
+   * `microserviceRegistry` the consumer's entrypoint statically imports from its
+   * own generated module and passes in; in tests it is a synthetic array.
    */
   readonly microserviceRegistry: MicroserviceRegistry;
   /** The environment to read toggles and config from. Defaults to `process.env`. */
@@ -168,7 +169,8 @@ export function boot(options: BootOptions): BootResult {
 // Error message formatting (design "Error Handling" message shapes).
 //
 // Each formatter renders one offender per line. The boot pipeline collects the
-// lines; the caller (index.ts) writes them to stderr and exits non-zero.
+// lines; the caller — the consumer's entrypoint — writes them to stderr and
+// exits non-zero.
 // ---------------------------------------------------------------------------
 
 /**

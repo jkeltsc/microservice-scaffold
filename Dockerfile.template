@@ -6,8 +6,12 @@
 # scripts/emit-effective-dockerfile.sh processes into a generated `Dockerfile`
 # (gitignored). The emit script fills the two `# --- MANIFEST_COPY_* ---`
 # anchors below with per-workspace COPY instructions (discovered via glob-style
-# listing of packages/), and injects the per-microservice default-toggle ENV
-# lines (MICROSERVICE_<X>_ENABLED=enabled) before the last ENTRYPOINT.
+# listing of packages/ plus the Entry_Package's own manifest), injects the
+# per-microservice default-toggle ENV lines (MICROSERVICE_<X>_ENABLED=enabled)
+# before the last ENTRYPOINT, and replaces the `# --- CMD ---` anchor with the
+# single CMD instruction naming the Entry_Point_Path. This file therefore carries
+# NO literal entrypoint path and NO CMD instruction of its own (R7.3); the emit
+# script fails if either anchor is missing or if a CMD is declared here.
 #
 # Builds a Container image that ships the Overseer plus a selected set of
 # microservices. The MICROSERVICES build argument is the selector (Requirements
@@ -78,13 +82,6 @@ ENV MICROSERVICES=${MICROSERVICES}
 
 # --- MANIFEST_COPY_BUILD ---
 
-# The root `prepare` lifecycle script (run by `npm ci`) copies the empty registry
-# template into the generated-registry location so the Overseer has a valid
-# (empty) registry to compile against. Because `npm ci` runs before `COPY . .`,
-# that one source file must be present now; it is a fixed path, so it is copied
-# statically here rather than via the generated manifest block.
-COPY packages/overseer/src/generated/microservice-registry.template.ts packages/overseer/src/generated/
-
 RUN --mount=type=cache,target=/root/.npm npm ci --workspaces --include-workspace-root
 
 # All sources. Copied AFTER npm ci so a source-only change does not invalidate
@@ -116,11 +113,6 @@ WORKDIR /app
 ARG WORKSPACE_SCOPE=@microservices
 
 # --- MANIFEST_COPY_PRODDEPS ---
-
-# Same reason as the build stage: `npm ci` here also runs the root `prepare`
-# script before any source is copied, so the registry template must be staged
-# first. Fixed path, copied statically.
-COPY packages/overseer/src/generated/microservice-registry.template.ts packages/overseer/src/generated/
 
 RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --workspaces --include-workspace-root
 
@@ -161,4 +153,9 @@ COPY --from=build /out ./
 EXPOSE 8080
 USER node
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "packages/overseer/dist/index.js"]
+
+# The emit script replaces the anchor below with exactly one
+#   CMD ["node", "<Entry_Point_Path>"]
+# instruction, the Entry_Point_Path being the configured Entry_Root joined to
+# `dist/index.js`. No literal entrypoint path and no CMD is committed here (R7.3).
+# --- CMD ---

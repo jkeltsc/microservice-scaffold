@@ -18,9 +18,11 @@
 //   2. Image_Tree equivalence — for each Selector the scoped entry set under
 //      `node_modules/@microservices/` equals the baseline set (`contracts`,
 //      `microservice1`, … the Selected microservices) PLUS `config` exactly
-//      when it is a required dependency (R14.7, R5.6, R7.6). Every scoped entry is
-//      a REAL directory, never a workspace symlink, and the Overseer sits at
-//      `packages/overseer/` inside the tree.
+//      when it is a required dependency (R14.7, R5.6, R7.6), plus `overseer`,
+//      which the registry inversion turned into an imported-by-name library. Every
+//      scoped entry is a REAL directory, never a workspace symlink, and the one
+//      package-directory staging inside the tree is the Entry_Package's, at the
+//      Entry_Root (registry-inversion R9.4, R9.6).
 //
 //   3. `contracts` staged file set — for each Selector the sorted tree-relative
 //      path set under `node_modules/@microservices/contracts` equals
@@ -57,7 +59,10 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 
 import { buildImageTree } from "@microservices/build-tools/dist/image-tree.js";
 import { buildPlan } from "@microservices/build-tools/dist/build-plan.js";
-import { generateRegistry } from "@microservices/build-tools/dist/generate-registry.js";
+import {
+  generateRegistry,
+  generatedRegistryPath,
+} from "@microservices/build-tools/dist/generate-registry.js";
 import { discoverPackages } from "@microservices/build-tools/dist/discovery.js";
 import { defaultEffectiveConfig } from "@microservices/build-tools/dist/project-config.js";
 import { projectContext } from "@microservices/build-tools/dist/project-context.js";
@@ -72,11 +77,20 @@ const DIST = resolve(repoRoot, "packages/build-tools/dist");
 /** Where the recorded Pre_Change_Baseline fixtures live (task 1.2). */
 const BASELINE_DIR = resolve(__dirname, "..", "baseline");
 
-/** The generated (gitignored) registry file `generateRegistry` writes. */
-const REGISTRY_PATH = resolve(
-  repoRoot,
-  "packages/overseer/src/generated/microservice-registry.ts",
-);
+/** This repository's default ProjectContext — unconfigured, so the Entry_Root is
+ *  the Entry_Root_Default `app`. */
+const defaultContext = projectContext(defaultEffectiveConfig());
+
+/**
+ * The generated (gitignored) registry file `generateRegistry` writes, taken from
+ * the single derivation rather than spelled here (registry-inversion R4.1, R5.8):
+ * it now lives in the CONSUMER's tree at `<Entry_Root>/src/generated/`, and no
+ * path under a Framework_Singleton is named in that role.
+ */
+const REGISTRY_PATH = resolve(repoRoot, generatedRegistryPath(defaultContext));
+
+/** The Entry_Root of this (unconfigured) repository, Project_Directory-relative. */
+const ENTRY_ROOT = defaultContext.entryRoot;
 
 /** The compiled Repo_Invariant_Checker bin the root `check:invariants` runs. */
 const CHECK_INVARIANTS_BIN = resolve(DIST, "bin/check-repo-invariants.js");
@@ -104,6 +118,13 @@ const ASSEMBLE_TIMEOUT_MS = 180_000;
  * that selects Microservice1 stages the Spa_Package `demo` as a real directory
  * at `node_modules/@microservices/demo`. Both shipped Selectors select
  * Microservice1, so BOTH staged sets gain `demo`.
+ *
+ * And since the registry inversion the Overseer is a LIBRARY the Entry_Package
+ * imports by name, so it is staged as a real directory under the scope root like
+ * any other imported-by-name package rather than at its package directory
+ * (registry-inversion R3.7, R9.4). It is a Required_Dependency of the
+ * Entry_Package for every Selector, so BOTH staged sets carry `overseer`. The one
+ * package-directory staging is now the Entry_Package's, at the Entry_Root (R9.6).
  */
 const BASELINE = {
   "*": {
@@ -116,6 +137,7 @@ const BASELINE = {
       "microservice1",
       "microservice2",
       "microservice3",
+      "overseer",
     ],
   },
   "microservice1,microservice2": {
@@ -126,6 +148,7 @@ const BASELINE = {
       "demo",
       "microservice1",
       "microservice2",
+      "overseer",
     ],
   },
 } as const;
@@ -188,20 +211,44 @@ function parseRegistry(text: string): ParsedRegistry {
 }
 
 /**
+ * The Generated_Registry's bytes when the file is present, `undefined` when it is
+ * absent. The Generated_Registry is one of the three in-place writes the worktree
+ * rule permits, and the discipline is: capture before the first write, write the
+ * captured bytes back with `writeFileSync` afterward, and REMOVE the file when it
+ * was absent before the run — never through git.
+ */
+function captureRegistry(): string | undefined {
+  try {
+    return readFileSync(REGISTRY_PATH, "utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+/** Restore what {@link captureRegistry} captured, removal included. */
+function restoreRegistry(captured: string | undefined): void {
+  if (captured === undefined) {
+    rmSync(REGISTRY_PATH, { force: true });
+  } else {
+    writeFileSync(REGISTRY_PATH, captured, "utf8");
+  }
+}
+
+/**
  * Generate the registry for `selector`, read the emitted text back, and restore
  * the prior (gitignored) file contents. Returns the emitted text.
  */
 function generateRegistryText(selector: string): string {
   const previousSelector = process.env.MICROSERVICES;
   const previousCwd = process.cwd();
-  const previousRegistry = readFileSync(REGISTRY_PATH, "utf8");
+  const previousRegistry = captureRegistry();
   try {
     process.chdir(repoRoot);
     process.env.MICROSERVICES = selector;
-    generateRegistry(projectContext(defaultEffectiveConfig()), selector);
+    generateRegistry(defaultContext, selector);
     return readFileSync(REGISTRY_PATH, "utf8");
   } finally {
-    writeFileSync(REGISTRY_PATH, previousRegistry, "utf8");
+    restoreRegistry(previousRegistry);
     process.chdir(previousCwd);
     if (previousSelector === undefined) {
       delete process.env.MICROSERVICES;
@@ -369,13 +416,27 @@ describe("Baseline Image_Tree equivalence (R14.7, R5.6, R7.6, R5.8)", () => {
         }
       });
 
-      it("places the Overseer at packages/overseer/ inside the tree (R7.6)", () => {
-        const overseerDir = join(outDir, "packages", "overseer");
+      it("places the Entry_Package at its Entry_Root and the Overseer under the scope root (R7.6, registry-inversion R9.4, R9.6)", () => {
+        // The one package-directory staging is the Entry_Package's: the
+        // entrypoint is invoked by path, so it ships at `<Entry_Root>/`, holding
+        // its manifest and compiled `dist` and no `src`.
+        const entryDir = join(outDir, ENTRY_ROOT);
+        expect(lstatSync(entryDir).isDirectory()).toBe(true);
+        expect(lstatSync(join(entryDir, "package.json")).isFile()).toBe(true);
+        expect(lstatSync(join(entryDir, "dist")).isDirectory()).toBe(true);
+        expect(() => lstatSync(join(entryDir, "src"))).toThrow();
+
+        // The Overseer is now imported by name, so it lands under the scope root
+        // as a real directory and NOT at `packages/overseer/`.
+        const overseerDir = join(scopeRoot(outDir), "overseer");
         expect(lstatSync(overseerDir).isDirectory()).toBe(true);
         expect(lstatSync(join(overseerDir, "package.json")).isFile()).toBe(
           true,
         );
         expect(lstatSync(join(overseerDir, "dist")).isDirectory()).toBe(true);
+        expect(() =>
+          lstatSync(join(outDir, "packages", "overseer")),
+        ).toThrow();
       });
 
       it("stages contracts as exactly package.json plus every file of dist/, dist/testing/ included (R5.8)", () => {
@@ -718,7 +779,7 @@ function observedRegistryBytes(
   context: unknown,
   value: string | undefined,
 ): string {
-  const previousRegistry = readFileSync(REGISTRY_PATH, "utf8");
+  const previousRegistry = captureRegistry();
   const previousCwd = process.cwd();
   try {
     process.chdir(repoRoot);
@@ -736,7 +797,7 @@ function observedRegistryBytes(
       return readFileSync(REGISTRY_PATH, "utf8");
     });
   } finally {
-    writeFileSync(REGISTRY_PATH, previousRegistry, "utf8");
+    restoreRegistry(previousRegistry);
     process.chdir(previousCwd);
   }
 }

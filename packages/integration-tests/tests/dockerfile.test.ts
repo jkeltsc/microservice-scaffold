@@ -77,12 +77,19 @@ describe("root Dockerfile structure", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("exposes 8080 and boots the Overseer via dumb-init", () => {
+  it("exposes 8080, keeps dumb-init as PID 1, and anchors the CMD instead of declaring one", () => {
     expect(instructions).toContain("EXPOSE 8080");
     expect(instructions).toContain('ENTRYPOINT ["dumb-init", "--"]');
-    expect(instructions).toContain(
-      'CMD ["node", "packages/overseer/dist/index.js"]',
-    );
+
+    // registry-inversion R7.3: the TEMPLATE carries no CMD of its own and no
+    // literal entrypoint path. It declares the `# --- CMD ---` anchor instead,
+    // which the Emit_Script replaces with the single
+    //   CMD ["node", "<Entry_Point_Path>"]
+    // instruction — so the committed source names no Framework_Singleton's
+    // compiled path in the entrypoint role.
+    expect(instructions.filter((line) => /^CMD([\s[])/.test(line))).toEqual([]);
+    expect(lines.map((line) => line.trim())).toContain("# --- CMD ---");
+    expect(dockerfile).not.toContain("packages/overseer/dist/index.js");
   });
 
   it("runs as the unprivileged node user", () => {

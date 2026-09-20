@@ -15,8 +15,10 @@ coverage/
 # on a fresh clone and skips emitting, which breaks the very first build in CI.
 *.tsbuildinfo
 
-# Generated registry (emitted by build-tools; the template is tracked)
-packages/overseer/src/generated/microservice-registry.ts
+# Generated registry: emitted into the entry package by build-tools on every
+# path that builds, starts, or typechecks. There is no committed stand-in for
+# it; generation always precedes compilation.
+app/src/generated/microservice-registry.ts
 
 # Generated Dockerfile (emitted by scripts/emit-effective-dockerfile.sh from
 # Dockerfile.template; the template is tracked)

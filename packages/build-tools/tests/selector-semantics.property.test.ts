@@ -31,7 +31,7 @@ import { describe, expect, it } from "vitest";
 import * as fc from "fast-check";
 
 import { resolveSelected } from "../src/selector.js";
-import { arbSelectorString } from "@microservices/contracts/testing";
+import { arbSelectorString } from "../src/testing/arbitraries.js";
 
 /**
  * Reference implementation of the split/trim/drop-empties list derivation,

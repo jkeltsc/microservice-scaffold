@@ -20,6 +20,9 @@
     "@microservices/contracts": "*"
   },
   "devDependencies": {
+    "@types/express": "^5.0.0",
+    "express": "^5.1.0",
+    "fast-check": "^3.23.0",
     "typescript": "^5.7.2"
   }
 }

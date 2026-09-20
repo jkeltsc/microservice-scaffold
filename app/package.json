@@ -1,0 +1,19 @@
+{
+  "name": "@microservices/app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "//name": "The Configured_Scope followed by `/` and the last path segment of the Entry_Root (R1.10). No `main` and no `types` on purpose: nothing imports this package by name, and a container invokes it by path at <Entry_Root>/dist/index.js (R1.12).",
+  "//dependencies": "The scoped `overseer` and `contracts` packages only. NO Microservice_Package is declared — the Selected_Microservices are Selector-dependent, and the dependency resolver rejects a manifest naming a peer microservice with its `[deps:peer]` diagnostic, from which this package gets no exemption (R1.11). The Build_Sequence supplies the microservice prerequisites synthetically instead.",
+  "//scripts": "`build` and `typecheck` each perform a Registry_Generation_Step before invoking the compiler, so both succeed in this directory on a clone that has never generated a registry, provided the Build_System itself is compiled (R5.4). The shim reports that one proviso itself (R5.9).",
+  "scripts": {
+    "build": "node scripts/generate-registry.mjs && tsc",
+    "test": "vitest --run --passWithNoTests",
+    "lint": "eslint .",
+    "typecheck": "node scripts/generate-registry.mjs && tsc --noEmit"
+  },
+  "dependencies": {
+    "@microservices/contracts": "*",
+    "@microservices/overseer": "*"
+  }
+}

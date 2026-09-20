@@ -21,11 +21,14 @@
 // `pathologicalText()` (the totality pool: empty, whitespace-only, non-JSON,
 // every JSON type, a mixed-key object, and one megabyte string), plus a
 // dedicated arbitrary that packs several independent problems into one object
-// (unknown keys + a bad scope + bad roots) so multi-diagnostic rejections — the
-// only inputs whose ordering is non-trivial — are exercised directly rather
-// than left to chance.
+// (unknown keys + a bad scope + bad roots + a bad `entry`) so multi-diagnostic
+// rejections — the only inputs whose ordering is non-trivial — are exercised
+// directly rather than left to chance. Since registry-inversion the pool also
+// carries `arbEntryConfigText()`, so the fourth value's two tags take part in
+// the ordering and the determinism claims.
 //
 // Validates: Requirements 2.8, 14.10
+// Validates: registry-inversion Requirements 1.2
 
 import { describe, expect, it } from "vitest";
 import * as fc from "fast-check";
@@ -36,7 +39,11 @@ import {
   renderDiagnostic,
   type ConfigDiagnostic,
 } from "../src/project-config.js";
-import { configText, pathologicalText } from "./arbitraries/config.js";
+import {
+  arbEntryConfigText,
+  configText,
+  pathologicalText,
+} from "./arbitraries/config.js";
 
 /**
  * The union of the two shared pools, plus a generator of objects that trigger
@@ -48,14 +55,26 @@ import { configText, pathologicalText } from "./arbitraries/config.js";
  * diagnostics spanning several tags and several key paths at once.
  */
 function anyInput(): fc.Arbitrary<string> {
-  return fc.oneof(configText(), pathologicalText(), multiProblemText());
+  return fc.oneof(
+    configText(),
+    pathologicalText(),
+    multiProblemText(),
+    // Texts that always declare `entry`, so the two tags the fourth value can
+    // produce — `[config:entry-path]` and `[config:entry-overlap]` — take part in
+    // the ordering and the determinism claims rather than only the seven older
+    // tags. `[config:entry-overlap]` is the one tag that reports SEVERAL
+    // diagnostics for a single value (one per colliding reserved path), so its
+    // ordering is non-trivial on its own.
+    arbEntryConfigText(),
+  );
 }
 
 /**
  * A JSON object text engineered to fail on several independent grounds at once,
  * so the returned diagnostic list has more than one element and its order is
- * non-trivial. Each ingredient is optional, but at least the unknown key and a
- * bad scope are always present, guaranteeing at least two diagnostics.
+ * non-trivial. Each ingredient is optional, but at least the unknown key, a bad
+ * scope, and a bad `entry` are always present, guaranteeing at least three
+ * diagnostics spanning at least three tags.
  */
 function multiProblemText(): fc.Arbitrary<string> {
   return fc
@@ -70,6 +89,17 @@ function multiProblemText(): fc.Arbitrary<string> {
       // Invalid root paths -> [config:root-path] at 'roots.microservice' etc.
       badMicroservice: fc.constantFrom("/abs", "../up", "trail/", "a//b", "*glob"),
       includeBadCommon: fc.boolean(),
+      // A rejected `entry` -> either one [config:entry-path] (an invalid path)
+      // or one [config:entry-overlap] per colliding reserved path (a value equal
+      // to, inside, or containing one of them). Both widen the tag span of the
+      // returned list, which is what makes the ordering claim non-trivial.
+      badEntry: fc.constantFrom(
+        "/abs",
+        "up/../down",
+        "packages",
+        "packages/contracts",
+        "packages/microservices/inside",
+      ),
     })
     .map((r) => {
       const roots: Record<string, unknown> = {
@@ -84,6 +114,7 @@ function multiProblemText(): fc.Arbitrary<string> {
         zzz: r.unknownA,
         aaa: r.unknownB,
         scope: r.badScope,
+        entry: r.badEntry,
         roots,
       };
       return JSON.stringify(obj);

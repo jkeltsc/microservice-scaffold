@@ -2,10 +2,18 @@
 // Starts the watch-mode development session.
 //
 // This is what `npm run dev` invokes, wrapped in `dotenvx run --` so the local
-// `.env` supplies Toggles and `PORT` while an inline assignment still wins. The
-// two shared startup steps come from scripts/common-startup.js; once they succeed
-// this script hands off to the compiled supervisor bin, which starts the build
-// watcher and the Overseer and owns the watch loop.
+// `.env` supplies Toggles and `PORT` while an inline assignment still wins. Its
+// four ordered steps are the ones `npm start` also performs: environment load
+// (the `dotenvx run --` wrapper, before Node starts), bootstrap build, registry
+// generation, then server start. The two shared middle steps come from
+// scripts/common-startup.js; once they succeed this script hands off to the
+// compiled supervisor bin, which owns step 4 and the watch loop.
+//
+// Step 4 differs from `npm start` only in watching: the supervisor spawns the
+// same Entry_Point_Path, reading it off the compiled ProjectContext as
+// `context.entryPointPath` rather than composing one, and respawns that same path
+// after each clean incremental recompilation (registry-inversion R7.2, R10.1,
+// R10.6). This script therefore names no entrypoint path of its own.
 //
 // The supervisor is spawned rather than imported because the bootstrap build has
 // only just produced it: a static import from an uncompiled script could not see

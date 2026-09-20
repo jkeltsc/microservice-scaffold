@@ -16,6 +16,9 @@
 //   - `packages/contracts` and `packages` appear in the overlap-prone pool
 //     because a Framework_Singleton directory (`packages/contracts`) collides
 //     under R4.7.
+//   - an Entry_Root is a Valid_Root_Path held to the same predicate a `roots`
+//     value is (registry-inversion R1.4), additionally colliding with none of
+//     the eight reserved paths (registry-inversion R1.6).
 //
 // The generators are smart generators: they constrain themselves to the input
 // space they mean to explore rather than filtering broadly, so that each
@@ -288,6 +291,227 @@ export function overlapProneRootTriple(): fc.Arbitrary<RootTriple> {
 }
 
 // ---------------------------------------------------------------------------
+// Entry_Root (registry-inversion R1.4, R1.6)
+// ---------------------------------------------------------------------------
+
+/**
+ * The Root_Defaults, spelled here rather than imported from
+ * `src/project-config.ts` on purpose: the properties these generators feed are
+ * mirror-based, so their expectation must come from a statement of the rule
+ * written in the test, not from the module under test. Same reason
+ * {@link FRAMEWORK_DIRECTORIES} above is spelled out.
+ */
+const ROOT_DEFAULT_PATHS = [
+  "packages/microservices",
+  "packages/common",
+  "packages/spa",
+] as const;
+
+/** The directory holding the Framework_Singletons. */
+const PACKAGES_CONTAINER = "packages";
+
+/**
+ * The eight reserved paths an Entry_Root may neither equal, lie inside, nor
+ * contain (R1.6): the three accepted-or-defaulted Discovery_Roots, the
+ * `packages` container, and the four Framework_Singleton directories.
+ *
+ * @param roots the three Discovery_Roots in microservice, common, spa order, or
+ *   `undefined` for the defaulted triple.
+ */
+export function reservedEntryPaths(
+  roots?: RootTriple | undefined,
+): readonly string[] {
+  return [
+    ...(roots ?? ROOT_DEFAULT_PATHS),
+    PACKAGES_CONTAINER,
+    ...FRAMEWORK_DIRECTORIES,
+  ];
+}
+
+/** The reserved set of a project declaring no `roots` — the common case, and the
+ *  default both entry generators take. */
+export const DEFAULT_RESERVED_ENTRY_PATHS: readonly string[] =
+  reservedEntryPaths();
+
+/** True when `path` bears one of R1.6's three relations — equal to, lies inside,
+ *  contains — to any reserved path, compared code point for code point. */
+export function collidesWithReserved(
+  path: string,
+  reserved: readonly string[] = DEFAULT_RESERVED_ENTRY_PATHS,
+): boolean {
+  return reserved.some(
+    (reservedPath) =>
+      path === reservedPath ||
+      path.startsWith(`${reservedPath}/`) ||
+      reservedPath.startsWith(`${path}/`),
+  );
+}
+
+/**
+ * An Entry_Root the Config_Parser ACCEPTS: a Valid_Root_Path colliding with none
+ * of the eight reserved paths (R1.4, R1.6).
+ *
+ * Built constructively — 1 to 4 valid segments whose lead segment is neither
+ * `packages` nor a lead segment of a reserved path — rather than by filtering
+ * `validRootPath()`, because at the defaults every reserved path begins
+ * `packages`, so a distinct lead segment already rules out all three relations.
+ * The one `filter` is a guard on the construction, not the construction itself,
+ * and rejects a vanishing fraction of draws.
+ *
+ * @param reserved the reserved set to avoid; pass {@link reservedEntryPaths} of
+ *   a declared root triple when the config under test declares `roots`.
+ */
+export function arbAcceptedEntryRoot(
+  reserved: readonly string[] = DEFAULT_RESERVED_ENTRY_PATHS,
+): fc.Arbitrary<string> {
+  const reservedLeads = new Set(
+    reserved.map((reservedPath) => reservedPath.split("/")[0]!),
+  );
+  return fc
+    .tuple(
+      validSegment().filter((segment) => !reservedLeads.has(segment)),
+      fc.array(validSegment(), { minLength: 0, maxLength: 3 }),
+    )
+    .map(([lead, tail]) => [lead, ...tail].join("/"))
+    .filter((path) => !collidesWithReserved(path, reserved));
+}
+
+/**
+ * An Entry_Root the Config_Parser REJECTS, covering all three rejection shapes:
+ * a value that is not a Valid_Root_Path (`[config:entry-path]`, R1.4), and each
+ * of R1.6's three collision relations against each reserved path
+ * (`[config:entry-overlap]`).
+ *
+ * The three collision shapes are built from the reserved set itself — a
+ * reserved path verbatim is the "is equal to" case, a reserved path plus a
+ * generated tail is "lies inside", and a proper `/`-boundary prefix of a
+ * reserved path is "contains" — so all three occur among 100 runs instead of
+ * depending on a wide generator stumbling into one. A single-segment reserved
+ * path (`packages` at the defaults) contributes no "contains" case because no
+ * shorter path exists at a `/` boundary; the seven multi-segment ones do.
+ *
+ * The trailing `filter` is a guard asserting the construction's promise: every
+ * value is either not a Valid_Root_Path or collides.
+ */
+export function arbRejectedEntryRoot(
+  reserved: readonly string[] = DEFAULT_RESERVED_ENTRY_PATHS,
+): fc.Arbitrary<string> {
+  const pool = fc.constantFrom(...reserved);
+
+  // Shape 1 — invalid character or segment, shared with the `roots` generator so
+  // both keys are held to the same Valid_Root_Path input space.
+  const invalidPath = invalidRootPath();
+
+  // Shape 2a — equal to a reserved path.
+  const equalTo = pool;
+
+  // Shape 2b — lies inside a reserved path.
+  const liesInside = fc
+    .tuple(pool, fc.array(validSegment(), { minLength: 1, maxLength: 2 }))
+    .map(([reservedPath, tail]) => [reservedPath, ...tail].join("/"));
+
+  // Shape 2c — contains a reserved path: a proper `/`-boundary prefix of one.
+  const prefixes = [...new Set(reserved.flatMap(properBoundaryPrefixes))];
+
+  const shapes: fc.Arbitrary<string>[] = [invalidPath, equalTo, liesInside];
+  if (prefixes.length > 0) {
+    shapes.push(fc.constantFrom(...prefixes));
+  }
+
+  return fc
+    .oneof(...shapes)
+    .filter(
+      (path) =>
+        !isPlausiblyValidRootPath(path) || collidesWithReserved(path, reserved),
+    );
+}
+
+/** Every proper prefix of `path` ending at a `/` boundary: `packages/a/b` yields
+ *  `packages` and `packages/a`. A single-segment path yields none. */
+function properBoundaryPrefixes(path: string): string[] {
+  const segments = path.split("/");
+  const prefixes: string[] = [];
+  for (let count = 1; count < segments.length; count += 1) {
+    prefixes.push(segments.slice(0, count).join("/"));
+  }
+  return prefixes;
+}
+
+/**
+ * Project_Config texts that ALWAYS declare `entry`, across the three spellings
+ * the parser distinguishes: an accepted Valid_Root_Path clear of the reserved
+ * set, a rejected string (bad path or a collision), and a wrong-typed JSON value
+ * (R1.4, R1.5, R1.6).
+ *
+ * The roots are drawn FIRST and the accepted entry is then generated against
+ * that triple's reserved set, so a text meant to be accepted is accepted whether
+ * or not it declares `roots` — otherwise a declared root could shadow the entry
+ * by accident and the accepted branch would quietly stop exercising acceptance.
+ *
+ * The text is always a well-formed JSON object with unique keys; member order is
+ * rotated and the indentation varied so the consuming property sees the
+ * insignificant-whitespace and member-order freedom JSON allows.
+ */
+export function arbEntryConfigText(): fc.Arbitrary<string> {
+  const wrongTypedEntry: fc.Arbitrary<string> = fc.constantFrom(
+    "42",
+    "true",
+    "null",
+    "[]",
+    "{}",
+  );
+
+  return fc
+    .option(nonOverlappingRootTriple(), { nil: undefined })
+    .chain((triple) => {
+      const reserved = reservedEntryPaths(triple);
+      const entryValue = fc.oneof(
+        {
+          arbitrary: arbAcceptedEntryRoot(reserved).map((v) =>
+            JSON.stringify(v),
+          ),
+          weight: 2,
+        },
+        {
+          arbitrary: arbRejectedEntryRoot(reserved).map((v) =>
+            JSON.stringify(v),
+          ),
+          weight: 2,
+        },
+        { arbitrary: wrongTypedEntry, weight: 1 },
+      );
+
+      return fc
+        .tuple(
+          entryValue,
+          fc.option(validScope(), { nil: undefined }),
+          fc.nat({ max: 2 }), // member-order rotation
+          fc.nat({ max: 3 }), // indentation width
+        )
+        .map(([entry, scope, rotation, indent]) => {
+          const members: [string, string][] = [["entry", entry]];
+          if (scope !== undefined) {
+            members.push(["scope", JSON.stringify(scope)]);
+          }
+          if (triple !== undefined) {
+            const [microservice, common, spa] = triple;
+            members.push([
+              "roots",
+              renderObject([
+                ["microservice", JSON.stringify(microservice)],
+                ["common", JSON.stringify(common)],
+                ["spa", JSON.stringify(spa)],
+              ]),
+            ]);
+          }
+          const shift = rotation % members.length;
+          const ordered = [...members.slice(shift), ...members.slice(0, shift)];
+          return renderObject(ordered, indent);
+        });
+    });
+}
+
+// ---------------------------------------------------------------------------
 // Config text
 // ---------------------------------------------------------------------------
 
@@ -301,9 +525,10 @@ export function overlapProneRootTriple(): fc.Arbitrary<RootTriple> {
  * consuming properties discard without failing.
  */
 export function configText(): fc.Arbitrary<string> {
-  const acceptedScopeMember = validScope().map(
-    (scope): [string, string] => ["scope", JSON.stringify(scope)],
-  );
+  const acceptedScopeMember = validScope().map((scope): [string, string] => [
+    "scope",
+    JSON.stringify(scope),
+  ]);
 
   const acceptedRootsMember = fc
     .record({
@@ -315,13 +540,18 @@ export function configText(): fc.Arbitrary<string> {
       const entries = Object.entries(roots).filter(
         ([, value]) => value !== undefined,
       );
-      return ["roots", renderObject(entries.map(([k, v]) => [k, JSON.stringify(v)]))];
+      return [
+        "roots",
+        renderObject(entries.map(([k, v]) => [k, JSON.stringify(v)])),
+      ];
     });
 
   // Optional noise: unrecognised keys and wrong-typed recognised values.
   const unknownKeyMember: fc.Arbitrary<[string, string]> = fc
     .tuple(
-      fc.stringMatching(/^[a-z]{1,8}$/).filter((k) => k !== "scope" && k !== "roots"),
+      fc
+        .stringMatching(/^[a-z]{1,8}$/)
+        .filter((k) => k !== "scope" && k !== "roots"),
       fc.constantFrom("true", "42", '"x"', "null", "[]"),
     )
     .map(([key, value]) => [key, value]);

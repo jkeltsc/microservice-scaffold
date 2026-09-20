@@ -23,9 +23,9 @@
 // dev-project-list.property.test.ts use: library packages eligible to be required dependencies
 // (Common and Spa) are laid out in a list, each depending only on earlier ones
 // so the graph is always a DAG with every edge resolvable, at least one
-// Microservice_Package, and an Overseer that always declares
-// `@microservices/contracts`. It is replicated here rather than imported because
-// those suites export no generators.
+// Microservice_Package, and an Entry_Package that always declares
+// `@microservices/contracts` and `@microservices/overseer`. It is replicated here
+// rather than imported because those suites export no generators.
 //
 // Selectors are generated as raw `MICROSERVICES` *string* values (unset, blank,
 // whitespace, `*`, padded `*`, and comma lists with padding, empty entries, and
@@ -71,6 +71,9 @@ const FRAMEWORK_DIR_NAMES: readonly string[] = FRAMEWORK_SINGLETONS.map(
 const LIBRARY_CATEGORIES: readonly ConsumerCategory[] = ["common", "spa"];
 
 const MICROSERVICE_PREFIX = `${NAMESPACE_CONTAINER.microservice}/`;
+/** The Entry_Root this run's context threads: a member of both derivations, since
+ *  Build_Sequence statement 6 is unconditional (registry-inversion R8.1, R8.7). */
+const ENTRY_ROOT = CONTEXT.entryRoot;
 
 // ---------------------------------------------------------------------------
 // In-memory layout model (mirrors build-plan.property.test.ts)
@@ -81,8 +84,9 @@ interface Layout {
   readonly libraries: readonly ConsumerPackage[];
   /** Microservice_Packages; their specifiers double as the root specifiers. */
   readonly microservices: readonly ConsumerPackage[];
-  /** The Overseer's declared specifiers (always includes `contracts`). */
-  readonly overseerDeps: readonly string[];
+  /** The Entry_Package's declared specifiers — the walk's non-microservice root
+   *  since registry-inversion R9.1 (always includes `contracts` and `overseer`). */
+  readonly entryDeps: readonly string[];
 }
 
 /** A discovered Consumer_Package placed in its category's Namespace_Container. */
@@ -135,7 +139,7 @@ function discoveryOf(layout: Layout): Discovery {
 /** A `ReadDependencies` reader over a layout's root consumers. */
 function readerFor(layout: Layout): ReadDependencies {
   return (packageDir) => {
-    if (packageDir === OVERSEER.packageDir) return layout.overseerDeps;
+    if (packageDir === ENTRY_ROOT) return layout.entryDeps;
     if (packageDir.startsWith(MICROSERVICE_PREFIX)) {
       const dirName = packageDir.slice(MICROSERVICE_PREFIX.length);
       return (
@@ -264,11 +268,11 @@ const arbLayout: fc.Arbitrary<Layout> = fc
 
       return arbMicroservices(libraryNames, libraryDirNames).chain(
         (microservices) =>
-          fc.subarray([...libraryNames]).map((extraOverseerDeps) => ({
+          fc.subarray([...libraryNames]).map((extraEntryDeps) => ({
             libraries,
             microservices,
-            overseerDeps: [
-              ...new Set([CONTRACTS.name, ...extraOverseerDeps]),
+            entryDeps: [
+              ...new Set([CONTRACTS.name, OVERSEER.name, ...extraEntryDeps]),
             ].sort(),
           })),
       );
@@ -410,6 +414,11 @@ describe("Property 17: the dev Project_List equals the image tsc --build roots",
         for (let i = 0; i < imageRoots.length; i += 1) {
           expect(devList[i]).toBe(imageRoots[i]);
         }
+        // The shared roots carry the Entry_Package, on both paths and for every
+        // Selector: Build_Sequence statement 6 is unconditional, so parity here
+        // is parity over a list that includes it (registry-inversion R8.1, R8.7).
+        expect(devList).toContain(ENTRY_ROOT);
+        expect(imageRoots).toContain(ENTRY_ROOT);
       }),
       { numRuns: 200 },
     );

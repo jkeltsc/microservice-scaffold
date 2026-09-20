@@ -106,21 +106,37 @@ function spa(packageDir: string, deps: readonly string[]): WorkspaceNode {
   };
 }
 
+/** The Entry_Package node, at the threaded Entry_Root and tier `"entry"`. Every
+ *  node set carries it, because Build_Sequence statement 6 emits it on every
+ *  Order_Producing_Path (registry-inversion R8.1, R8.7). */
+function entry(): WorkspaceNode {
+  return {
+    packageDir: CONTEXT.entryRoot,
+    name: nameOf(CONTEXT.entryRoot),
+    dependencySpecifiers: [
+      "@microservices/contracts",
+      "@microservices/overseer",
+    ],
+    tier: "entry",
+  };
+}
+
 // --- Generator: synthetic workspace-node sets with a spa shape -----------
 
 /**
  * A synthetic node set whose derived order is realistic: the four
  * Framework_Singletons the Build_Sequence always emits (`contracts`,
  * `build-tools`, `overseer`, `integration-tests`), a Common_Package, a
- * Spa_Package that depends on the common (and contracts), and a microservice that
- * depends on the Spa_Package (and contracts). `workspaceBuildOrder` derives over
- * the FULL workspace — `buildTools` and `testOnly` both true — so statements 2, 5
- * and 6 always emit `build-tools`, `overseer` and `integration-tests`; the node
- * set must include them or the derived order names a package the set cannot map
- * back. `extra` unrelated microservices widen the order and exercise failures at
- * arbitrary positions.
+ * Spa_Package that depends on the common (and contracts), a microservice that
+ * depends on the Spa_Package (and contracts), and the Entry_Package.
+ * `workspaceBuildOrder` derives over the FULL workspace — `buildTools` and
+ * `testOnly` both true — so statements 2, 5, 6 and 7 always emit `build-tools`,
+ * `overseer`, the Entry_Package and `integration-tests`; the node set must include
+ * them or the derived order names a package the set cannot map back. `extra`
+ * unrelated microservices widen the order and exercise failures at arbitrary
+ * positions.
  *
- * With the Build_Sequence putting Spa_Packages at statement 7 (the trailing
+ * With the Build_Sequence putting Spa_Packages at statement 8 (the trailing
  * phase), the Spa node lands after every Tsc_Project — the shape 2.4 fixes.
  *
  * The nodes are yielded in a scrambled presentation order so the derivation, not
@@ -132,6 +148,10 @@ const RESERVED_MICROSERVICE_NAMES = new Set([
   "overseer",
   "integration-tests",
   "gateway",
+  // The Entry_Root's last segment: the Entry_Package's declared name is composed
+  // from it, and Package_Discovery rejects two packages declaring one name, so a
+  // generated microservice must not claim it.
+  CONTEXT.entryRoot.slice(CONTEXT.entryRoot.lastIndexOf("/") + 1),
 ]);
 
 const nodeSetArb: fc.Arbitrary<readonly WorkspaceNode[]> = fc
@@ -167,6 +187,7 @@ const nodeSetArb: fc.Arbitrary<readonly WorkspaceNode[]> = fc
       contracts,
       buildTools,
       overseer,
+      entry(),
       integrationTests,
       common,
       theSpa,

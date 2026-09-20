@@ -3,7 +3,8 @@
 // wants: the scoped-name composer, the Dependency_Specifier prefix, the scoped
 // `node_modules` directory, the per-category Discovery_Root, and the four
 // Framework_Singleton records with their names composed under the run's scope
-// (R1.9, R3.6, R3.7).
+// (R1.9, R3.6, R3.7). It is also the one place the Entry_Root and the
+// Entry_Point_Path are derived (registry-inversion R1.3, R7.1).
 //
 // `projectContext(config)` is pure and total over any EffectiveConfig: it reads
 // no filesystem, so a property test can build a context from a generated config
@@ -53,6 +54,19 @@ export interface ProjectContext {
   readonly scopeDir: string;
   /** The configured Discovery_Root of each Consumer_Category (R6.1). */
   readonly roots: Readonly<Record<ConsumerCategory, string>>;
+  /** The Entry_Root: the Entry_Package's directory, Project_Directory-relative
+   *  POSIX, `config.entry` verbatim (registry-inversion R1.1, R1.3).
+   *
+   *  A sibling of `roots` rather than a member of it: the Entry_Package belongs
+   *  to no Consumer_Category and is discovered by nothing. */
+  readonly entryRoot: string;
+  /** The Entry_Point_Path: `${entryRoot}/dist/index.js` — the Entry_Root joined
+   *  to `dist/index.js` by a single `/`, `/` its only separator, with no
+   *  normalisation of either part (registry-inversion R7.1).
+   *
+   *  Derived in this one module and supplied to every consumer through the
+   *  context, which is what makes "exactly one module derives it" checkable. */
+  readonly entryPointPath: string;
   /** The four Framework_Singletons with names composed under this scope (R3.7). */
   readonly framework: {
     readonly contracts: FrameworkSingleton;
@@ -114,6 +128,12 @@ export function projectContext(config: EffectiveConfig): ProjectContext {
     all.map((entry) => [entry.name, entry]),
   );
 
+  // The Entry_Root is `config.entry` verbatim, and the Entry_Point_Path is it
+  // joined to `dist/index.js` by a single `/` — derived once, here, so every
+  // consumer reads the same string instead of composing its own (R1.3, R7.1).
+  const entryRoot = config.entry;
+  const entryPointPath = `${entryRoot}/dist/index.js`;
+
   return {
     config,
     scopedName,
@@ -124,6 +144,8 @@ export function projectContext(config: EffectiveConfig): ProjectContext {
       common: config.roots.common,
       spa: config.roots.spa,
     },
+    entryRoot,
+    entryPointPath,
     framework: { contracts, overseer, buildTools, integrationTests, all },
     frameworkByName: (name: string): FrameworkSingleton | undefined =>
       byName.get(name),

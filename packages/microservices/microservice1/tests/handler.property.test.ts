@@ -40,7 +40,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fc from "fast-check";
 
-import { arbHttpMethod, arbHttpMethodNonGet } from "@microservices/contracts/testing";
+import { arbHttpMethod, arbHttpMethodNonGet } from "@microservices/build-tools/dist/testing/index.js";
 
 // Import the static router by RELATIVE path — NOT via the `@microservices/demo`
 // bundle or any resolved Spa_Root. The router under test is Microservice1's own.

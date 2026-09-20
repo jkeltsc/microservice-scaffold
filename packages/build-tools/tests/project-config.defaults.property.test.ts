@@ -1,20 +1,22 @@
 // Property 4: An undeclared value takes its default.
 //
-// For any Project_Config text declaring any proper subset of the four
-// recognised value keys (`scope` and the three `roots` members) with ACCEPTED
-// values, each declared value appears in the Effective_Config character for
-// character (R1.4), and each undeclared value equals that key's Scope_Default
-// or Root_Default (R1.4). Plus the two single-value assertions: the JSON text
-// `{}` yields an Effective_Config equal in all four values to
-// `defaultEffectiveConfig()` (R1.6), and that same `{}` outcome equals what the
-// absent-file path yields — asserted here as `{}` parse equals
+// For any Project_Config text declaring any proper subset of the five
+// recognised value keys (`scope`, the three `roots` members, and — since
+// registry-inversion — `entry`) with ACCEPTED values, each declared value
+// appears in the Effective_Config character for character (R1.4; Entry_Root:
+// registry-inversion R1.1), and each undeclared value equals that key's
+// Scope_Default, Root_Default, or Entry_Root_Default (R1.4; registry-inversion
+// R1.1, R1.2). Plus the two single-value assertions: the JSON text `{}` yields
+// an Effective_Config equal in every value to `defaultEffectiveConfig()`
+// (R1.6), the Entry_Root_Default `app` included, and that same `{}` outcome
+// equals what the absent-file path yields — asserted here as `{}` parse equals
 // `defaultEffectiveConfig()`, the value the Config_Loader yields for an absent
-// file (R1.5).
+// file (R1.5; registry-inversion R1.5 for the fourth value joining it).
 //
 // `configText()` from the shared arbitraries generates subset-declaring texts,
 // but it does not report WHICH keys it declared, and this property must assert
 // declared-preserved versus undeclared-defaulted per key. So it builds a small
-// local arbitrary that draws each of the four values independently as
+// local arbitrary that draws each of the five values independently as
 // present-with-an-accepted-value or absent, renders the JSON, and carries the
 // declared choices alongside the text so each key can be checked against the
 // right expectation.
@@ -27,21 +29,30 @@ import {
   defaultEffectiveConfig,
   SCOPE_DEFAULT,
   ROOT_DEFAULTS,
+  ENTRY_ROOT_DEFAULT,
   PROJECT_CONFIG_FILE,
 } from "../src/project-config.js";
-import { validScope, nonOverlappingRootTriple } from "./arbitraries/config.js";
+import {
+  validScope,
+  nonOverlappingRootTriple,
+  arbAcceptedEntryRoot,
+  reservedEntryPaths,
+  DEFAULT_RESERVED_ENTRY_PATHS,
+  collidesWithReserved,
+} from "./arbitraries/config.js";
 
 /** The value chosen for one recognised key: either declared with an accepted
  *  string, or left absent so it must take its default. */
 type Choice = { readonly declared: false } | { readonly declared: true; readonly value: string };
 
-/** The four independent choices of one generated config, plus the JSON text
+/** The five independent choices of one generated config, plus the JSON text
  *  they render to, so each key can be checked against the right expectation. */
 interface SubsetConfig {
   readonly scope: Choice;
   readonly microservice: Choice;
   readonly common: Choice;
   readonly spa: Choice;
+  readonly entry: Choice;
   readonly text: string;
 }
 
@@ -53,7 +64,7 @@ function toChoice(value: string | undefined): Choice {
 }
 
 /**
- * A config declaring any subset of the four recognised value keys with accepted
+ * A config declaring any subset of the five recognised value keys with accepted
  * values, tracking which keys were declared.
  *
  * The scope choice is drawn independently — scope participates in no
@@ -75,16 +86,42 @@ function toChoice(value: string | undefined): Choice {
  * non-overlapping and non-framework. Every subset is reachable — including the
  * empty subset (`{}`) and the full set, the boundary case where the property
  * degenerates to "every value is preserved and none is defaulted".
+ *
+ * `entry` joins on the same terms, and for the same reason it cannot be drawn
+ * from a free path generator: an Entry_Root equal to, inside, or containing one
+ * of the effective Discovery_Roots, the `packages` container, or a
+ * Framework_Singleton directory is a `[config:entry-overlap]` rejection the
+ * parser is RIGHT to make (registry-inversion R1.6). So a declared `entry` comes
+ * from `arbAcceptedEntryRoot()` over the union of this draw's triple and the
+ * three Root_Defaults — either set can be the effective one, since each category
+ * independently declares or defaults — and the triple is guarded so the
+ * Entry_Root_Default `app`, which an undeclared `entry` takes, collides with no
+ * generated root either.
  */
 function subsetConfig(): fc.Arbitrary<SubsetConfig> {
   return fc
     .record({
       scope: fc.option(validScope(), { nil: undefined }),
-      triple: nonOverlappingRootTriple(),
+      triple: nonOverlappingRootTriple().filter(
+        // A guard on the construction, not the construction: a generated root
+        // equal to or nested with `app` would make the DEFAULTED Entry_Root a
+        // correct rejection rather than the defaulting this property is about.
+        (triple) => !collidesWithReserved(ENTRY_ROOT_DEFAULT, [...triple]),
+      ),
       declareMicroservice: fc.boolean(),
       declareCommon: fc.boolean(),
       declareSpa: fc.boolean(),
+      declareEntry: fc.boolean(),
     })
+    .chain((draw) =>
+      arbAcceptedEntryRoot([
+        ...reservedEntryPaths(draw.triple),
+        ...DEFAULT_RESERVED_ENTRY_PATHS,
+      ]).map((entryRoot) => ({
+        ...draw,
+        entryRoot: draw.declareEntry ? entryRoot : undefined,
+      })),
+    )
     .map((draw) => {
       const [microserviceRoot, commonRoot, spaRoot] = draw.triple;
       const scope = toChoice(draw.scope);
@@ -93,9 +130,13 @@ function subsetConfig(): fc.Arbitrary<SubsetConfig> {
       );
       const common = toChoice(draw.declareCommon ? commonRoot : undefined);
       const spa = toChoice(draw.declareSpa ? spaRoot : undefined);
+      const entry = toChoice(draw.entryRoot);
       const topMembers: [string, string][] = [];
       if (scope.declared) {
         topMembers.push(["scope", JSON.stringify(scope.value)]);
+      }
+      if (entry.declared) {
+        topMembers.push(["entry", JSON.stringify(entry.value)]);
       }
 
       const rootsMembers: [string, string][] = [];
@@ -121,6 +162,7 @@ function subsetConfig(): fc.Arbitrary<SubsetConfig> {
         microservice,
         common,
         spa,
+        entry,
         text: renderObject(topMembers),
       };
     });
@@ -163,14 +205,17 @@ describe("Property 4: an undeclared value takes its default (R1.4)", () => {
           expected(subset.common, ROOT_DEFAULTS.common),
         );
         expect(config.roots.spa).toBe(expected(subset.spa, ROOT_DEFAULTS.spa));
+        // registry-inversion R1.1, R1.2 — the Entry_Root is the declared value
+        // character for character, or the Entry_Root_Default when undeclared.
+        expect(config.entry).toBe(expected(subset.entry, ENTRY_ROOT_DEFAULT));
       }),
     );
   });
 });
 
 describe("the empty object yields the defaults (R1.5, R1.6)", () => {
-  it("parses `{}` to an Effective_Config equal in all four values to defaultEffectiveConfig()", () => {
-    // R1.6: `{}` yields all four defaults. R1.5: an absent file yields the same
+  it("parses `{}` to an Effective_Config equal in every value to defaultEffectiveConfig()", () => {
+    // R1.6: `{}` yields every default. R1.5: an absent file yields the same
     // Effective_Config, which `defaultEffectiveConfig()` is by definition, so
     // asserting `{}` equals it also pins the absent-file equality.
     const outcome = parseProjectConfig("{}", PROJECT_CONFIG_FILE);
@@ -181,7 +226,7 @@ describe("the empty object yields the defaults (R1.5, R1.6)", () => {
     expect(outcome.parsed.config).toEqual(defaultEffectiveConfig());
   });
 
-  it("yields each of the four defaults individually", () => {
+  it("yields each of the five defaults individually", () => {
     const outcome = parseProjectConfig("{}", PROJECT_CONFIG_FILE);
     if (outcome.kind !== "parsed") throw new Error("expected `{}` to parse");
 
@@ -190,9 +235,14 @@ describe("the empty object yields the defaults (R1.5, R1.6)", () => {
     expect(config.roots.microservice).toBe(ROOT_DEFAULTS.microservice);
     expect(config.roots.common).toBe(ROOT_DEFAULTS.common);
     expect(config.roots.spa).toBe(ROOT_DEFAULTS.spa);
+    // registry-inversion R1.2 — the Entry_Root_Default `app`, taken by a config
+    // that declares no `entry` key at all.
+    expect(config.entry).toBe(ENTRY_ROOT_DEFAULT);
+    expect(ENTRY_ROOT_DEFAULT).toBe("app");
   });
 });
 
 /**
  * Validates: Requirements 1.4, 1.5, 1.6, 14.4
+ * Validates: registry-inversion Requirements 1.2, 1.5
  */

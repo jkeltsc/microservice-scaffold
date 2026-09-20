@@ -192,3 +192,167 @@ describe("the steering docs describe the config-driven mechanism (R16)", () => {
     ).toEqual([]);
   });
 });
+// ---------------------------------------------------------------------------
+// registry-inversion: no consumer-facing document names the retired registry
+// mechanism (R15.14)
+// ---------------------------------------------------------------------------
+//
+// This feature moved the generated registry out of the Overseer's source tree
+// and into the Entry_Package, and retired four things with it: the
+// Registry_Template, the Template_Copy_Step (the root `prepare` script that
+// copied it), the `[scope:template]` check, and the Retired_Testing_Specifier
+// (the arbitraries' old home under `contracts`). A document that still names
+// any of them describes a mechanism that no longer exists.
+//
+// Scope. The Steering_Documents are `.kiro/steering/tech.md` and
+// `.kiro/steering/structure.md`; `README.md` is scanned alongside them because
+// R7.9 puts it under the same naming obligation and the spa-common block above
+// already scans it. `.kiro/steering/platform-split.md` is deliberately NOT
+// scanned: it is a decision record describing the *programme of work*, so it
+// legitimately narrates the retired arrangement as the history it is
+// ("the root `prepare` script that copies the empty registry template retires
+// with it", and the arbitraries' pre-move specifier). Requirement 15's open
+// questions say that record is corrected when it is next revised and that
+// nothing in this feature depends on its wording.
+//
+// Reporting. Unlike the two blocks above, this one scans line by line and names
+// the offending document AND line, because that is the failure shape R15.14
+// specifies.
+
+const REGISTRY_INVERSION_SCANNED_DOCS = ["README.md", TECH, STRUCTURE] as const;
+
+// Each needle is assembled from fragments so this source never contains a
+// forbidden string contiguously.
+const RETIRED_REGISTRY_DIR = "packages/" + "overseer" + "/src/generated";
+const REGISTRY_TEMPLATE_BASENAME = "microservice-registry" + ".template";
+const SCOPE_TEMPLATE_TAG = "[scope" + ":template]";
+// Scope-independent: the Retired_Testing_Specifier is
+// `<Configured_Scope>/contracts/testing`, so the scope-free tail is the needle.
+const RETIRED_TESTING_SPECIFIER = "contracts" + "/testing";
+
+interface RetiredMechanismRule {
+  readonly what: string;
+  readonly matches: (lowercasedLine: string) => boolean;
+}
+
+const RETIRED_MECHANISM_RULES: readonly RetiredMechanismRule[] = [
+  {
+    what: `the retired generated-registry path (${RETIRED_REGISTRY_DIR})`,
+    matches: (line) => line.includes(RETIRED_REGISTRY_DIR),
+  },
+  {
+    what: `the Registry_Template (${REGISTRY_TEMPLATE_BASENAME})`,
+    matches: (line) => line.includes(REGISTRY_TEMPLATE_BASENAME),
+  },
+  {
+    // The Template_Copy_Step is a *statement*, not a token, so it is matched as
+    // a co-occurrence rather than by banning the word `prepare` outright: a
+    // future document may legitimately mention npm's `prepare` lifecycle in
+    // another context, and `Dockerfile.template` is named on many current
+    // lines. What no longer exists is an install-time step touching the
+    // registry or a template — so a single line naming the `prepare` script
+    // together with either one is the retired claim.
+    what:
+      "the Template_Copy_Step (a line naming the `prepare` script together " +
+      "with the registry or a template)",
+    matches: (line) =>
+      line.includes("prepare") &&
+      (line.includes("registry") || line.includes("template")),
+  },
+  {
+    what: `the retired ${SCOPE_TEMPLATE_TAG} check`,
+    matches: (line) => line.includes(SCOPE_TEMPLATE_TAG),
+  },
+  {
+    what: `the Retired_Testing_Specifier (…/${RETIRED_TESTING_SPECIFIER})`,
+    matches: (line) => line.includes(RETIRED_TESTING_SPECIFIER),
+  },
+];
+
+/**
+ * Reports one `<doc>:<line>: <what>` entry per retired-mechanism mention, so a
+ * failure names both the offending document and the offending line. Exported
+ * shape kept simple on purpose: the teeth test below drives it over a synthetic
+ * document rather than writing a file into the checked-out tree.
+ */
+function retiredMechanismOffenders(doc: string, text: string): string[] {
+  const offenders: string[] = [];
+  const lines = text.split("\n");
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const lowercased = lines[index]!.toLowerCase();
+    for (const rule of RETIRED_MECHANISM_RULES) {
+      if (rule.matches(lowercased)) {
+        offenders.push(`${doc}:${index + 1}: ${rule.what}`);
+      }
+    }
+  }
+
+  return offenders;
+}
+
+describe("no document names the retired registry mechanism (R15.14)", () => {
+  it.each(REGISTRY_INVERSION_SCANNED_DOCS)(
+    "%s names none of the retired mechanisms",
+    (doc) => {
+      const offenders = retiredMechanismOffenders(doc, readDoc(doc));
+
+      expect(
+        offenders,
+        `${doc} still names a retired mechanism:\n${offenders.join("\n")}`,
+      ).toEqual([]);
+    },
+  );
+
+  // The guard has teeth: each rule fires over a synthetic document held in
+  // memory, and the report carries the line number. No file is written.
+  const TEETH_CASES: readonly {
+    readonly name: string;
+    readonly line: string;
+  }[] = [
+    {
+      name: "the retired generated-registry path",
+      line: `The registry lives at ${RETIRED_REGISTRY_DIR}/microservice-registry.ts.`,
+    },
+    {
+      name: "the Registry_Template",
+      line: `A committed ${REGISTRY_TEMPLATE_BASENAME}.ts stands in for it.`,
+    },
+    {
+      name: "the Template_Copy_Step",
+      line: "The root `prepare` script copies the empty registry template.",
+    },
+    {
+      name: "the [scope:template] check",
+      line: `\`check:invariants\` performs the ${SCOPE_TEMPLATE_TAG} check.`,
+    },
+    {
+      name: "the Retired_Testing_Specifier",
+      line: `Import them from \`@microservices/${RETIRED_TESTING_SPECIFIER}\`.`,
+    },
+  ];
+
+  it.each(TEETH_CASES)("fails on a document naming $name", ({ line }) => {
+    // The offending line is line 3 of the synthetic document.
+    const synthetic = ["# Heading", "", line, "", "Trailing prose."].join("\n");
+
+    const offenders = retiredMechanismOffenders("synthetic.md", synthetic);
+
+    expect(offenders.length).toBeGreaterThan(0);
+    for (const offender of offenders) {
+      expect(offender.startsWith("synthetic.md:3: ")).toBe(true);
+    }
+  });
+
+  it("reports a clean synthetic document as clean", () => {
+    const clean = [
+      "# Heading",
+      "",
+      "The generated registry lives at `app/src/generated/microservice-registry.ts`.",
+      "`Dockerfile.template` is committed source.",
+      "The arbitraries live under `packages/build-tools/src/testing/`.",
+    ].join("\n");
+
+    expect(retiredMechanismOffenders("synthetic.md", clean)).toEqual([]);
+  });
+});

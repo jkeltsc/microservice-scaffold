@@ -1,11 +1,11 @@
-// This module is the single declaration site for the project's scope and its
-// three Discovery_Roots, and the total, filesystem-free Config_Parser and
-// Config_Serializer over the Project_Config_File text.
+// This module is the single declaration site for the project's scope, its three
+// Discovery_Roots and its Entry_Root, and the total, filesystem-free
+// Config_Parser and Config_Serializer over the Project_Config_File text.
 //
 // It is the only module in `packages/build-tools/src/` where the string
-// `@microservices` or any Discovery_Root path appears as a literal (R1.8,
-// R12.4). The four defaults live here and nowhere else; every other use derives
-// from them.
+// `@microservices`, any Discovery_Root path, or the Entry_Root_Default `app`
+// appears as a literal (R1.8, R12.4; registry-inversion R1.3). The five defaults
+// live here and nowhere else; every other use derives from them.
 //
 // The parser is total: every input string yields exactly one of a ParsedConfig
 // or a non-empty list of Config_Diagnostics, with no throw and no process exit
@@ -36,6 +36,15 @@ import {
 export interface EffectiveConfig {
   readonly scope: string;
   readonly roots: Readonly<Record<ConsumerCategory, string>>;
+  /** The Entry_Root: the Entry_Package's Project_Directory-relative path (R1.1).
+   *
+   *  A sibling of `roots` rather than a fourth member of it, deliberately: a
+   *  `roots` member is a Discovery_Root, a directory whose direct subdirectories
+   *  are the members of a Consumer_Category, and the Entry_Root is not that — it
+   *  is one package's own directory, belonging to no category and discovered by
+   *  nothing (R1.8, R1.9). Inside `roots` it would make `ConsumerCategory` and
+   *  the `roots` record disagree about what they enumerate. */
+  readonly entry: string;
 }
 
 /** The only declaration of the Scope_Default in the repository (R1.8, R12.4). */
@@ -51,6 +60,13 @@ export const ROOT_DEFAULTS: Readonly<Record<ConsumerCategory, string>> = {
   common: "packages/common",
   spa: "packages/spa",
 };
+
+/** The only declaration of the Entry_Root_Default in the repository (R1.3).
+ *
+ *  Not composed from `PACKAGES_DIR`: the Entry_Package is consumer-owned and
+ *  sits outside the directory holding the Framework_Singletons — an Entry_Root
+ *  under `packages` is in fact a `[config:entry-overlap]` rejection (R1.6). */
+export const ENTRY_ROOT_DEFAULT = "app";
 
 /** The one path the config is read from, Project_Directory-relative (R1.1). */
 export const PROJECT_CONFIG_FILE = "scaffold.config.json";
@@ -70,10 +86,11 @@ export function defaultEffectiveConfig(): EffectiveConfig {
       common: ROOT_DEFAULTS.common,
       spa: ROOT_DEFAULTS.spa,
     },
+    entry: ENTRY_ROOT_DEFAULT,
   };
 }
 
-/** The twelve diagnostic tags. Seven belong to the Config_Parser, five to the
+/** The fourteen diagnostic tags. Nine belong to the Config_Parser, five to the
  *  Config_Loader; no one run reports both sets. */
 export type ConfigTag =
   | "config:unparsable"
@@ -83,6 +100,10 @@ export type ConfigTag =
   | "config:root-path"
   | "config:root-overlap"
   | "config:root-framework"
+  // R1.4 — a declared `entry` value that is not a Valid_Root_Path.
+  | "config:entry-path"
+  // R1.6 — an Entry_Root colliding with one of the eight reserved paths.
+  | "config:entry-overlap"
   | "config:unreadable"
   | "config:root-missing"
   | "config:root-not-directory"
@@ -305,10 +326,71 @@ function frameworkDirectories(): readonly string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Entry_Root overlap check (registry-inversion R1.6)
+// ---------------------------------------------------------------------------
+
+/** Which of the three collision relations a rejected Entry_Root bears to a
+ *  reserved path, for the diagnostic's `reason` (R1.6). */
+type EntryOverlapRelation = "is equal to" | "lies inside" | "contains";
+
+/** The reserved paths an Entry_Root may neither equal, lie inside, nor contain
+ *  (R1.6): the three accepted-or-defaulted Discovery_Roots, the directory
+ *  holding the Framework_Singletons, and the four Framework_Singleton package
+ *  directories. Rejected `roots` values are absent from this list (R1.6).
+ *
+ *  At most eight members — three roots, `packages`, four singleton directories —
+ *  and the Entry_Root is compared against each exactly once, which is where
+ *  R1.6's "at most eight such diagnostics" comes from: arithmetic, not a clamp.
+ *  A run that rejected a `roots` value yields fewer, which is what guarantees no
+ *  `[config:entry-overlap]` names an already-rejected value. */
+function entryReservedPaths(
+  roots: Readonly<Record<ConsumerCategory, string>>,
+  rootRejected: Readonly<Record<ConsumerCategory, boolean>>,
+): readonly string[] {
+  const reserved: string[] = [];
+  for (const category of CONSUMER_CATEGORIES) {
+    if (!rootRejected[category]) {
+      reserved.push(roots[category]);
+    }
+  }
+  reserved.push(PACKAGES_DIR);
+  reserved.push(...frameworkDirectories());
+  return reserved;
+}
+
+/** The first relation that holds between the Entry_Root and a reserved path,
+ *  tested in the R1.6 order, or undefined when none holds. Every comparison is
+ *  code point for code point and case-sensitive, with no normalisation. */
+function entryOverlapRelation(
+  entryRoot: string,
+  reservedPath: string,
+): EntryOverlapRelation | undefined {
+  if (entryRoot === reservedPath) return "is equal to";
+  if (liesInside(entryRoot, reservedPath)) return "lies inside";
+  if (liesInside(reservedPath, entryRoot)) return "contains";
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
 // The parser
 // ---------------------------------------------------------------------------
 
-const RECOGNISED_TOP_LEVEL_KEYS = ["roots", "scope"] as const;
+/** The three recognised top-level keys, already in ascending code-point order —
+ *  which is the order every top-level `[config:unknown-key]` diagnostic must
+ *  list them in (R1.7). The single source of both the recognition test and the
+ *  message, so the two cannot drift. */
+const RECOGNISED_TOP_LEVEL_KEYS = ["entry", "roots", "scope"] as const;
+
+type RecognisedTopLevelKey = (typeof RECOGNISED_TOP_LEVEL_KEYS)[number];
+
+function isRecognisedTopLevelKey(key: string): key is RecognisedTopLevelKey {
+  return (RECOGNISED_TOP_LEVEL_KEYS as readonly string[]).includes(key);
+}
+
+/** `'entry', 'roots', 'scope'` — the listing both recognised-keys messages use. */
+const RECOGNISED_TOP_LEVEL_KEY_LIST = RECOGNISED_TOP_LEVEL_KEYS.map(
+  (key) => `'${key}'`,
+).join(", ");
 
 /**
  * Turns config text into a ParsedConfig or a non-empty diagnostic list. Total
@@ -345,7 +427,7 @@ export function parseProjectConfig(
         "config:shape",
         configPath,
         jsonTypeOf(root),
-        "the Project_Config must be a JSON object with recognised keys 'scope' and 'roots'",
+        `the Project_Config must be a JSON object with recognised keys ${RECOGNISED_TOP_LEVEL_KEY_LIST}`,
       ),
     ]);
   }
@@ -354,13 +436,13 @@ export function parseProjectConfig(
 
   // R2.6 — unknown top-level keys, one per key; recognised keys still validated.
   for (const key of Object.keys(root)) {
-    if (key !== "scope" && key !== "roots") {
+    if (!isRecognisedTopLevelKey(key)) {
       diagnostics.add(
         diagnostic(
           "config:unknown-key",
           key,
           key,
-          `unrecognised top-level key; recognised keys are ${RECOGNISED_TOP_LEVEL_KEYS.map((k) => `'${k}'`).join(", ")}`,
+          `unrecognised top-level key; recognised keys are ${RECOGNISED_TOP_LEVEL_KEY_LIST}`,
         ),
       );
     }
@@ -425,11 +507,7 @@ export function parseProjectConfig(
     } else {
       // R2.6 — unknown roots members, one per key.
       for (const key of Object.keys(rawRoots)) {
-        if (
-          key !== "microservice" &&
-          key !== "common" &&
-          key !== "spa"
-        ) {
+        if (key !== "microservice" && key !== "common" && key !== "spa") {
           diagnostics.add(
             diagnostic(
               "config:unknown-key",
@@ -476,6 +554,50 @@ export function parseProjectConfig(
           continue;
         }
         roots[category] = rawValue; // R4.1 — accepted, no normalisation.
+      }
+    }
+  }
+
+  // --- entry: the same three states, mirroring the roots block ---------------
+  // Undeclared takes ENTRY_ROOT_DEFAULT and PARTICIPATES in the R1.6
+  // comparisons (a default that happened to collide is still a rejection);
+  // declared-and-rejected is excluded from them with no default substituted.
+  let entry: string = ENTRY_ROOT_DEFAULT;
+  let entryRejected = false;
+  if ("entry" in root) {
+    const rawEntry = root["entry"];
+    if (typeof rawEntry !== "string") {
+      // R1.5 — wrong-typed `entry`: exactly one `[config:shape]`, no
+      // `[config:entry-path]`, no default substituted, excluded from R1.6.
+      diagnostics.add(
+        diagnostic(
+          "config:shape",
+          "entry",
+          jsonTypeOf(rawEntry),
+          "'entry' must be a string",
+        ),
+      );
+      entryRejected = true;
+    } else {
+      // R1.4 — the Valid_Root_Path predicate is the SAME one `roots` values are
+      // held to, which is what makes R1.1's "resolve that path exactly as it
+      // resolves a Discovery_Root" true by construction.
+      const violations = rootPathViolations(rawEntry);
+      if (violations.length > 0) {
+        // One diagnostic per rejected value, naming every violated condition.
+        diagnostics.add(
+          diagnostic(
+            "config:entry-path",
+            "entry",
+            renderRejectedValue(rawEntry),
+            `not a valid relative POSIX path: ${violations.join("; ")}`,
+          ),
+        );
+        entryRejected = true;
+      } else {
+        // R1.1 — character for character: no trimming, no separator
+        // normalisation, no case normalisation.
+        entry = rawEntry;
       }
     }
   }
@@ -552,6 +674,28 @@ export function parseProjectConfig(
     }
   }
 
+  // R1.6 — one `[config:entry-overlap]` per offending pair of the Entry_Root and
+  // one reserved path, at most eight. Encoding the pair in `at` as
+  // `entry, <collidingPath>` — the shape `[config:root-framework]` already uses
+  // — makes the collector's key unique per pair (so "exactly one per pair" needs
+  // no guard) and makes its sort by `at`, within this tag's group, a sort by
+  // ascending code point of the colliding path.
+  if (!entryRejected) {
+    for (const reservedPath of entryReservedPaths(roots, rootRejected)) {
+      const relation = entryOverlapRelation(entry, reservedPath);
+      if (relation !== undefined) {
+        diagnostics.add(
+          diagnostic(
+            "config:entry-overlap",
+            `entry, ${reservedPath}`,
+            entry,
+            `the Entry_Root ${relation} '${reservedPath}'; the Entry_Package is consumer-owned and lies outside the directory holding the Framework_Singletons and outside every Discovery_Root`,
+          ),
+        );
+      }
+    }
+  }
+
   if (!diagnostics.isEmpty) {
     return rejected(diagnostics.sorted());
   }
@@ -563,15 +707,17 @@ export function parseProjectConfig(
       common: roots.common,
       spa: roots.spa,
     },
+    entry,
   };
   return { kind: "parsed", parsed: { [PARSED]: true, config } };
 }
 
 /**
- * Renders an Effective_Config as JSON declaring all four values (R2.9).
+ * Renders an Effective_Config as JSON declaring every recognised value (R2.9),
+ * the Entry_Root included.
  *
- * Two Effective_Configs equal in all four values render byte-identically: the
- * keys are written in a fixed order and the values are the config's own strings.
+ * Two Effective_Configs equal in every value render byte-identically: the keys
+ * are written in a fixed order and the values are the config's own strings.
  */
 export function serializeProjectConfig(config: EffectiveConfig): string {
   const shape = {
@@ -581,6 +727,7 @@ export function serializeProjectConfig(config: EffectiveConfig): string {
       common: config.roots.common,
       spa: config.roots.spa,
     },
+    entry: config.entry,
   };
   return `${JSON.stringify(shape, null, 2)}\n`;
 }

@@ -40,14 +40,30 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
+
+import { defaultEffectiveConfig } from "@microservices/build-tools/dist/project-config.js";
+import { projectContext } from "@microservices/build-tools/dist/project-context.js";
+import { generatedRegistryPath } from "@microservices/build-tools/dist/generate-registry.js";
 
 import {
   repoRoot,
   pristineWorktree,
   type PristineWorktreeResult,
 } from "./helpers.js";
+
+/**
+ * This repository's unconfigured ProjectContext — and the pristine copy's, since
+ * the copy carries no `scaffold.config.json` either, so both take the
+ * Entry_Root_Default.
+ */
+const context = projectContext(defaultEffectiveConfig());
+
+/** The Entry_Package's own package name, for its ordered-build run header. */
+const ENTRY_PACKAGE_NAME = context.scopedName(
+  context.entryRoot.split("/").at(-1) ?? context.entryRoot,
+);
 
 // The three entry-point scripts, read as text for the static half.
 const scriptsDir = resolve(repoRoot, "scripts");
@@ -62,14 +78,7 @@ const devSrc = readFileSync(devPath, "utf8");
 // The generated registry path, captured/restored around the step-sequence
 // example, which runs the real generator (it is gitignored and expected to
 // churn, so restoring it keeps the working tree exactly as found).
-const REGISTRY_PATH = resolve(
-  repoRoot,
-  "packages",
-  "overseer",
-  "src",
-  "generated",
-  "microservice-registry.ts",
-);
+const REGISTRY_PATH = resolve(repoRoot, generatedRegistryPath(context));
 
 // ---------------------------------------------------------------------------
 // Part 1 — single-sourcing (static checks). Property 11 (R11.1, R11.2), and
@@ -166,8 +175,13 @@ describe("Property 10: Common_Startup yields one registry for both entry points 
   });
 
   afterAll(() => {
+    // Restore the permitted in-place write with a filesystem write, never git —
+    // and REMOVE the file when it was absent before the run, so a clone that had
+    // never generated a registry is left that way.
     if (originalRegistry !== undefined) {
       writeFileSync(REGISTRY_PATH, originalRegistry, "utf8");
+    } else {
+      rmSync(REGISTRY_PATH, { force: true });
     }
   });
 
@@ -355,13 +369,20 @@ describe("Property 11: Production_Start is unchanged (execution, pristine tree)"
       // or bundler output: the selected microservice's own build header appears,
       // the Overseer's own build header appears, the microservice is built
       // before the Overseer (statement 4 before statement 5 of the
-      // Build_Sequence), and the Overseer compiles against the fresh registry
-      // before it boots. `microservice1` is the Selector this example spawns.
+      // Build_Sequence), the Entry_Package is built after both (statement 6,
+      // registry-inversion R8.1), and the Entry_Module compiles against the fresh
+      // registry before it boots. `microservice1` is the Selector this example
+      // spawns.
       const msBuildHeader = /^> @microservices\/microservice1@\S+ build\b/m;
       const overseerBuildHeader = /^> @microservices\/overseer@\S+ build\b/m;
+      const entryBuildHeader = new RegExp(
+        `^> ${ENTRY_PACKAGE_NAME.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}@\\S+ build\\b`,
+        "m",
+      );
 
       const msBuild = combined.match(msBuildHeader);
       const overseerBuild = combined.match(overseerBuildHeader);
+      const entryBuild = combined.match(entryBuildHeader);
       expect(
         msBuild,
         `ordered build did not run 'npm run build --workspace @microservices/microservice1' ` +
@@ -371,9 +392,14 @@ describe("Property 11: Production_Start is unchanged (execution, pristine tree)"
         overseerBuild,
         `ordered build did not run 'npm run build --workspace @microservices/overseer':\n${combined}`,
       ).not.toBeNull();
+      expect(
+        entryBuild,
+        `ordered build did not run 'npm run build --workspace ${ENTRY_PACKAGE_NAME}':\n${combined}`,
+      ).not.toBeNull();
 
       const idxMsBuild = combined.indexOf(msBuild![0]);
       const idxOverseerBuild = combined.indexOf(overseerBuild![0]);
+      const idxEntryBuild = combined.indexOf(entryBuild![0]);
 
       // The full ordered build runs after registry generation: the microservice
       // build header appears after the bootstrap step landmark.
@@ -386,9 +412,16 @@ describe("Property 11: Production_Start is unchanged (execution, pristine tree)"
         `Overseer was built before microservice1 — the ordered build did not place the ` +
           `Selected_Microservice ahead of the Overseer:\n${combined}`,
       ).toBeGreaterThan(idxMsBuild);
-      // The Overseer compiles against the fresh registry and only then boots:
+      // And the Entry_Package (statement 6) is built after both, which is what lets
+      // its static import of the Generated_Registry resolve.
+      expect(
+        idxEntryBuild,
+        `the Entry_Package was built before the Overseer — the ordered build did not ` +
+          `place it after both the Selected_Microservices and the Overseer:\n${combined}`,
+      ).toBeGreaterThan(idxOverseerBuild);
+      // The Entry_Module compiles against the fresh registry and only then boots:
       // its build header precedes the boot marker.
-      expect(idxReady).toBeGreaterThan(idxOverseerBuild);
+      expect(idxReady).toBeGreaterThan(idxEntryBuild);
 
       // The Overseer answers over the wire from the compiled artifacts.
       // Liveness probe (R13.12): microservice1 is mounted at its Mount_Root "/",
@@ -546,18 +579,20 @@ function waitForMarker(
 }
 
 /**
- * Locate the pid of the Overseer process spawned by Production_Start, so the
+ * Locate the pid of the server process spawned by Production_Start, so the
  * test can kill just that grandchild and observe start.js terminate.
  *
- * start.js spawns the Overseer as its own child with the RELATIVE entrypoint
- * `packages/overseer/dist/index.js` (cwd is the pristine dir, which is not part
- * of the argv). The reliable discriminator is therefore the Overseer's parent
- * pid: it is a direct child of the spawned start.js process. Matching on
- * (ppid === startPid) ∧ (argv contains the entrypoint) uniquely identifies it
- * and cannot collide with any other node process on the machine.
+ * start.js spawns the Entry_Point_Path as its own child, as a RELATIVE path (cwd
+ * is the pristine dir, which is not part of the argv). Since the registry
+ * inversion that path is `<Entry_Root>/dist/index.js`, read off the
+ * ProjectContext rather than spelled here (registry-inversion R7.1, R7.2). The
+ * reliable discriminator is the child's parent pid: it is a direct child of the
+ * spawned start.js process. Matching on (ppid === startPid) ∧ (argv contains the
+ * entrypoint) uniquely identifies it and cannot collide with any other node
+ * process on the machine.
  */
 async function findOverseerPid(startPid: number): Promise<number | null> {
-  const needle = "packages/overseer/dist/index.js";
+  const needle = context.entryPointPath;
   const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     if (process.platform === "win32") {

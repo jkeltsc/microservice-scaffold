@@ -587,3 +587,298 @@ describe("Property 1: Bug Condition — no produced order contains an Ordering_V
     );
   });
 });
+
+// ===========================================================================
+// Feature: registry-inversion, Property 8: The Verification_Pass rejects exactly
+// the orders that violate a Prerequisite_Edge.
+//
+// For any generated order the Verification_Pass accepts and any generated
+// relocation of the Entry_Package to an index ahead of at least one of its
+// prerequisites, the Verification_Pass reports one `[build-order:prerequisite]`
+// diagnostic per Prerequisite_Edge that relocation violates and no further
+// diagnostic, each reported diagnostic names the Entry_Package and the prerequisite
+// it precedes, and no build is spawned over that order.
+//
+// The COMPLETENESS half is what distinguishes this from Property 1 above. Property
+// 1 asserts soundness — no order the derivation produces carries an
+// Ordering_Violation — and would still pass if the Verification_Pass reported
+// nothing at all. This property establishes the other direction: an order that
+// genuinely violates an edge is rejected, with exactly one diagnostic per violated
+// edge and not one more. The expected diagnostic set is computed from the relocated
+// positions and the edge list, so an over-report (a second message for one edge, or
+// a message for an edge the relocation left intact) fails as loudly as an
+// under-report.
+//
+// Why relocating ONLY the Entry_Package keeps the expected set exact: nothing in
+// the workspace depends on the Entry_Package, so it is the dependent half of every
+// edge it takes part in and the prerequisite half of none. Moving it therefore
+// changes the verdict of exactly those edges, leaving every other edge's relative
+// order — and so its verdict — untouched. And statement 6 has a single member, so
+// no edge can have both endpoints inside it and the Entry_Package's violations are
+// always positional rather than structural (R8.6).
+//
+// The suite runs in memory over the real `prerequisiteEdges`, `buildSequence` and
+// `verifyBuildOrder`; "no build is spawned" is asserted through `assertBuildOrder`,
+// the throwing wrapper both Order_Producing_Paths call before spawning a single
+// `build` script.
+//
+// Validates: Requirements 8.6, 13.8
+
+import {
+  assertBuildOrder,
+  buildSequence,
+  prerequisiteEdges,
+  verifyBuildOrder,
+  type PrerequisiteEdge,
+  type SequencedPackage,
+} from "../src/build-sequence.js";
+import { type ProjectContext } from "../src/project-context.js";
+import { resolveSelected } from "../src/selector.js";
+import {
+  arbSynthesizedTreeWithEntry,
+  consumerPackagesOf,
+  effectiveConfigOf,
+  microserviceIdentifiersOf,
+  type EntryTreeDescription,
+} from "./arbitraries/tree.js";
+
+/** Every Consumer_Package of an entry-bearing description, in one list. */
+function entryTreePackages(
+  description: EntryTreeDescription,
+): readonly ConsumerPackage[] {
+  return [
+    ...consumerPackagesOf(description, "microservice"),
+    ...consumerPackagesOf(description, "common"),
+    ...consumerPackagesOf(description, "spa"),
+  ];
+}
+
+/** The `Discovery` an entry-bearing description denotes. */
+function entryTreeDiscovery(description: EntryTreeDescription): Discovery {
+  const all = entryTreePackages(description);
+  const of = (category: ConsumerCategory): readonly ConsumerPackage[] =>
+    all.filter((pkg) => pkg.category === category);
+  return {
+    byCategory: {
+      microservice: of("microservice"),
+      common: of("common"),
+      spa: of("spa"),
+    },
+    nameByDir: new Map(all.map((pkg) => [pkg.packageDir, pkg.name])),
+    byName: new Map(all.map((pkg) => [pkg.name, pkg])),
+  };
+}
+
+/**
+ * The dependency reader for the packages discovery never records. The
+ * Entry_Package names the scoped `overseer` and `contracts` packages and no
+ * Microservice_Package (R1.10, R1.11), so its two edges are declared ones (R8.5);
+ * `contracts` declares nothing, so no self-edge is ever built.
+ */
+function entryTreeReader(
+  context: ProjectContext,
+  description: EntryTreeDescription,
+): ReadDependencies {
+  const declaredByDir = new Map<string, readonly string[]>(
+    entryTreePackages(description).map(
+      (pkg) => [pkg.packageDir, pkg.dependencySpecifiers] as const,
+    ),
+  );
+  const { contracts, overseer } = context.framework;
+  return (packageDir) => {
+    if (packageDir === context.entryRoot) return [overseer.name, contracts.name];
+    if (packageDir === contracts.packageDir) return [];
+    return declaredByDir.get(packageDir) ?? [contracts.name];
+  };
+}
+
+/** The full-workspace sequenced order of an entry-bearing description. */
+function entryTreeSequence(
+  context: ProjectContext,
+  description: EntryTreeDescription,
+): readonly SequencedPackage[] {
+  return buildSequence(context, {
+    common: consumerPackagesOf(description, "common"),
+    microservices: microserviceIdentifiersOf(description),
+    spa: consumerPackagesOf(description, "spa"),
+    buildTools: true,
+    testOnly: true,
+  });
+}
+
+/** Moves one member of a sequenced order to `index`, leaving every other member's
+ *  relative order untouched. */
+function relocated(
+  order: readonly SequencedPackage[],
+  packageDir: string,
+  index: number,
+): readonly SequencedPackage[] {
+  const moved = order.find((pkg) => pkg.packageDir === packageDir);
+  if (moved === undefined) {
+    throw new Error(`"${packageDir}" is not in the order`);
+  }
+  const rest = order.filter((pkg) => pkg.packageDir !== packageDir);
+  return [...rest.slice(0, index), moved, ...rest.slice(index)];
+}
+
+/** The `[build-order:prerequisite]` positional message, spelled from the
+ *  requirement rather than read from the module under test, so the property
+ *  compares two independent statements of the wording (R8.6). */
+function expectedPositionalMessage(edge: PrerequisiteEdge): string {
+  return `[build-order:prerequisite] "${edge.dependent}" is built before its prerequisite "${edge.prerequisite}"`;
+}
+
+/** One generated input: a tree, a Selector, and the index the Entry_Package is
+ *  relocated to — always ahead of at least one of its own prerequisites. */
+interface EntryRelocationCase {
+  readonly description: EntryTreeDescription;
+  readonly selector: string;
+  readonly index: number;
+}
+
+/**
+ * Draws the relocation index so the premise holds by construction.
+ *
+ * The Entry_Package always declares `contracts`, which statement 1 places at index
+ * 0 of the order-without-the-Entry_Package, so index 0 is always a violating
+ * placement and the drawn range `[0, highest prerequisite index]` is never empty.
+ * That is why the property never needs a `filter` that could silently exhaust.
+ */
+function arbEntryRelocationCase(): fc.Arbitrary<EntryRelocationCase> {
+  return arbSynthesizedTreeWithEntry().chain((description) => {
+    const identifiers = microserviceIdentifiersOf(description);
+    const context = projectContext(effectiveConfigOf(description));
+    const nodes = workspaceNodesFrom(
+      context,
+      entryTreeDiscovery(description),
+      entryTreeReader(context, description),
+    );
+    const order = entryTreeSequence(context, description);
+
+    return fc
+      .oneof(
+        fc.constant("*"),
+        fc.constant(""),
+        fc
+          .shuffledSubarray([...identifiers], { minLength: 1 })
+          .map((subset) => subset.join(",")),
+      )
+      .chain((selector) => {
+        const selected = resolveSelected(selector, identifiers);
+        const edges = prerequisiteEdges(context, nodes, selected);
+        const withoutEntry = order
+          .filter((pkg) => pkg.packageDir !== context.entryRoot)
+          .map((pkg) => pkg.packageDir);
+        const prerequisiteIndices = edges
+          .filter((edge) => edge.dependent === context.entryRoot)
+          .map((edge) => withoutEntry.indexOf(edge.prerequisite))
+          .filter((index) => index >= 0);
+        const highest = Math.max(...prerequisiteIndices);
+        return fc
+          .integer({ min: 0, max: highest })
+          .map((index): EntryRelocationCase => ({
+            description,
+            selector,
+            index,
+          }));
+      });
+  });
+}
+
+describe("Feature: registry-inversion, Property 8: the Verification_Pass rejects exactly the orders that violate a Prerequisite_Edge", () => {
+  it("accepts the derived order and reports one diagnostic per violated edge — and no further diagnostic — for every relocation of the Entry_Package", () => {
+    fc.assert(
+      fc.property(
+        arbEntryRelocationCase(),
+        ({ description, selector, index }) => {
+          const context = projectContext(effectiveConfigOf(description));
+          const nodes = workspaceNodesFrom(
+            context,
+            entryTreeDiscovery(description),
+            entryTreeReader(context, description),
+          );
+          const selected = resolveSelected(
+            selector,
+            microserviceIdentifiersOf(description),
+          );
+          const edges = prerequisiteEdges(context, nodes, selected);
+          const accepted = entryTreeSequence(context, description);
+
+          // The premise: the derived order is one the Verification_Pass accepts.
+          expect(verifyBuildOrder(context, accepted, edges)).toStrictEqual([]);
+          expect(() =>
+            assertBuildOrder(context, accepted, edges),
+          ).not.toThrow();
+
+          // Every synthesised `Selected_Microservice → Entry_Package` edge is
+          // present, one per selected identifier (R8.4) — the edges the relocation
+          // is about.
+          const entryEdges = edges.filter(
+            (edge) => edge.dependent === context.entryRoot,
+          );
+          for (const identifier of new Set(selected)) {
+            expect(
+              entryEdges.some(
+                (edge) =>
+                  edge.prerequisite ===
+                  `${context.roots.microservice}/${identifier}`,
+              ),
+            ).toBe(true);
+          }
+          // And the two DECLARED ones: the Overseer and `contracts` (R8.5).
+          for (const prerequisite of [
+            context.framework.overseer.packageDir,
+            context.framework.contracts.packageDir,
+          ]) {
+            expect(
+              entryEdges.some((edge) => edge.prerequisite === prerequisite),
+            ).toBe(true);
+          }
+
+          // The relocation: the Entry_Package moved ahead of at least one of its
+          // own prerequisites, every other member's relative order untouched.
+          const broken = relocated(accepted, context.entryRoot, index);
+          expect(broken.map((pkg) => pkg.packageDir).sort()).toStrictEqual(
+            accepted.map((pkg) => pkg.packageDir).sort(),
+          );
+
+          const positionOf = new Map(
+            broken.map((pkg, at) => [pkg.packageDir, at]),
+          );
+          const entryPosition = positionOf.get(context.entryRoot) as number;
+          const violated = entryEdges.filter(
+            (edge) => (positionOf.get(edge.prerequisite) as number) >= entryPosition,
+          );
+          expect(violated.length).toBeGreaterThan(0);
+
+          // One diagnostic per violated edge, and no further diagnostic. Compared
+          // as SORTED MULTISETS, so a duplicated message fails as loudly as a
+          // missing one.
+          const reported = verifyBuildOrder(context, broken, edges);
+          expect([...reported].sort()).toStrictEqual(
+            violated.map(expectedPositionalMessage).sort(),
+          );
+
+          // Each reported diagnostic names the Entry_Package and the prerequisite
+          // it precedes.
+          for (const message of reported) {
+            expect(message).toContain(`"${context.entryRoot}"`);
+            expect(
+              violated.some((edge) =>
+                message.includes(`"${edge.prerequisite}"`),
+              ),
+            ).toBe(true);
+          }
+
+          // No build is spawned over that order: the throwing wrapper both
+          // Order_Producing_Paths call before spawning a `build` script raises,
+          // carrying every finding of the run.
+          expect(() => assertBuildOrder(context, broken, edges)).toThrow(
+            /\[build-order:prerequisite\]/,
+          );
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+});

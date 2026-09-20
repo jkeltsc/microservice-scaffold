@@ -90,6 +90,10 @@ const FRAMEWORK_DIR_NAMES: readonly string[] = FRAMEWORK_SINGLETONS.map(
 
 /** The library Consumer_Categories eligible to be required dependencies: everything but `microservice`. */
 const LIBRARY_CATEGORIES: readonly ConsumerCategory[] = ["common", "spa"];
+/** The Entry_Root this run's context threads: a walk root of every plan, and the
+ *  one staged target that is not under the scope directory (registry-inversion
+ *  R9.1, R9.6, R9.7). */
+const ENTRY_ROOT = CONTEXT.entryRoot;
 
 // ---------------------------------------------------------------------------
 // In-memory layout model (shared with the build-plan / required-dependencies suites)
@@ -100,8 +104,9 @@ interface Layout {
   readonly libraries: readonly ConsumerPackage[];
   /** Microservice_Packages; their specifiers double as the root specifiers. */
   readonly microservices: readonly ConsumerPackage[];
-  /** The Overseer's declared specifiers (always includes `contracts`). */
-  readonly overseerDeps: readonly string[];
+  /** The Entry_Package's declared specifiers — the walk's non-microservice root
+   *  since registry-inversion R9.1 (always includes `contracts` and `overseer`). */
+  readonly entryDeps: readonly string[];
 }
 
 /** A discovered Consumer_Package placed in its category's Namespace_Container. */
@@ -155,7 +160,7 @@ function discoveryOf(layout: Layout): Discovery {
 function readerFor(layout: Layout): ReadDependencies {
   const prefix = `${NAMESPACE_CONTAINER.microservice}/`;
   return (packageDir) => {
-    if (packageDir === OVERSEER.packageDir) return layout.overseerDeps;
+    if (packageDir === ENTRY_ROOT) return layout.entryDeps;
     if (packageDir.startsWith(prefix)) {
       const dirName = packageDir.slice(prefix.length);
       return (
@@ -202,7 +207,7 @@ function referenceSelected(
  * R7.14 restated as the SPA-cut reachability walk — the STAGE-set oracle,
  * written independently of the production `.staged` derivation. A worklist
  * reachability walk over declared names: from the Selected_Microservices' and
- * the Overseer's specifiers, ignore anything not `@microservices`-scoped,
+ * the Entry_Package's specifiers, ignore anything not `@microservices`-scoped,
  * resolve-but-do-not-follow a Framework_Singleton name, and follow every
  * discovered library edge — with ONE restriction that separates it from the
  * build-set reachability: a Spa_Package is ARRIVED AT (and so staged) but is
@@ -224,7 +229,7 @@ function referenceStagedNames(
   const frameworkNames = FRAMEWORK_SINGLETONS.map((entry) => entry.name);
   const byName = new Map(allPackages(layout).map((pkg) => [pkg.name, pkg]));
 
-  const queue: string[] = [...layout.overseerDeps];
+  const queue: string[] = [...layout.entryDeps];
   for (const dirName of selected) {
     const microservice = layout.microservices.find(
       (pkg) => pkg.dirName === dirName,
@@ -257,8 +262,11 @@ function referenceStagedNames(
  * `plan.stage`. A discovered Common_Package or Spa_Package is justified iff it
  * is a member of the Staged_Dependencies (the SPA-cut reachable set), NOT merely
  * of the Required_Dependencies: a Common_Package reachable only through a
- * Spa_Package is built but ships nowhere, so it is not justified. The Overseer
- * ships at its own package directory and so contributes nothing here.
+ * Spa_Package is built but ships nowhere, so it is not justified. The
+ * Overseer_Library now ships under the scope directory like `contracts`, so it
+ * arrives through `ALWAYS_STAGED_SCOPED_ENTRIES` rather than contributing nothing
+ * (registry-inversion R3.7, R9.4); the one package staged at a package directory
+ * is the Entry_Package, whose entry carries no `scopedEntry` at all (R9.7).
  */
 function justifiedScopeEntries(
   layout: Layout,
@@ -382,11 +390,11 @@ const arbLayout: fc.Arbitrary<Layout> = fc
 
       return arbMicroservices(libraryNames, libraryDirNames).chain(
         (microservices) =>
-          fc.subarray([...libraryNames]).map((extraOverseerDeps) => ({
+          fc.subarray([...libraryNames]).map((extraEntryDeps) => ({
             libraries,
             microservices,
-            overseerDeps: [
-              ...new Set([CONTRACTS.name, ...extraOverseerDeps]),
+            entryDeps: [
+              ...new Set([CONTRACTS.name, OVERSEER.name, ...extraEntryDeps]),
             ].sort(),
           })),
       );
@@ -618,18 +626,36 @@ describe("Property 19: a package is staged iff the Selector justifies it", () =>
     );
   });
 
-  it("stages the Overseer at its package directory, not under the scope", () => {
+  it("stages the Overseer_Library under the scope, and the Entry_Package alone at a package directory", () => {
     fc.assert(
       fc.property(arbLayoutAndSelector, ({ layout, selector }) => {
         const plan = planOf(layout, selector);
+
+        // registry-inversion R3.7/R9.4: the Overseer is a library the
+        // Entry_Package imports by name, so it lands under the scope directory
+        // like any other imported-by-name package.
         const overseer = plan.stage.find(
           (staged) => staged.sourceDir === OVERSEER.packageDir,
         );
         expect(overseer).toBeDefined();
-        expect(overseer!.targetDir).toBe(OVERSEER.packageDir);
-        expect(overseer!.scopedEntry).toBeUndefined();
-        // ...and it never leaks in as a scope entry.
-        expect(planScopeEntries(plan).has(OVERSEER.dirName)).toBe(false);
+        expect(overseer!.targetDir).toBe(`${SCOPE_DIR}/${OVERSEER.dirName}`);
+        expect(overseer!.scopedEntry).toBe(OVERSEER.dirName);
+        expect(planScopeEntries(plan).has(OVERSEER.dirName)).toBe(true);
+
+        // R9.6/R9.7: the package-directory staging belongs to the Entry_Package,
+        // which is the ONLY staged entry carrying no `scopedEntry` — that absence
+        // is what keeps the Integrity_Assertion from ranging over it.
+        const withoutScopedEntry = plan.stage.filter(
+          (staged) => staged.scopedEntry === undefined,
+        );
+        expect(withoutScopedEntry).toEqual([
+          {
+            sourceDir: ENTRY_ROOT,
+            targetDir: ENTRY_ROOT,
+            scopedEntry: undefined,
+            justification: "entry-package",
+          },
+        ]);
       }),
       { numRuns: 200 },
     );
@@ -1055,7 +1081,7 @@ describe("Property 13 (concrete): integrity over the microservice1 → demo → 
         `${WORKSPACE_SCOPE}/demo`,
       ]),
     ],
-    overseerDeps: [CONTRACTS.name],
+    entryDeps: [CONTRACTS.name, OVERSEER.name],
   };
   const SELECTOR = "microservice1";
 

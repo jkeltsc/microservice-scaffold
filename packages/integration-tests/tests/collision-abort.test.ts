@@ -26,7 +26,7 @@
 // Validates: Requirements R9.3, R9.4, R9.5
 
 import { describe, it, expect } from "vitest";
-import { buildExpressRouter } from "@microservices/contracts/testing";
+import { buildExpressRouter } from "@microservices/build-tools/dist/testing/index.js";
 import type { MicroserviceRegistry } from "@microservices/contracts";
 
 // boot() is a pure composition helper on the Overseer; reach into its compiled

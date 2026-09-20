@@ -45,8 +45,11 @@
 // because the copy is discarded whole in teardown.
 //
 // --- The expected order -----------------------------------------------------
-// In the predecessor shape the Build_Sequence's seven statements yield the
-// then-committed order exactly (3.18):
+// In the predecessor shape the Build_Sequence's statements yield the
+// then-committed order, plus the Entry_Package the registry inversion inserted
+// (3.18; registry-inversion R8.1–R8.3). The inversion renumbered the tail:
+// the Entry_Statement is 6, the test-only Framework_Singleton is 7, and the
+// trailing Spa_Package phase is 8.
 //
 //   1  packages/contracts                    (statement 1: contracts, first)
 //   2  packages/build-tools                   (statement 2: build-tools)
@@ -55,9 +58,12 @@
 //   5  packages/microservices/microservice2                  in packageDir order)
 //   6  packages/microservices/microservice3
 //   7  packages/overseer                       (statement 5: overseer)
-//   8  packages/integration-tests              (statement 6: integration-tests)
+//   8  app                                    (statement 6: the Entry_Package,
+//                                              strictly after every microservice
+//                                              and after the Overseer)
+//   9  packages/integration-tests              (statement 7: integration-tests)
 //
-// Nothing follows integration-tests: statement 7 has no members, so the trailing
+// Nothing follows integration-tests: statement 8 has no members, so the trailing
 // Spa_Package phase is empty. There is no `packages/spa/demo` and no
 // `packages/common/extended-config`. This is the whole oracle.
 //
@@ -83,10 +89,18 @@ import {
 } from "@microservices/build-tools/dist/workspace-build-order.js";
 import { pristineWorktree, type PristineWorktreeResult } from "./helpers.js";
 
+/** This repository's Entry_Root — unconfigured, so the Entry_Root_Default `app`.
+ *  The pristine copy carries no `scaffold.config.json` either, so the copy's
+ *  Entry_Root is the same value. */
+const ENTRY_ROOT = projectContext(defaultEffectiveConfig()).entryRoot;
+
 /**
- * The eight `packageDir`s of the pre-`scaffold-demo-samples` state, in
- * Build_Sequence order (3.18). Statement 7 contributes nothing, so
- * `packages/integration-tests` (statement 6) is last; there is no
+ * The nine `packageDir`s of the pre-`scaffold-demo-samples` state, in
+ * Build_Sequence order (3.18), with the Entry_Package at the position the
+ * registry inversion gives it (statement 6 — strictly after every
+ * Selected_Microservice and after the Overseer, strictly before the test-only
+ * Framework_Singletons). Statement 8 contributes nothing, so
+ * `packages/integration-tests` (statement 7) is last; there is no
  * `packages/spa/demo` and no `packages/common/extended-config`.
  */
 const EXPECTED_ORDER: readonly string[] = [
@@ -97,6 +111,7 @@ const EXPECTED_ORDER: readonly string[] = [
   "packages/microservices/microservice2",
   "packages/microservices/microservice3",
   "packages/overseer",
+  ENTRY_ROOT,
   "packages/integration-tests",
 ];
 
@@ -216,7 +231,7 @@ afterAll(() => {
 
 describe("Workspace_Build_Order over the pre-`scaffold-demo-samples` state (3.18)", () => {
   it(
-    "yields exactly the eight predecessor-shape entries, in that order, with statement 7 empty",
+    "yields exactly the nine predecessor-shape entries, in that order, with statement 8 empty",
     () => {
       if (pristine === undefined || pristine.available !== true) {
         console.warn(
@@ -229,14 +244,14 @@ describe("Workspace_Build_Order over the pre-`scaffold-demo-samples` state (3.18
 
       const order = deriveOrder();
 
-      // The whole oracle: the eight predecessor-shape entries in Build_Sequence
+      // The whole oracle: the nine predecessor-shape entries in Build_Sequence
       // order (3.18). No `packages/spa/demo` and no
       // `packages/common/extended-config` appear.
       expect(order).toEqual(EXPECTED_ORDER);
       expect(order).not.toContain("packages/spa/demo");
       expect(order).not.toContain("packages/common/extended-config");
 
-      // Statement 7 is empty: integration-tests (statement 6) is last, nothing
+      // Statement 8 is empty: integration-tests (statement 7) is last, nothing
       // follows it (2.22, 3.18) — the trailing Spa_Package phase has no members.
       expect(order[order.length - 1]).toBe("packages/integration-tests");
     },

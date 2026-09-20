@@ -23,7 +23,7 @@ import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fc from "fast-check";
 
-import { arbHttpMethod, arbHttpMethodNonGet } from "@microservices/contracts/testing";
+import { arbHttpMethod, arbHttpMethodNonGet } from "@microservices/build-tools/dist/testing/index.js";
 
 import { path, router } from "../src/index.js";
 

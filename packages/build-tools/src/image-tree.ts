@@ -26,16 +26,25 @@
 // Target layout (relative to `outDir`):
 //
 //   node_modules/@microservices/contracts/    always staged, Framework_Singleton
+//   node_modules/@microservices/overseer/     always staged, Framework_Singleton
 //   node_modules/@microservices/<required>/   Required_Dependencies only
 //   node_modules/@microservices/<selected>/   Selected_Microservices only
-//   packages/overseer/                        package.json + dist
+//   <Entry_Root>/                             package.json + dist
 //
 // Packages ship under `node_modules/@microservices/` because the generated
-// registry imports them by package name, and they are staged as real
-// directories rather than workspace symlinks, which would dangle once
-// `packages/…` is absent from the image. The Overseer ships at its own package
-// directory because the entrypoint invokes it by path (`ENTRYPOINT ["node",
-// "packages/overseer/dist/index.js"]`).
+// registry and the Entry_Module import them by package name, and they are staged
+// as real directories rather than workspace symlinks, which would dangle once
+// `packages/…` is absent from the image. The Overseer_Library is one of them: the
+// Entry_Module imports it by package name and no process invokes it by path, so
+// it ships under the scope directory and no longer at its package directory
+// (registry-inversion R3.7).
+//
+// The Entry_Package is the one package staged at a package directory, at the
+// Entry_Root, because that is what makes the Entry_Point_Path
+// `<Entry_Root>/dist/index.js` — the module the container `CMD` spawns — resolve
+// inside the image (registry-inversion R9.6, R7.7). Its `src/` is not staged, so
+// the Generated_Registry's source file reaches no Image_Tree while its compiled
+// form ships inside that `dist` (R9.5).
 //
 // Paths are relative to cwd, which in the build stage is the repo root. Errors
 // propagate: Node prints them and exits non-zero.
@@ -51,6 +60,7 @@ import {
 } from "./build-plan.js";
 import { requireProjectContext } from "./config-loader.js";
 import { discoverPackages, readDependencySpecifiers } from "./discovery.js";
+import { assertRegistryPresent } from "./entry-registry.js";
 import { assertFrameworkDirectoriesPresent } from "./framework.js";
 import { generateRegistry } from "./generate-registry.js";
 import { type ProjectContext } from "./project-context.js";
@@ -206,6 +216,11 @@ function quote(entries: readonly string[]): string {
  * both have offenders, since a framework member with no output explains most of
  * the rest.
  *
+ * The Entry_Package is one of the packages this ranges over, and its
+ * `"entry-package"` justification is not `"framework-singleton"`, so it falls to
+ * the `[image-tree:no-dist]` branch and is reported with the existing wording and
+ * no new tag (registry-inversion R9.9).
+ *
  * The two predicates are parameters so the function is pure and
  * property-testable against an in-memory layout; {@link stageImageTree} passes
  * `existsSync` and {@link isNonEmptyDir}.
@@ -273,10 +288,23 @@ export function assertBuildOutputsPresent(
  * missing one.
  *
  * The justified set is the `scopedEntry` values of `plan.stage` — the
- * always-staged Framework_Singletons, the Required_Dependencies, and the
- * selected microservices (R5.10, R7.3–R7.5). Reading it off the same list that
- * drove the copying keeps the check in step with staging: a package that leaves
- * `plan.stage` stops being copied and stops being expected at once.
+ * always-staged Framework_Singletons (`contracts` and the Overseer_Library), the
+ * Required_Dependencies, and the selected microservices (R5.10, R7.3–R7.5,
+ * registry-inversion R3.7). Reading it off the same list that drove the copying
+ * keeps the check in step with staging: a package that leaves `plan.stage` stops
+ * being copied and stops being expected at once.
+ *
+ * Two consequences of the Entry_Package's staging land here with no logic of
+ * their own. The Entry_Package cannot be reported at all: its staged entry
+ * carries `scopedEntry: undefined`, so it is neither enumerated by
+ * {@link listScopedEntries} nor a member of the justified set, and
+ * registry-inversion R9.7's "no diagnostic for the Entry_Package's
+ * package-directory staging" holds because the check does not range over it
+ * rather than because an exemption was written. And the Overseer_Library has
+ * become subject to the check: at its package directory it sat outside the
+ * enumerated directory, while at `node_modules/<Configured_Scope>/overseer` it is
+ * both enumerated and justified, so an image that failed to stage it now fails
+ * with `[image-tree:missing]` naming `overseer`.
  *
  * @param outDir the assembled Image_Tree root.
  * @param plan the plan that was just executed.
@@ -336,8 +364,7 @@ export function buildImageTree(
   plan: BuildPlan,
   outDir = "/out",
 ): void {
-  void context; // threaded for R1.9 uniformity; the plan already carries scope
-  executeBuildPlan(plan, outDir);
+  executeBuildPlan(context, plan, outDir);
 }
 
 /**
@@ -386,17 +413,28 @@ export function runImageTreeCli(outDir = "/out"): void {
  * leaves the Image_Tree untouched. `stage` is one injected step so a test can
  * assert it never ran.
  *
+ * @param context the per-run derivation of this run's Effective_Config (R1.9),
+ *   read by the registry-presence guard for the Generated_Registry's path.
  * @param plan the plan to execute.
  * @param outDir the Image_Tree root to assemble.
  * @param runner the command runner; defaults to the real {@link run}.
  * @param stage the staging step; defaults to {@link stageImageTree}.
  */
 export function executeBuildPlan(
+  context: ProjectContext,
   plan: BuildPlan,
   outDir: string,
   runner: CommandRunner = run,
   stage: (plan: BuildPlan, outDir: string) => void = stageImageTree,
 ): void {
+  // The Entry_Package is one of `plan.tscRoots` (statement 6 of the
+  // Build_Sequence), so this `tsc --build` compiles the Entry_Module and its
+  // static import of the Generated_Registry. The guard runs first: an absent
+  // registry is reported as the named diagnostic and the run ends here, with no
+  // compiler invoked and no compiled output emitted, rather than surfacing the
+  // compiler's unresolved-module error (registry-inversion R5.3, R5.5).
+  assertRegistryPresent(context);
+
   runner("npx", ["tsc", "--build", ...plan.tscRoots]); // step 7 (R6.5)
   for (const spa of plan.spaBuilds) {
     runner("npm", ["run", "build"], { cwd: spa.packageDir }); // step 8 (R6.4)

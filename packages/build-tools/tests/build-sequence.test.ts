@@ -1,12 +1,18 @@
 // Feature: unified-build-order — the statement scaffold of the Build_Sequence
 // (requirement 2.1), pinned by example.
 //
-// `buildSequence` runs the seven ordered statements of 2.1 literally and in
-// order. The properties in the sibling suites quantify over that numbering — a
-// statement's presence, its membership, its position — so this file pins the
-// numbering itself by example: one example per statement whose presence or
-// emptiness depends on the membership, plus statement 3's calculated
+// `buildSequence` runs the eight ordered statements of 2.1 literally and in
+// order — seven as unified-build-order fixed them, plus the Entry_Statement
+// registry-inversion R8.1 inserts at position 6, which renumbered the test-only
+// and Spa statements to 7 and 8. The properties in the sibling suites quantify
+// over that numbering — a statement's presence, its membership, its position — so
+// this file pins the numbering itself by example: one example per statement whose
+// presence or emptiness depends on the membership, plus statement 3's calculated
 // `config`-before-`extended-config` order over the two real Common_Packages.
+//
+// Statement 6 carries no membership flag, deliberately: every
+// Order_Producing_Path compiles the Entry_Package (R8.7), so it appears in every
+// example's expected order, immediately after the Overseer.
 //
 // Every assertion reads the returned `SequencedPackage.statement` value, not just
 // the sequence position, so a package emitted by the wrong statement fails here
@@ -69,8 +75,20 @@ const EXTENDED_CONFIG: ConsumerPackage = {
   buildKind: "tsc-project",
 };
 
+/** The Entry_Package as statement 6 emits it, spelled out rather than derived:
+ *  the threaded Entry_Root as its `packageDir`, and the scope composed with that
+ *  root's last segment as its `name` — exactly as registry-inversion R1.10
+ *  requires its manifest to spell it. Under this repository's default config that
+ *  is `app` / `@microservices/app`, and the example below pins the context's
+ *  agreement with these literals so the derivation cannot drift unnoticed. */
+const ENTRY_PACKAGE = {
+  packageDir: "app",
+  name: "@microservices/app",
+};
+
 /** A membership with every optional statement absent and every loop empty; each
- *  example widens exactly the one axis it is pinning. */
+ *  example widens exactly the one axis it is pinning. Statement 6 has no flag, so
+ *  the Entry_Package is present whatever this membership says. */
 const EMPTY_MEMBERSHIP: SequenceMembership = {
   common: [],
   microservices: [],
@@ -101,9 +119,61 @@ describe("buildSequence: statement 1 — contracts, always first", () => {
     const order = buildSequence(CONTEXT, EMPTY_MEMBERSHIP);
 
     expect(order[0]).toEqual(entryOf(CONTRACTS, 1));
-    // Statement 5 (Overseer) is unconditional too, so the barest membership is
-    // exactly [contracts, overseer].
-    expect(order).toEqual([entryOf(CONTRACTS, 1), entryOf(OVERSEER, 5)]);
+    // Statements 5 (Overseer) and 6 (the Entry_Package) are unconditional too, so
+    // the barest membership is exactly [contracts, overseer, entry].
+    expect(order).toEqual([
+      entryOf(CONTRACTS, 1),
+      entryOf(OVERSEER, 5),
+      entryOf(ENTRY_PACKAGE, 6),
+    ]);
+  });
+});
+
+describe("buildSequence: statement 6 — the Entry_Package, on every path", () => {
+  it("names the Entry_Package from the threaded Entry_Root and the composed scope", () => {
+    // The literals above are the expectation; this pins the context derivation to
+    // them, so a changed Entry_Root_Default or a changed name composition fails
+    // here rather than silently moving every other example's expected order.
+    expect(CONTEXT.entryRoot).toBe(ENTRY_PACKAGE.packageDir);
+    expect(CONTEXT.scopedName("app")).toBe(ENTRY_PACKAGE.name);
+  });
+
+  it("emits the Entry_Package at statement 6, after the Overseer and before the test-only singleton", () => {
+    const order = buildSequence(CONTEXT, {
+      ...EMPTY_MEMBERSHIP,
+      microservices: ["microservice1"],
+      testOnly: true,
+    });
+
+    expect(at(order, ENTRY_PACKAGE.packageDir)).toEqual(
+      entryOf(ENTRY_PACKAGE, 6),
+    );
+    expect(order).toEqual([
+      entryOf(CONTRACTS, 1),
+      {
+        packageDir: `${NAMESPACE_CONTAINER.microservice}/microservice1`,
+        name: CONTEXT.scopedName("microservice1"),
+        statement: 4,
+      },
+      entryOf(OVERSEER, 5),
+      entryOf(ENTRY_PACKAGE, 6),
+      entryOf(INTEGRATION_TESTS, 7),
+    ]);
+  });
+
+  it("carries no membership flag: every membership emits exactly one statement-6 entry (R8.7)", () => {
+    for (const membership of [
+      EMPTY_MEMBERSHIP,
+      { ...EMPTY_MEMBERSHIP, buildTools: true, testOnly: true },
+      { ...EMPTY_MEMBERSHIP, microservices: ["microservice1"] },
+      { ...EMPTY_MEMBERSHIP, common: [CONFIG, EXTENDED_CONFIG] },
+    ]) {
+      const order = buildSequence(CONTEXT, membership);
+
+      expect(order.filter((entry) => entry.statement === 6)).toEqual([
+        entryOf(ENTRY_PACKAGE, 6),
+      ]);
+    }
   });
 });
 
@@ -120,6 +190,7 @@ describe("buildSequence: statement 2 — build-tools, gated on membership.buildT
       entryOf(CONTRACTS, 1),
       entryOf(BUILD_TOOLS, 2),
       entryOf(OVERSEER, 5),
+      entryOf(ENTRY_PACKAGE, 6),
     ]);
   });
 
@@ -159,12 +230,14 @@ describe("buildSequence: statement 3 — Common_Packages in calculated order", (
     expect(configPos).toBeLessThan(extendedPos);
 
     // The whole membership is exactly the two Common_Packages, both at
-    // statement 3, framed by contracts (1) and the Overseer (5).
+    // statement 3, framed by contracts (1), the Overseer (5), and the
+    // Entry_Package (6).
     expect(order).toEqual([
       entryOf(CONTRACTS, 1),
       entryOf(CONFIG, 3),
       entryOf(EXTENDED_CONFIG, 3),
       entryOf(OVERSEER, 5),
+      entryOf(ENTRY_PACKAGE, 6),
     ]);
   });
 });
@@ -194,21 +267,22 @@ describe("buildSequence: statement 5 — the Overseer, always after every micros
   });
 });
 
-describe("buildSequence: statement 6 — integration-tests, gated on membership.testOnly", () => {
-  it("emits integration-tests at statement 6 when testOnly is true", () => {
+describe("buildSequence: statement 7 — integration-tests, gated on membership.testOnly", () => {
+  it("emits integration-tests at statement 7 when testOnly is true", () => {
     const order = buildSequence(CONTEXT, {
       ...EMPTY_MEMBERSHIP,
       testOnly: true,
     });
 
     expect(at(order, INTEGRATION_TESTS.packageDir)).toEqual(
-      entryOf(INTEGRATION_TESTS, 6),
+      entryOf(INTEGRATION_TESTS, 7),
     );
-    // After the Overseer (statement 5).
+    // After the Overseer (statement 5) and the Entry_Package (statement 6).
     expect(order).toEqual([
       entryOf(CONTRACTS, 1),
       entryOf(OVERSEER, 5),
-      entryOf(INTEGRATION_TESTS, 6),
+      entryOf(ENTRY_PACKAGE, 6),
+      entryOf(INTEGRATION_TESTS, 7),
     ]);
   });
 
@@ -219,18 +293,18 @@ describe("buildSequence: statement 6 — integration-tests, gated on membership.
     });
 
     expect(at(order, INTEGRATION_TESTS.packageDir)).toBeUndefined();
-    expect(order.some((entry) => entry.statement === 6)).toBe(false);
+    expect(order.some((entry) => entry.statement === 7)).toBe(false);
   });
 });
 
-describe("buildSequence: statement 7 — the trailing Spa_Package phase", () => {
-  it("emits no statement-7 entry when membership.spa is empty", () => {
+describe("buildSequence: statement 8 — the trailing Spa_Package phase", () => {
+  it("emits no statement-8 entry when membership.spa is empty", () => {
     const order = buildSequence(CONTEXT, { ...EMPTY_MEMBERSHIP, spa: [] });
 
-    expect(order.some((entry) => entry.statement === 7)).toBe(false);
+    expect(order.some((entry) => entry.statement === 8)).toBe(false);
   });
 
-  it("emits a Spa_Package at statement 7 after every Tsc_Project when present", () => {
+  it("emits a Spa_Package at statement 8 after every Tsc_Project when present", () => {
     const demo: ConsumerPackage = {
       category: "spa",
       dirName: "demo",
@@ -251,11 +325,12 @@ describe("buildSequence: statement 7 — the trailing Spa_Package phase", () => 
     expect(demoEntry).toEqual({
       packageDir: "packages/spa/demo",
       name: "@microservices/demo",
-      statement: 7,
+      statement: 8,
     });
 
     // The trailing phase: the Spa_Package is the final entry, after contracts (1),
-    // build-tools (2), the Overseer (5), and integration-tests (6).
+    // build-tools (2), the Overseer (5), the Entry_Package (6), and
+    // integration-tests (7).
     expect(order[order.length - 1]).toEqual(demoEntry);
   });
 });

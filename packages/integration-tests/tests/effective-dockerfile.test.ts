@@ -43,6 +43,15 @@ import { dirname, join, resolve } from "node:path";
 // its two CLI entry points. This test reaches its compiled modules directly, the
 // same way the suite already reaches the Overseer (`@microservices/overseer/dist/...`).
 import { resolveSelected } from "@microservices/build-tools/dist/selector.js";
+import { defaultEffectiveConfig } from "@microservices/build-tools/dist/project-config.js";
+import { projectContext } from "@microservices/build-tools/dist/project-context.js";
+
+/**
+ * This repository's Entry_Root. It declares no `scaffold.config.json`, so the
+ * Entry_Root is the Entry_Root_Default — read from the single declaration site via
+ * the default Effective_Config rather than spelled here (registry-inversion R1.8).
+ */
+const ENTRY_ROOT = projectContext(defaultEffectiveConfig()).entryRoot;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // tests/ -> integration-tests -> packages -> repo root
@@ -261,16 +270,20 @@ describe("emit-effective-dockerfile.sh output structure", () => {
 
     // The output is no longer byte-for-byte identical to the template: the two
     // `# --- MANIFEST_COPY_* ---` anchors are REPLACED by generated COPY blocks,
-    // and the two header lines + the R6.6 ENV block are injected. To verify the
-    // rest of the template survives verbatim and in order, normalise both sides:
+    // the `# --- CMD ---` anchor is REPLACED by the single CMD instruction naming
+    // the Entry_Point_Path (registry-inversion R7.3), and the two header lines +
+    // the R6.6 ENV block are injected. To verify the rest of the template survives
+    // verbatim and in order, normalise both sides:
     //
     //   output  -> drop the two header lines, drop the generated manifest COPY
     //              blocks, drop the injected R6.6 block; the anchors were
-    //              replaced, so put a single placeholder where each block was.
-    //   template -> replace each anchor line with the same placeholder.
+    //              replaced, so put a single placeholder where each block was, and
+    //              a second placeholder where the CMD landed.
+    //   template -> replace each anchor line with the matching placeholder.
     //
     // What remains must match line for line.
     const ANCHOR = "<<<MANIFEST>>>";
+    const CMD_ANCHOR = "<<<CMD>>>";
 
     const normalisedOut: string[] = [];
     let inManifestBlock = false;
@@ -299,6 +312,10 @@ describe("emit-effective-dockerfile.sh output structure", () => {
         }
         inManifestBlock = false;
       }
+      if (/^CMD \["node", "[^"]+"\]$/.test(line)) {
+        normalisedOut.push(CMD_ANCHOR);
+        continue;
+      }
       normalisedOut.push(line);
     }
 
@@ -306,7 +323,9 @@ describe("emit-effective-dockerfile.sh output structure", () => {
       line === "# --- MANIFEST_COPY_BUILD ---" ||
       line === "# --- MANIFEST_COPY_PRODDEPS ---"
         ? ANCHOR
-        : line,
+        : line === "# --- CMD ---"
+          ? CMD_ANCHOR
+          : line,
     );
 
     expect(normalisedOut.join("\n")).toBe(normalisedTemplate.join("\n"));
@@ -557,8 +576,11 @@ describe("emit-effective-dockerfile.sh generates manifest COPY lines", () => {
 
     // The block content is exactly: root manifests, then one COPY per
     // top-level package, then one COPY per microservice, then one COPY per
-    // common-container member, then one COPY per spa-container member, in that
-    // group order.
+    // common-container member, then one COPY per spa-container member, and LAST
+    // the Entry_Package's own manifest (registry-inversion R7.4) — appended
+    // unconditionally, with no `-f` existence test, which is why it sits after the
+    // four discovered groups and leaves every other COPY line at its existing
+    // index.
     const expected = [
       "COPY package.json package-lock.json ./",
       ...topLevelPackages.map(
@@ -575,8 +597,29 @@ describe("emit-effective-dockerfile.sh generates manifest COPY lines", () => {
       ...spaMemberIds.map(
         (id) => `COPY packages/spa/${id}/package.json packages/spa/${id}/`,
       ),
+      `COPY ${ENTRY_ROOT}/package.json ${ENTRY_ROOT}/`,
     ];
     expect(blocks[0]).toEqual(expected);
+  });
+
+  // registry-inversion R7.3: the emitted document carries exactly one CMD, and its
+  // single argument is the Entry_Point_Path — the Entry_Root joined to
+  // `dist/index.js` — and no Framework_Singleton's compiled path.
+  // Validates: Requirements 7.3
+  it("replaces the CMD anchor with exactly one CMD naming the Entry_Point_Path", () => {
+    const { out } = emit("*");
+    const cmdLines = out
+      .split("\n")
+      .filter((line) => /^CMD([\s[])/.test(line));
+
+    expect(cmdLines).toEqual([`CMD ["node", "${ENTRY_ROOT}/dist/index.js"]`]);
+    // The anchor LINE is gone — replaced, not left in place. (The template's own
+    // header comment names the anchor in prose, so a substring test would match
+    // that instead.)
+    expect(out.split("\n").filter((line) => line.trim() === "# --- CMD ---")).toEqual(
+      [],
+    );
+    expect(out).not.toContain("packages/overseer/dist/index.js");
   });
 
   // The Common_Package (`packages/common/config/`) must ride the SAME unchanged

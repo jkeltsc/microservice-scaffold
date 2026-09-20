@@ -22,8 +22,8 @@
 //   - `contracts` is no longer a member of the generated graph pinned at index
 //     0. It is a Framework_Singleton, so a specifier naming it resolves without
 //     being followed and without becoming a required dependency (Property 10) —
-//     the Overseer still declares it in every generated layout, which is what makes
-//     that framework edge present in every run.
+//     the Entry_Package still declares it in every generated layout, which is what
+//     makes that framework edge present in every run.
 //   - Consumer_Packages come in two categories eligible to be required
 //     dependencies, `common` and `spa`, both of which sit under their own
 //     Namespace_Container. The generator mixes them so resolution is exercised
@@ -34,7 +34,7 @@
 //
 //   - `referenceRequired` restates R7.1 as a worklist reachability walk over the
 //     generated layout — start from the Selected_Microservices' and the
-//     Overseer's specifiers, ignore anything not `@microservices`-scoped (R3.10),
+//     Entry_Package's specifiers, ignore anything not `@microservices`-scoped (R3.10),
 //     resolve-but-do-not-follow a Framework_Singleton name (R3.7), and follow
 //     every discovered Consumer_Package edge.
 //   - `referenceOrder` restates R7.2 as "repeatedly emit the lexicographically
@@ -82,6 +82,14 @@ const NAMESPACE_CONTAINER = CONTEXT.roots;
 const FRAMEWORK_SINGLETONS = CONTEXT.framework.all;
 const { contracts: CONTRACTS, overseer: OVERSEER } = CONTEXT.framework;
 
+/** The Entry_Root this run's context threads. The resolver's walk roots are the
+ *  Selected_Microservices and the Entry_Package (registry-inversion R9.1): the
+ *  Overseer_Library is no longer a root of its own, being reached through the
+ *  Entry_Package's declared dependency on it and — as a Framework_Singleton —
+ *  resolved without being followed. Every layout below therefore hangs its
+ *  non-microservice root specifiers on this directory. */
+const ENTRY_ROOT = CONTEXT.entryRoot;
+
 /** Framework names as data, so the oracles never call the production lookup. */
 const FRAMEWORK_NAMES: readonly string[] = FRAMEWORK_SINGLETONS.map(
   (entry) => entry.name,
@@ -98,8 +106,8 @@ const LIBRARY_CATEGORIES: readonly ConsumerCategory[] = ["common", "spa"];
 // ---------------------------------------------------------------------------
 //
 // A layout is a set of discovered Consumer_Packages — library packages (Common
-// and Spa) plus Microservice_Packages — together with the Overseer's declared
-// specifiers. Library packages are laid out in a list and may depend only on
+// and Spa) plus Microservice_Packages — together with the Entry_Package's
+// declared specifiers. Library packages are laid out in a list and may depend only on
 // packages *earlier* in the list, so the base graph is always acyclic and every
 // edge resolves; the dangling case is Property 11's and the cyclic case is
 // Property 14's, each built by injecting into a base layout.
@@ -109,8 +117,10 @@ interface Layout {
   readonly libraries: readonly ConsumerPackage[];
   /** Microservice_Packages; their specifiers double as the root specifiers. */
   readonly microservices: readonly ConsumerPackage[];
-  /** The Overseer's declared specifiers (always includes `contracts`). */
-  readonly overseerDeps: readonly string[];
+  /** The Entry_Package's declared specifiers — the walk's non-microservice root
+   *  (always includes `contracts` and `overseer`, as R1.10 requires its manifest
+   *  to name them; both are Framework_Singletons, so both resolve unfollowed). */
+  readonly entryDeps: readonly string[];
 }
 
 /** A discovered Consumer_Package placed in its category's Namespace_Container. */
@@ -148,7 +158,7 @@ function discoveryOf(layout: Layout): Discovery {
 function readerFor(layout: Layout): ReadDependencies {
   const prefix = `${NAMESPACE_CONTAINER.microservice}/`;
   return (packageDir) => {
-    if (packageDir === OVERSEER.packageDir) return layout.overseerDeps;
+    if (packageDir === ENTRY_ROOT) return layout.entryDeps;
     if (packageDir.startsWith(prefix)) {
       const dirName = packageDir.slice(prefix.length);
       return (
@@ -185,7 +195,7 @@ function requiredOf(
 /**
  * Reference reachability — R7.1 restated as a worklist walk, kept
  * independent of the production two-phase walk. Returns the *set* of declared
- * names reachable from the Selected_Microservices' and the Overseer's
+ * names reachable from the Selected_Microservices' and the Entry_Package's
  * specifiers:
  *
  *   - a specifier that is not `@microservices`-scoped is ignored (R3.10);
@@ -203,7 +213,7 @@ function referenceRequired(
 ): Set<string> {
   const byName = new Map(allPackages(layout).map((pkg) => [pkg.name, pkg]));
 
-  const queue: string[] = [...layout.overseerDeps];
+  const queue: string[] = [...layout.entryDeps];
   for (const dirName of selected) {
     const microservice = layout.microservices.find(
       (pkg) => pkg.dirName === dirName,
@@ -369,9 +379,10 @@ function arbMicroservices(
 /**
  * A random layout. Library packages are laid out in a list and may depend only
  * on earlier entries (a DAG, every edge resolvable); microservices and the
- * Overseer depend on arbitrary subsets of them. The Overseer always declares
- * `@microservices/contracts`, mirroring the real repository — which puts a
- * Framework_Singleton edge in every generated run.
+ * Entry_Package depend on arbitrary subsets of them. The Entry_Package always
+ * declares `@microservices/contracts` and `@microservices/overseer`, mirroring the
+ * real repository — which puts two Framework_Singleton edges in every generated
+ * run.
  */
 const arbLayout: fc.Arbitrary<Layout> = fc
   .uniqueArray(arbLibraryEntry, {
@@ -400,11 +411,11 @@ const arbLayout: fc.Arbitrary<Layout> = fc
 
       return arbMicroservices(libraryNames, libraryDirNames).chain(
         (microservices) =>
-          fc.subarray([...libraryNames]).map((extraOverseerDeps) => ({
+          fc.subarray([...libraryNames]).map((extraEntryDeps) => ({
             libraries,
             microservices,
-            overseerDeps: [
-              ...new Set([CONTRACTS.name, ...extraOverseerDeps]),
+            entryDeps: [
+              ...new Set([CONTRACTS.name, OVERSEER.name, ...extraEntryDeps]),
             ].sort(),
           })),
       );
@@ -446,7 +457,7 @@ function withPackageSpecifiers(
   return {
     libraries: apply(layout.libraries),
     microservices: apply(layout.microservices),
-    overseerDeps: layout.overseerDeps,
+    entryDeps: layout.entryDeps,
   };
 }
 
@@ -464,19 +475,19 @@ function withExtraSpecifiersEverywhere(
   return {
     libraries: add(layout.libraries),
     microservices: add(layout.microservices),
-    overseerDeps: [...new Set([...layout.overseerDeps, ...extra])].sort(),
+    entryDeps: [...new Set([...layout.entryDeps, ...extra])].sort(),
   };
 }
 
 /** Which consumer a failure block attaches its offending specifiers to. */
 type Declarer =
-  | { readonly kind: "overseer" }
+  | { readonly kind: "entry" }
   | { readonly kind: "microservice"; readonly dirName: string }
   | { readonly kind: "library"; readonly dirName: string };
 
 function arbDeclarer(layout: Layout): fc.Arbitrary<Declarer> {
   const options: fc.Arbitrary<Declarer>[] = [
-    fc.constant<Declarer>({ kind: "overseer" }),
+    fc.constant<Declarer>({ kind: "entry" }),
     fc
       .constantFrom(...layout.microservices.map((pkg) => pkg.dirName))
       .map((dirName) => ({ kind: "microservice" as const, dirName })),
@@ -495,7 +506,7 @@ function arbDeclarer(layout: Layout): fc.Arbitrary<Declarer> {
  * Attach `extra` specifiers to one consumer and return the Selector that makes
  * the resolver reach that consumer:
  *
- *   - the Overseer is a root under every Selector, so every microservice is
+ *   - the Entry_Package is a root under every Selector, so every microservice is
  *     selected and the failure surfaces once the roots' clean subgraphs are done;
  *   - a Microservice_Package is made the sole Selected_Microservice, so the
  *     failure surfaces while its own specifiers are resolved;
@@ -510,14 +521,14 @@ function injectAt(
   declarer: Declarer,
   extra: readonly string[],
 ): { layout: Layout; selected: string[]; declarerDir: string } {
-  if (declarer.kind === "overseer") {
+  if (declarer.kind === "entry") {
     return {
       layout: {
         ...layout,
-        overseerDeps: [...new Set([...layout.overseerDeps, ...extra])].sort(),
+        entryDeps: [...new Set([...layout.entryDeps, ...extra])].sort(),
       },
       selected: layout.microservices.map((pkg) => pkg.dirName),
-      declarerDir: OVERSEER.packageDir,
+      declarerDir: ENTRY_ROOT,
     };
   }
 
@@ -612,9 +623,9 @@ describe("Property 10: a Framework_Singleton specifier resolves and never become
       fc.property(arbLayoutAndSelection, ({ layout, selected }) => {
         const required = requiredOf(layout, selected);
 
-        // The Overseer declares @microservices/contracts in every generated
+        // The Entry_Package declares @microservices/contracts in every generated
         // layout, so this is the R5.3 case: declared, resolved, not a member.
-        expect(layout.overseerDeps).toContain(CONTRACTS.name);
+        expect(layout.entryDeps).toContain(CONTRACTS.name);
         expect(required.map((pkg) => pkg.name)).not.toContain(CONTRACTS.name);
 
         // It is nevertheless always staged, on Framework_Singleton grounds
@@ -795,7 +806,7 @@ describe("Property 12: the Required_Dependencies equals the reachability oracle"
     );
   });
 
-  it("excludes the Selected_Microservices, every Microservice_Package, and the Overseer", () => {
+  it("excludes the Selected_Microservices, every Microservice_Package, and the Overseer_Library", () => {
     fc.assert(
       fc.property(arbLayoutAndSelection, ({ layout, selected }) => {
         const required = requiredOf(layout, selected);
@@ -813,7 +824,7 @@ describe("Property 12: the Required_Dependencies equals the reachability oracle"
     );
   });
 
-  it("stages nothing beyond the Overseer's own required dependencies when no microservice is selected", () => {
+  it("stages nothing beyond the Entry_Package's own required dependencies when no microservice is selected", () => {
     fc.assert(
       fc.property(arbLayout, (layout) => {
         const members = new Set(requiredOf(layout, []).map((pkg) => pkg.name));
@@ -829,8 +840,8 @@ describe("Property 12: the Required_Dependencies equals the reachability oracle"
         const allIds = layout.microservices.map((pkg) => pkg.dirName);
         const all = new Set(requiredOf(layout, allIds).map((pkg) => pkg.name));
 
-        // The empty-Selector result (the Overseer's own required dependencies)
-        // is part of every Selector's result, so it seeds the union.
+        // The empty-Selector result (the Entry_Package's own required
+        // dependencies) is part of every Selector's result, so it seeds the union.
         const union = new Set(requiredOf(layout, []).map((pkg) => pkg.name));
         for (const id of allIds) {
           for (const pkg of requiredOf(layout, [id])) union.add(pkg.name);
@@ -1118,7 +1129,7 @@ describe("[deps:peer]: a specifier naming a Microservice_Package is forbidden", 
 // Two edges are forbidden regardless of the target's reachability: a
 // Common_Package resolving a specifier to a Spa_Package (`[deps:common-to-spa]`,
 // R8.13) and a Spa_Package resolving a specifier to another Spa_Package
-// (`[deps:spa-to-spa]`, R9.11). A `microservice -> spa` or `overseer -> spa`
+// (`[deps:spa-to-spa]`, R9.11). A `microservice -> spa` or `entry -> spa`
 // edge is legal — only the two inbound-SPA edges above are rejected, and both
 // are decided by the DECLARER's category.
 //
@@ -1154,7 +1165,7 @@ const arbInboundSpaCase: fc.Arbitrary<{
     declarerDir: arbDirName,
     microserviceId: arbIdentifier,
     declarerKind: fc.constantFrom<"common" | "spa">("common", "spa"),
-    overseerExtra: fc.boolean(),
+    entryExtra: fc.boolean(),
   })
   .filter(
     ({ targetDir, declarerDir, microserviceId }) =>
@@ -1167,7 +1178,7 @@ const arbInboundSpaCase: fc.Arbitrary<{
       !FRAMEWORK_DIR_NAMES.includes(declarerDir) &&
       !FRAMEWORK_DIR_NAMES.includes(microserviceId),
   )
-  .map(({ targetDir, declarerDir, microserviceId, declarerKind, overseerExtra }) => {
+  .map(({ targetDir, declarerDir, microserviceId, declarerKind, entryExtra }) => {
     const targetName = `${WORKSPACE_SCOPE}/${targetDir}`;
     const declarerName = `${WORKSPACE_SCOPE}/${declarerDir}`;
     const target = consumerPackage("spa", targetDir, targetName, []);
@@ -1185,12 +1196,13 @@ const arbInboundSpaCase: fc.Arbitrary<{
     const layout: Layout = {
       libraries: [target, declarer],
       microservices: [microservice],
-      // Optionally also reach the declarer from the Overseer; either way the
+      // Optionally also reach the declarer from the Entry_Package; either way the
       // walk resolves the declarer's forbidden specifier.
-      overseerDeps: [
+      entryDeps: [
         ...new Set([
           CONTRACTS.name,
-          ...(overseerExtra ? [declarerName] : []),
+          OVERSEER.name,
+          ...(entryExtra ? [declarerName] : []),
         ]),
       ].sort(),
     };
@@ -1291,7 +1303,7 @@ describe("Property 28: a forbidden inbound edge into a Spa_Package fails, naming
 //
 // The declarer's category is varied across all four kinds that can declare a
 // specifier resolving to a Microservice_Package — a peer Microservice_Package, a
-// Common_Package, a Spa_Package, and the Overseer — and every one must fail with
+// Common_Package, a Spa_Package, and the Entry_Package — and every one must fail with
 // the SAME `[deps:peer]` wording: the message names the declarer's repo-relative
 // directory and the offending specifier and attributes NO Package_Category to
 // the declarer, so one sentence is correct for all four (R7.12). The old clause
@@ -1301,13 +1313,19 @@ describe("Property 28: a forbidden inbound edge into a Spa_Package fails, naming
 // The declarer of each kind is placed so the walk reaches it and resolves the
 // peer specifier: a common/spa declarer is reached by a microservice pointed at
 // it; a peer-microservice declarer is the sole Selected_Microservice; the
-// Overseer is a root under every Selector.
+// Entry_Package is a root under every Selector.
+//
+// The Entry_Package replaces the Overseer as the fourth declarer because the walk
+// roots moved to the Selected_Microservices and the Entry_Package
+// (registry-inversion R9.1), and because R1.11 grants the Entry_Package no
+// exemption from `[deps:peer]` — a manifest of its naming a Microservice_Package
+// is rejected with the same one sentence as any other declarer's.
 //
 // Feature: package-categories, Property 29: A Microservice_Package is never a dependency target, whatever the declarer
 //
 // Validates: Requirements 7.12, 14.5
 
-type DeclarerKind = "microservice" | "common" | "spa" | "overseer";
+type DeclarerKind = "microservice" | "common" | "spa" | "entry";
 
 /**
  * A layout with a Microservice_Package `victim` that some declarer of a chosen
@@ -1329,7 +1347,7 @@ const arbPeerDeclarerCase: fc.Arbitrary<{
       "microservice",
       "common",
       "spa",
-      "overseer",
+      "entry",
     ),
   })
   .filter(
@@ -1358,7 +1376,7 @@ const arbPeerDeclarerCase: fc.Arbitrary<{
         layout: {
           libraries: [],
           microservices: [victim, declarer],
-          overseerDeps: [CONTRACTS.name],
+          entryDeps: [CONTRACTS.name, OVERSEER.name],
         },
         selected: [declarer.dirName],
         declarerDir: declarer.packageDir,
@@ -1366,16 +1384,18 @@ const arbPeerDeclarerCase: fc.Arbitrary<{
       };
     }
 
-    if (kind === "overseer") {
+    if (kind === "entry") {
       return {
         layout: {
           libraries: [],
           microservices: [victim],
-          overseerDeps: [...new Set([CONTRACTS.name, peerSpecifier])].sort(),
+          entryDeps: [
+            ...new Set([CONTRACTS.name, OVERSEER.name, peerSpecifier]),
+          ].sort(),
         },
-        // The Overseer is a root under every Selector; select the victim too.
+        // The Entry_Package is a root under every Selector; select the victim too.
         selected: [victim.dirName],
-        declarerDir: OVERSEER.packageDir,
+        declarerDir: ENTRY_ROOT,
         peerSpecifier,
       };
     }
@@ -1388,7 +1408,7 @@ const arbPeerDeclarerCase: fc.Arbitrary<{
       `${WORKSPACE_SCOPE}/${declarerDir}`,
       [peerSpecifier],
     );
-    const entry = consumerPackage(
+    const reacher = consumerPackage(
       "microservice",
       otherId,
       `${WORKSPACE_SCOPE}/${otherId}`,
@@ -1397,10 +1417,10 @@ const arbPeerDeclarerCase: fc.Arbitrary<{
     return {
       layout: {
         libraries: [declarer],
-        microservices: [victim, entry],
-        overseerDeps: [CONTRACTS.name],
+        microservices: [victim, reacher],
+        entryDeps: [CONTRACTS.name, OVERSEER.name],
       },
-      selected: [entry.dirName],
+      selected: [reacher.dirName],
       declarerDir: declarer.packageDir,
       peerSpecifier,
     };
@@ -1448,7 +1468,7 @@ describe("Property 29: a Microservice_Package is never a dependency target, what
 //
 // The Staged_Dependencies (`resolveDependencySets(...).staged`) are the
 // discovered Consumer_Packages reachable from the Selected_Microservices and the
-// Overseer under the RESTRICTED edge relation that follows every specifier of a
+// Entry_Package under the RESTRICTED edge relation that follows every specifier of a
 // root and of every reached non-Spa_Package, but follows no specifier a
 // Spa_Package declares (R7.14, R9.12). So a reached Spa_Package is arrived at
 // and staged, a Common_Package reachable only via a Spa_Package is NOT staged,
@@ -1490,7 +1510,7 @@ function referenceStaged(
 ): Set<string> {
   const byName = new Map(allPackages(layout).map((pkg) => [pkg.name, pkg]));
 
-  const seed: string[] = [...layout.overseerDeps];
+  const seed: string[] = [...layout.entryDeps];
   for (const dirName of selected) {
     const microservice = layout.microservices.find(
       (pkg) => pkg.dirName === dirName,
@@ -1581,7 +1601,7 @@ describe("Property 31: the Staged_Dependencies equal the SPA-cut reachability or
     const layout: Layout = {
       libraries: [deep, both, ui],
       microservices: [service],
-      overseerDeps: [CONTRACTS.name],
+      entryDeps: [CONTRACTS.name, OVERSEER.name],
     };
 
     const staged = new Set(
@@ -1626,7 +1646,7 @@ describe("Property 31: the Staged_Dependencies equal the SPA-cut reachability or
             ...pkg,
             dependencySpecifiers: [...pkg.dependencySpecifiers].reverse(),
           })),
-          overseerDeps: [...layout.overseerDeps].reverse(),
+          entryDeps: [...layout.entryDeps].reverse(),
         };
         expect(
           stagedOf(permuted, [...selected].reverse()).map(
@@ -1688,7 +1708,7 @@ describe("Feature: spa-common-consumption, Property 5: a Spa_Package's Common_Pa
   const layout: Layout = {
     libraries: [base, shell, frontend],
     microservices: [entry],
-    overseerDeps: [CONTRACTS.name],
+    entryDeps: [CONTRACTS.name, OVERSEER.name],
   };
 
   it("includes every package of the microservice → spa → common → common chain in the Required_Dependencies", () => {
@@ -1743,7 +1763,7 @@ describe("Feature: spa-common-consumption, Property 11: a Spa_Package declaring 
   const layout: Layout = {
     libraries: [frontend],
     microservices: [entry],
-    overseerDeps: [CONTRACTS.name],
+    entryDeps: [CONTRACTS.name, OVERSEER.name],
   };
 
   it("throws [shared:unresolved] naming the Spa_Package directory and the specifier", () => {

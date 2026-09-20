@@ -90,6 +90,10 @@ const FRAMEWORK_DIR_NAMES: readonly string[] = FRAMEWORK_SINGLETONS.map(
 const LIBRARY_CATEGORIES: readonly ConsumerCategory[] = ["common", "spa"];
 
 const MICROSERVICE_PREFIX = `${NAMESPACE_CONTAINER.microservice}/`;
+/** The Entry_Root this run's context threads: the Project_List's last member
+ *  (Build_Sequence statement 6) and one of the two walk roots (registry-inversion
+ *  R8.1, R9.1). */
+const ENTRY_ROOT = CONTEXT.entryRoot;
 
 // ---------------------------------------------------------------------------
 // In-memory layout model (mirrors build-plan.property.test.ts)
@@ -100,8 +104,9 @@ interface Layout {
   readonly libraries: readonly ConsumerPackage[];
   /** Microservice_Packages; their specifiers double as the root specifiers. */
   readonly microservices: readonly ConsumerPackage[];
-  /** The Overseer's declared specifiers (always includes `contracts`). */
-  readonly overseerDeps: readonly string[];
+  /** The Entry_Package's declared specifiers — the walk's non-microservice root
+   *  since registry-inversion R9.1 (always includes `contracts` and `overseer`). */
+  readonly entryDeps: readonly string[];
 }
 
 /** A discovered Consumer_Package placed in its category's Namespace_Container. */
@@ -154,7 +159,7 @@ function discoveryOf(layout: Layout): Discovery {
 /** A `ReadDependencies` reader over a layout's root consumers. */
 function readerFor(layout: Layout): ReadDependencies {
   return (packageDir) => {
-    if (packageDir === OVERSEER.packageDir) return layout.overseerDeps;
+    if (packageDir === ENTRY_ROOT) return layout.entryDeps;
     if (packageDir.startsWith(MICROSERVICE_PREFIX)) {
       const dirName = packageDir.slice(MICROSERVICE_PREFIX.length);
       return (
@@ -212,7 +217,7 @@ function microserviceDir(identifier: string): string {
 /**
  * The Required_Dependencies's declared names, computed by an independent worklist
  * reachability walk (R7.1): start from the Selected_Microservices' and the
- * Overseer's specifiers, ignore anything not `@microservices`-scoped,
+ * Entry_Package's specifiers, ignore anything not `@microservices`-scoped,
  * resolve-but-do-not-follow a Framework_Singleton name, and follow every
  * discovered Consumer_Package edge. The generators produce no peer edge and no
  * dangling specifier, so nothing is dropped silently.
@@ -224,7 +229,7 @@ function requiredNames(
   const frameworkNames = FRAMEWORK_SINGLETONS.map((entry) => entry.name);
   const byName = new Map(allPackages(layout).map((pkg) => [pkg.name, pkg]));
 
-  const queue: string[] = [...layout.overseerDeps];
+  const queue: string[] = [...layout.entryDeps];
   for (const identifier of selected) {
     const microservice = layout.microservices.find(
       (pkg) => pkg.dirName === identifier,
@@ -250,8 +255,10 @@ function requiredNames(
  * The expected member SET of the Project_List for a layout and a resolved
  * identifier list, computed independently of the derivation: `packages/contracts`
  * (a Framework_Singleton, always a root — R5.4, R5.5), the required
- * Common_Packages, each selected microservice's directory, and
- * `packages/overseer`. The Required_Dependencies are filtered on `category === "common"` where
+ * Common_Packages, each selected microservice's directory, `packages/overseer`,
+ * and the Entry_Root (registry-inversion R8.1 — statement 6 is unconditional, so
+ * the Entry_Package is a member of every Project_List). The
+ * Required_Dependencies are filtered on `category === "common"` where
  * production filters on the derived `buildKind`, so the Spa exclusion (R13.4) is
  * restated here rather than inherited. Order is not asserted here — that is a
  * separate property.
@@ -269,13 +276,14 @@ function expectedMembers(
   }
   for (const identifier of selected) members.add(microserviceDir(identifier));
   members.add(OVERSEER.packageDir);
+  members.add(ENTRY_ROOT);
   return members;
 }
 
 /**
  * Every declared dependency edge of a layout, as (dependency dir, dependent dir)
  * pairs: each library → its specifiers, each selected microservice → its
- * specifiers, and the Overseer → its specifiers. A specifier naming `contracts`
+ * specifiers, and the Entry_Package → its specifiers. A specifier naming `contracts`
  * becomes an edge from the Framework_Singleton's directory, so the "contracts
  * ahead of everything naming it" clause is checked over a real edge rather than
  * assumed from contracts being first. Used to assert R13.6 directly against the
@@ -309,7 +317,7 @@ function edgesFor(
       add(microservice.dependencySpecifiers, microservice.packageDir);
     }
   }
-  add(layout.overseerDeps, OVERSEER.packageDir);
+  add(layout.entryDeps, ENTRY_ROOT);
 
   return edges;
 }
@@ -429,11 +437,11 @@ const arbLayout: fc.Arbitrary<Layout> = fc
 
       return arbMicroservices(libraryNames, libraryDirNames).chain(
         (microservices) =>
-          fc.subarray([...libraryNames]).map((extraOverseerDeps) => ({
+          fc.subarray([...libraryNames]).map((extraEntryDeps) => ({
             libraries,
             microservices,
-            overseerDeps: [
-              ...new Set([CONTRACTS.name, ...extraOverseerDeps]),
+            entryDeps: [
+              ...new Set([CONTRACTS.name, OVERSEER.name, ...extraEntryDeps]),
             ].sort(),
           })),
       );
@@ -493,7 +501,7 @@ const arbRequiredSpaCase: fc.Arbitrary<{
 // ---------------------------------------------------------------------------
 
 describe("Property 1: Project_List membership and topological order", () => {
-  it("membership equals contracts plus the required Common_Packages plus the selected microservices plus the Overseer", () => {
+  it("membership equals contracts plus the required Common_Packages plus the selected microservices plus the Overseer plus the Entry_Package", () => {
     fc.assert(
       fc.property(arbLayoutAndSelection, ({ layout, selected }) => {
         const selector = selected.join(",");
@@ -585,7 +593,7 @@ describe("Property 1: Project_List membership and topological order", () => {
     );
   });
 
-  it("places packages/contracts first, every selected microservice next, and packages/overseer last", () => {
+  it("places packages/contracts first, every selected microservice next, packages/overseer after them, and the Entry_Package last", () => {
     fc.assert(
       fc.property(arbLayoutAndSelection, ({ layout, selected }) => {
         const selector = selected.join(",");
@@ -597,8 +605,13 @@ describe("Property 1: Project_List membership and topological order", () => {
 
         expect(list[0]).toBe(CONTRACTS.packageDir);
 
+        // registry-inversion R8.1: statement 6's Entry_Package is last, and
+        // statement 5's Overseer_Library immediately before it.
+        const entryIndex = list.indexOf(ENTRY_ROOT);
+        expect(entryIndex).toBe(list.length - 1);
+
         const overseerIndex = list.indexOf(OVERSEER.packageDir);
-        expect(overseerIndex).toBe(list.length - 1);
+        expect(overseerIndex).toBe(entryIndex - 1);
 
         for (const identifier of resolved) {
           const index = list.indexOf(microserviceDir(identifier));

@@ -11,21 +11,25 @@
 // Build_System entry point — the compiled `generate-registry` bin — over a
 // `pristineWorktree()` copy whose `scaffold.config.json` sets BOTH a scope other
 // than `@microservices` (`@acme`) AND all three roots away from their defaults
-// (`services`, `libs`, `web`). The copy carries synthesised Consumer_Packages
+// (`services`, `libs`, `web`) AND an Entry_Root away from the Entry_Root_Default
+// (`runner` rather than `app`, registry-inversion R1.3). The copy carries
+// synthesised Consumer_Packages
 // under those relocated roots, named under the configured scope, plus a
 // `workspaces` array covering them (npm reads that array statically to create the
 // scoped symlinks). The copy's directory is passed as BOTH the Project_Directory
 // and the spawn `cwd`, so the bin loads `scaffold.config.json` relative to it and
 // discovers under the configured roots.
 //
-// The observable: the generated Microservice_Registry imports the selected
-// synthesised microservice under the CONFIGURED scope (`@acme/<id>`) and its
-// `sourcePackage` carries that scope — proving the loaded scope and the loaded
-// roots both thread all the way through discovery and registry generation, from
+// The observable: the generated Microservice_Registry lands under the CONFIGURED
+// Entry_Root and imports the selected synthesised microservice under the
+// CONFIGURED scope (`@acme/<id>`), its `sourcePackage` carrying that scope —
+// proving the loaded scope, the loaded roots, and the loaded Entry_Root all thread
+// the whole way through discovery, path derivation, and registry generation, from
 // a real spawned process reading a real file. A run that read a baked-in
-// `@microservices` scope or a baked-in `packages/microservices` root would import
-// nothing (the relocated roots hold no default-named package) or emit the wrong
-// scope, and this suite would fail.
+// `@microservices` scope, a baked-in `packages/microservices` root, or a baked-in
+// `app` Entry_Root would import nothing (the relocated roots hold no default-named
+// package), emit the wrong scope, or write the registry somewhere this suite does
+// not look — and this suite would fail.
 //
 // --- This suite NEVER touches the real working tree -------------------------
 // The `scaffold.config.json`, the relocated root directories, the synthesised
@@ -33,8 +37,8 @@
 // `pristineWorktree()` copy — an OS temp directory. NO `scaffold.config.json` and
 // NO package directory is ever created in the checked-out repository: an
 // untracked config file would change what every other suite reads, which is
-// exactly what Requirement 13.6 forbids. The registry the bin writes lands in the
-// copy's own `packages/overseer/src/generated/`, not the real tree. Teardown
+// exactly what Requirement 13.6 forbids. The registry the bin writes lands under
+// the copy's own configured Entry_Root, not the real tree. Teardown
 // removes the copy — including on failure — via `afterAll`; there is nothing in
 // the real tree to undo. This follows `dev-session-scope.test.ts`.
 //
@@ -42,7 +46,7 @@
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pristineWorktree, type PristineWorktreeResult } from "./helpers.js";
 
@@ -53,6 +57,10 @@ const SCOPE = "@acme";
 const MS_ROOT = "services";
 const COMMON_ROOT = "libs";
 const SPA_ROOT = "web";
+// The Entry_Root, away from the Entry_Root_Default `app` and colliding with none
+// of the eight reserved paths, so the Config_Parser accepts it
+// (registry-inversion R1.4, R1.6).
+const ENTRY_ROOT = "runner";
 
 // One synthesised microservice and one common library under the relocated roots.
 const MS_ID = "gateway";
@@ -69,12 +77,17 @@ const TEST_TIMEOUT_MS = 900_000;
 
 /** The compiled generate-registry bin, relative to the copy root. */
 const GENERATE_REGISTRY_BIN = "packages/build-tools/dist/bin/generate-registry.js";
-/** Where the bin writes the registry, relative to the copy root. */
-const REGISTRY_OUT = "packages/overseer/src/generated/microservice-registry.ts";
-/** The committed registry template, whose scoped specifiers must match the
- *  configured scope for a later Overseer compile; rewritten inside the copy. */
-const REGISTRY_TEMPLATE =
-  "packages/overseer/src/generated/microservice-registry.template.ts";
+/** Where the bin writes the registry, relative to the copy root: under the
+ *  CONFIGURED Entry_Root, not under a Framework_Singleton and not under the
+ *  Entry_Root_Default (registry-inversion R4.1). Spelled out here rather than
+ *  imported, so the suite's expectation is independent of the derivation. */
+const REGISTRY_OUT = `${ENTRY_ROOT}/src/generated/microservice-registry.ts`;
+/** The retired location, which no run may write any more. */
+const RETIRED_REGISTRY_OUT =
+  "packages/overseer/src/generated/microservice-registry.ts";
+/** The Entry_Root_Default's location, which a run under this config may not write
+ *  either — the Entry_Root is a configured value, not a constant. */
+const DEFAULT_REGISTRY_OUT = "app/src/generated/microservice-registry.ts";
 
 let pristine: PristineWorktreeResult | undefined;
 /** The generated registry bytes, captured after the spawned bin ran. */
@@ -117,8 +130,31 @@ function commonManifest(): string {
   );
 }
 
+/** A minimal Entry_Package manifest under the configured scope, named as
+ *  registry-inversion R1.10 requires: the scope, `/`, and the Entry_Root's last
+ *  segment. */
+function entryManifest(): string {
+  return (
+    JSON.stringify(
+      {
+        name: `${SCOPE}/${ENTRY_ROOT}`,
+        version: "0.0.0",
+        private: true,
+        type: "module",
+        dependencies: {
+          [`${SCOPE}/contracts`]: "*",
+          [`${SCOPE}/overseer`]: "*",
+        },
+      },
+      null,
+      2,
+    ) + "\n"
+  );
+}
+
 /** Rewrite the root package.json `workspaces` array so it covers the relocated
- *  roots (npm reads it statically). Preserves the framework entries. */
+ *  roots and the relocated Entry_Root (npm reads it statically). Preserves the
+ *  framework entries. */
 function rewriteWorkspaces(root: string): void {
   const manifestPath = resolve(root, "package.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
@@ -130,6 +166,7 @@ function rewriteWorkspaces(root: string): void {
     "packages/overseer",
     "packages/build-tools",
     "packages/integration-tests",
+    ENTRY_ROOT,
     `${MS_ROOT}/*`,
     `${COMMON_ROOT}/*`,
     `${SPA_ROOT}/*`,
@@ -155,26 +192,35 @@ beforeAll(() => {
   mkdirSync(commonDir, { recursive: true });
   writeFileSync(resolve(commonDir, "package.json"), commonManifest());
 
-  // The non-default configuration, written INSIDE the copy only.
+  // The Entry_Package at the relocated Entry_Root: a manifest alone, since the
+  // generate-registry bin reads no content of the Entry_Module and writes the
+  // registry into a directory it creates itself. It exists so the `workspaces`
+  // entry below names a real directory.
+  const entryDir = resolve(dir, ENTRY_ROOT);
+  mkdirSync(entryDir, { recursive: true });
+  writeFileSync(resolve(entryDir, "package.json"), entryManifest());
+
+  // The non-default configuration, written INSIDE the copy only. All four
+  // recognised values differ from their defaults.
   writeFileSync(
     resolve(dir, "scaffold.config.json"),
     JSON.stringify(
-      { scope: SCOPE, roots: { microservice: MS_ROOT, common: COMMON_ROOT, spa: SPA_ROOT } },
+      {
+        scope: SCOPE,
+        entry: ENTRY_ROOT,
+        roots: { microservice: MS_ROOT, common: COMMON_ROOT, spa: SPA_ROOT },
+      },
       null,
       2,
     ) + "\n",
   );
 
-  // Cover the relocated roots in the root `workspaces` array (membership, not
-  // order), and rewrite the committed registry template's scope to match the
-  // configured scope so a later Overseer compile would resolve — both inside the
-  // copy only.
+  // Cover the relocated roots and the relocated Entry_Root in the root
+  // `workspaces` array (membership, not order), inside the copy only. No registry
+  // template is rewritten: there is none — the Registry_Template was retired, and
+  // the generator now writes a complete registry into the consumer's tree
+  // (registry-inversion R3.6, R5.1).
   rewriteWorkspaces(dir);
-  const template = readFileSync(resolve(dir, REGISTRY_TEMPLATE), "utf8");
-  writeFileSync(
-    resolve(dir, REGISTRY_TEMPLATE),
-    template.split("@microservices/").join(`${SCOPE}/`),
-  );
 
   // Build the compiled bin's chain (contracts, then build-tools) inside the
   // copy. Only these two are needed to run generate-registry.
@@ -258,6 +304,36 @@ describe("Build_System end-to-end under a non-default scope and relocated roots 
         ...text.matchAll(/\{ identifier: "([^"]+)"/g),
       ].map((match) => match[1]);
       expect(identifierLines).toEqual([MS_ID]);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "writes the registry under the CONFIGURED Entry_Root and nowhere else",
+    () => {
+      if (pristine === undefined || pristine.available !== true) {
+        return; // reason already reported by the skip case above
+      }
+      const dir = pristine.dir;
+
+      // The configured Entry_Root is where the registry landed — the `entry` value
+      // is threaded end-to-end just like the scope and the three roots
+      // (registry-inversion R4.1, R13.2).
+      expect(existsSync(resolve(dir, REGISTRY_OUT))).toBe(true);
+
+      // And nowhere else. Not the retired location under the Overseer
+      // Framework_Singleton — no run writes under a Framework_Singleton's directory
+      // any more (R4.1) — and not the Entry_Root_Default's location, which would
+      // mean a component read a literal instead of the threaded Effective_Config.
+      expect(
+        existsSync(resolve(dir, RETIRED_REGISTRY_OUT)),
+        "a registry was written under the retired location beneath the Overseer",
+      ).toBe(false);
+      expect(
+        existsSync(resolve(dir, DEFAULT_REGISTRY_OUT)),
+        "a registry was written at the Entry_Root_Default, so the configured " +
+          "Entry_Root was not the value the generator used",
+      ).toBe(false);
     },
     TEST_TIMEOUT_MS,
   );

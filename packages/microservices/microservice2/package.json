@@ -17,6 +17,7 @@
     "express": "^5.1.0"
   },
   "devDependencies": {
+    "@microservices/build-tools": "*",
     "@types/express": "^5.0.0"
   }
 }

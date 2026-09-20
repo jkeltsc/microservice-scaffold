@@ -3,9 +3,13 @@
 //
 // The check is step 1 of the build pipeline, called by image-tree.ts's
 // `buildImageTree` before anything else runs. Every other module under
-// `packages/build-tools/src/` takes category directories and the Overseer
-// entrypoint from here (R10.2-R10.5); the scope-composed framework NAMES live on
-// the project context, not here (R3.7).
+// `packages/build-tools/src/` takes category directories from here
+// (R10.2-R10.5); the scope-composed framework NAMES live on the project context,
+// not here (R3.7).
+//
+// No Framework_Singleton's compiled path is named here in the entrypoint role:
+// the Entry_Point_Path is derived once, on the project context, as
+// `context.entryPointPath` (registry-inversion R7.1, R7.2).
 //
 // Framework packages are known by their directories, and declared here. The
 // packages a template user writes are named nowhere: discovery.ts finds those by
@@ -86,12 +90,14 @@ export const CONTRACTS: FrameworkDirectory = frameworkDirectory(
   "scoped-node-modules",
 );
 
-/** The routing frontend. Staged at its package directory because the entrypoint
- *  invokes it by path; its generated registry imports the microservices, so the
- *  Build_Sequence emits it after them. */
+/** The routing frontend, now a library: the Entry_Package imports it by name, so
+ *  it is staged as a real directory under the scope directory like any other
+ *  imported-by-name package, and no longer at its own package directory
+ *  (registry-inversion R3.7). The package directory staging belongs to the
+ *  Entry_Package, which is no Framework_Singleton. */
 export const OVERSEER: FrameworkDirectory = frameworkDirectory(
   OVERSEER_DIR!,
-  "package-dir",
+  "scoped-node-modules",
 );
 
 /** The Build_System itself. Compiled by the image's bootstrap step, never a root
@@ -124,10 +130,6 @@ export const ALWAYS_STAGED_SCOPED_ENTRIES: readonly string[] =
   FRAMEWORK_DIRECTORIES.filter(
     (entry) => entry.staging === "scoped-node-modules",
   ).map((entry) => entry.dirName);
-
-/** The Overseer's compiled entrypoint, `packages/overseer/dist/index.js`. POSIX
- *  separators: this is a build and spawn argument, not a host path (R10.1). */
-export const OVERSEER_ENTRYPOINT = `${OVERSEER.packageDir}/dist/index.js`;
 
 /**
  * Builds the error for absent framework directories: one clause per offender, so

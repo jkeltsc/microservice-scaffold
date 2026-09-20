@@ -363,21 +363,27 @@ describe("the ordered build precedes the first test and the Overseer spawn (R11.
     expect(scripts.test ?? "").toContain("vitest --run");
   });
 
-  it("start.js runs the ordered build before it spawns the Overseer (R11.5, 2.10, 2.15)", () => {
+  it("start.js runs the ordered build before it spawns the Entry_Point_Path (R11.5, 2.10, 2.15)", () => {
     // scripts/start.js is a straight-line script. After the step-3 change
     // (task 6.1) its full build no longer goes through `npm run build
     // --workspaces` — the Declared_Array_Sequence — but through the compiled
     // ordered `build-workspaces` bin, whose order comes from the
     // Build_Sequence-derived Workspace_Build_Order (2.10, 2.15). That ordered
-    // build must run before it spawns the Overseer entrypoint, so the ordered
+    // build must run before it spawns the project's entrypoint, so the ordered
     // build (the Demo_Spa's build among it) is observed to exit 0 before the
-    // Overseer process starts.
+    // server process starts.
+    //
+    // Since the registry inversion the module spawned is the Entry_Point_Path, read
+    // off the compiled ProjectContext as `context.entryPointPath` — no
+    // Framework_Singleton's compiled path is named in that role, so there is no
+    // literal path to look for and the derivation IS the marker
+    // (registry-inversion R7.1, R7.2, R10.6).
     const startSource = readFileSync(
       resolve(repoRoot, "scripts", "start.js"),
       "utf8",
     );
     // Strip comments so the ordering is asserted over executable statements
-    // only — the file documents the Overseer entrypoint path and the ordered
+    // only — the file documents the entrypoint derivation and the ordered
     // bin's guarantee in comments.
     const code = startSource
       .replace(/\/\*[\s\S]*?\*\//g, "")
@@ -389,13 +395,16 @@ describe("the ordered build precedes the first test and the Overseer spawn (R11.
     const orderedBinPos = code.indexOf(
       "packages/build-tools/dist/bin/build-workspaces.js",
     );
-    const overseerSpawnPos = code.indexOf("packages/overseer/dist/index.js");
+    const entrySpawnPos = code.indexOf("context.entryPointPath");
 
     expect(orderedBinPos).toBeGreaterThanOrEqual(0);
-    expect(overseerSpawnPos).toBeGreaterThanOrEqual(0);
-    // The ordered build precedes the Overseer spawn textually and, this being a
+    expect(entrySpawnPos).toBeGreaterThanOrEqual(0);
+    // The ordered build precedes the entrypoint spawn textually and, this being a
     // straight-line script, logically.
-    expect(orderedBinPos).toBeLessThan(overseerSpawnPos);
+    expect(orderedBinPos).toBeLessThan(entrySpawnPos);
+    // And no Framework_Singleton's compiled path stands in the entrypoint role
+    // (registry-inversion R7.2).
+    expect(code).not.toContain("packages/overseer/dist/index.js");
 
     // start.js does not fall back to the Declared_Array_Sequence anywhere: it
     // invokes no `npm run build --workspaces`. (The suite's `no scripts/*.js

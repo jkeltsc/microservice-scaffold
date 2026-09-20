@@ -18,7 +18,18 @@
 // every declared framework directory. `projectContext` is pure and total over
 // any EffectiveConfig and touches no filesystem, so no tree is materialised.
 //
+// Since registry-inversion the same derivation also yields the Entry_Root and
+// the Entry_Point_Path, and they join the rules asserted here on the same terms
+// (R1.3, R7.1): `entryRoot` is `config.entry` character for character, and
+// `entryPointPath` is that string joined to `dist/index.js` by a single `/` with
+// no normalisation of either part. Purity and totality are asserted over a
+// deliberately wider `entry` input space than the Config_Parser would accept —
+// any string at all, an empty one and a whitespace-only one included — because
+// `projectContext` is total over any EffectiveConfig and validation is the
+// parser's job, not the derivation's.
+//
 // Validates: Requirements 1.9, 3.6, 3.7, 3.8
+// Validates: registry-inversion Requirements 1.3, 7.1
 
 import { describe, expect, it } from "vitest";
 import * as fc from "fast-check";
@@ -50,6 +61,47 @@ const configWithScope = (): fc.Arbitrary<EffectiveConfig> =>
   validScope().map((scope) => ({
     ...defaultEffectiveConfig(),
     scope,
+  }));
+
+/**
+ * Any `entry` value an EffectiveConfig can carry — the derivation is total over
+ * all of them, so the pool is deliberately wider than the Config_Parser's
+ * accepted set: plain relative paths, then strings the parser would reject
+ * (absolute, trailing slash, backslash, dot segments, empty, whitespace-only,
+ * a trailing space) and non-ASCII, mixed-case, and free-form text. Every one of
+ * them must come back verbatim, which is what "no normalisation" means.
+ */
+const anyEntryRoot = (): fc.Arbitrary<string> =>
+  fc.oneof(
+    fc.constantFrom(
+      "app",
+      "apps/server",
+      "a",
+      "App",
+      "my-app/nested/deep",
+      "",
+      " ",
+      "   ",
+      "app ",
+      " app",
+      "/app",
+      "app/",
+      "app\\win",
+      "./app",
+      "../app",
+      "app//double",
+      "packages/app",
+      "ünïcode-app",
+    ),
+    fc.string(),
+  );
+
+/** An Effective_Config over a generated scope AND a generated Entry_Root. */
+const configWithEntry = (): fc.Arbitrary<EffectiveConfig> =>
+  fc.tuple(validScope(), anyEntryRoot()).map(([scope, entry]) => ({
+    ...defaultEffectiveConfig(),
+    scope,
+    entry,
   }));
 
 describe("projectContext: framework name composition (R3.7) and lookup (R3.8)", () => {
@@ -90,6 +142,67 @@ describe("projectContext: framework name composition (R3.7) and lookup (R3.8)", 
       }),
       { numRuns: 200 },
     );
+  });
+
+  it("derives entryRoot verbatim and entryPointPath as entryRoot + '/dist/index.js'", () => {
+    fc.assert(
+      fc.property(configWithEntry(), (config) => {
+        const context = projectContext(config);
+
+        // R1.3 — the Entry_Root is `config.entry` character for character: no
+        // trimming, no separator normalisation, no case normalisation.
+        expect(context.entryRoot).toBe(config.entry);
+
+        // R7.1 — the Entry_Point_Path is the Entry_Root joined to
+        // `dist/index.js` by a single `/`, neither part normalised. Composed
+        // here from the config's own value, so the assertion states the rule
+        // rather than reading the context's `entryRoot` back to itself.
+        expect(context.entryPointPath).toBe(`${config.entry}/dist/index.js`);
+        expect(context.entryPointPath).toBe(
+          `${context.entryRoot}/dist/index.js`,
+        );
+
+        // The Entry_Root is a sibling of the roots, not a member of them: the
+        // three Discovery_Roots are untouched by the entry derivation, and no
+        // category's root is the Entry_Root's source.
+        expect(context.roots).toEqual(config.roots);
+
+        // The joined suffix appears exactly once and at the very end, so the
+        // derivation appends rather than interpolating anywhere else.
+        expect(
+          context.entryPointPath.endsWith(`${config.entry}/dist/index.js`),
+        ).toBe(true);
+        expect(context.entryPointPath.length).toBe(
+          config.entry.length + "/dist/index.js".length,
+        );
+      }),
+      { numRuns: 200 },
+    );
+  });
+
+  it("is pure: two derivations from one config yield equal entry values, and nothing mutates the config", () => {
+    fc.assert(
+      fc.property(configWithEntry(), (config) => {
+        const first = projectContext(config);
+        const second = projectContext(config);
+
+        // Total and pure over any EffectiveConfig: the same input yields the
+        // same strings, and the input object is left alone.
+        expect(second.entryRoot).toBe(first.entryRoot);
+        expect(second.entryPointPath).toBe(first.entryPointPath);
+        expect(config.entry).toBe(first.entryRoot);
+        expect(first.config).toBe(config);
+      }),
+      { numRuns: 200 },
+    );
+  });
+
+  it("derives the repository's own Entry_Root from the default Effective_Config", () => {
+    // The unconfigured case, which is this repository's: `entry` takes the
+    // Entry_Root_Default, and the Entry_Point_Path follows from it.
+    const context = projectContext(defaultEffectiveConfig());
+    expect(context.entryRoot).toBe("app");
+    expect(context.entryPointPath).toBe("app/dist/index.js");
   });
 
   it("resolves frameworkByName exactly and case-sensitively", () => {

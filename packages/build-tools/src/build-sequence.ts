@@ -7,10 +7,12 @@
 // of the order exists.
 //
 // The module consults no per-package build-order position metadata (2.2): the
-// framework members of statements 1, 2, 5 and 6 are named by name through
-// framework.ts's exported records, not read from a manifest or a declared
-// position. It touches no filesystem and reads no `process` state — that purity
-// is what lets the properties over generated layouts run against it (2.13).
+// framework members of statements 1, 2, 5 and 7 are named by name through
+// framework.ts's exported records, and statement 6's single member — the
+// Entry_Package — is named by the threaded Entry_Root, not read from a manifest
+// or a declared position. It touches no filesystem and reads no `process` state
+// — that purity is what lets the properties over generated layouts run against
+// it (2.13).
 //
 // It also owns the Verification_Pass (§3, requirements 2.13, 2.14, 3.14): the
 // single check that fails a produced order carrying an Ordering_Violation and
@@ -41,12 +43,17 @@ export interface SequenceMembership {
   readonly common: readonly ConsumerPackage[];
   /** Statement 4's members, as Microservice_Identifiers. */
   readonly microservices: readonly string[];
-  /** Statement 7's members: the Spa_Packages this derivation orders. */
+  /** Statement 8's members: the Spa_Packages this derivation orders. */
   readonly spa: readonly ConsumerPackage[];
   /** Statement 2. False on the image and dev paths (3.15). */
   readonly buildTools: boolean;
-  /** Statement 6. False on the image and dev paths (3.15). */
+  /** Statement 7. False on the image and dev paths (3.15). */
   readonly testOnly: boolean;
+  // No `entry` field, deliberately: statements 2 and 7 carry flags because
+  // `build-tools` and `integration-tests` are excluded on the image and dev
+  // paths, whereas statement 6's Entry_Package is compiled on *every*
+  // Order_Producing_Path (registry-inversion R8.7). A flag would be a switch
+  // with no `false` caller.
 }
 
 /** One entry of a produced order, carrying the statement that placed it. */
@@ -54,8 +61,20 @@ export interface SequencedPackage {
   readonly packageDir: string;
   /** The declared package name; `runOrderedBuild` invokes `--workspace <name>`. */
   readonly name: string;
-  /** 1..7, the statement of 2.1 that emitted it. */
-  readonly statement: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  /** 1..8, the statement of 2.1 that emitted it (registry-inversion R8.1, R8.3). */
+  readonly statement: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+}
+
+/**
+ * The last `/`-separated segment of a Project_Directory-relative POSIX path.
+ *
+ * Used to compose the Entry_Package's declared name from the Entry_Root, exactly
+ * as registry-inversion R1.10 requires its manifest to spell it: the
+ * Configured_Scope, `/`, and the Entry_Root's last segment. A root with no `/`
+ * (the Entry_Root_Default `app`) is its own last segment.
+ */
+function lastSegment(path: string): string {
+  return path.slice(path.lastIndexOf("/") + 1);
 }
 
 /**
@@ -152,19 +171,21 @@ function commonOrder(
 /**
  * The Build_Sequence: the fixed statement order of 2.1 applied to one membership.
  *
- * The seven statements run literally and in order — `contracts`, `build-tools`
+ * The eight statements run literally and in order — `contracts`, `build-tools`
  * (when included), the Common_Packages in calculated order, the microservices in
- * `packageDir` order, the Overseer, the test-only Framework_Singletons (when
- * included), and finally the Spa_Packages in `packageDir` order as a trailing
- * phase (2.4). Statements 4 and 7 iterate in `compareCodePoints` order of
- * `packageDir` for reproducibility, no correctness resting on it (2.3).
+ * `packageDir` order, the Overseer, the Entry_Package, the test-only
+ * Framework_Singletons (when included), and finally the Spa_Packages in
+ * `packageDir` order as a trailing phase (2.4, registry-inversion R8.1, R8.2).
+ * Statements 4 and 8 iterate in `compareCodePoints` order of `packageDir` for
+ * reproducibility, no correctness resting on it (2.3).
  *
- * Consults no per-package position metadata (2.2): statements 1, 2, 5 and 6 name
- * their framework members through framework.ts's exported records.
+ * Consults no per-package position metadata (2.2): statements 1, 2, 5 and 7 name
+ * their framework members through framework.ts's exported records, and statement
+ * 6 names its single member through the threaded Entry_Root.
  *
  * @param context the per-run context; supplies the four Framework_Singleton
- *   records, the microservice Discovery_Root, and every scoped name (R1.9, R10.7,
- *   R10.8).
+ *   records, the microservice Discovery_Root, the Entry_Root, and every scoped
+ *   name (R1.9, R10.7, R10.8, registry-inversion R8.1).
  * @throws `[build-order:cycle]` when statement 3's calculated order cannot be
  *   computed, with the existing wording (3.14).
  */
@@ -222,16 +243,29 @@ export function buildSequence(
     statement: 5,
   });
 
-  // Statement 6 — the test-only Framework_Singletons, when included.
+  // Statement 6 — the Entry_Package, strictly after the Overseer and after every
+  // Selected_Microservice, strictly before the test-only Framework_Singletons
+  // (registry-inversion R8.1). Unconditional: every Order_Producing_Path compiles
+  // it, so `SequenceMembership` carries no flag for it (R8.7). Its name is
+  // composed exactly as R1.10 requires its manifest to spell it, so the sequence
+  // reads no manifest to name the package it hands to `--workspace` and holds no
+  // scope literal (R6.4).
+  sequenced.push({
+    packageDir: context.entryRoot,
+    name: context.scopedName(lastSegment(context.entryRoot)),
+    statement: 6,
+  });
+
+  // Statement 7 — the test-only Framework_Singletons, when included.
   if (membership.testOnly) {
     sequenced.push({
       packageDir: integrationTests.packageDir,
       name: integrationTests.name,
-      statement: 6,
+      statement: 7,
     });
   }
 
-  // Statement 7 — the Spa_Packages, a trailing bundler phase (2.4).
+  // Statement 8 — the Spa_Packages, a trailing bundler phase (2.4, R8.2).
   const spa = [...membership.spa].sort((a, b) =>
     compareCodePoints(a.packageDir, b.packageDir),
   );
@@ -239,7 +273,7 @@ export function buildSequence(
     sequenced.push({
       packageDir: pkg.packageDir,
       name: pkg.name,
-      statement: 7,
+      statement: 8,
     });
   }
 
@@ -323,26 +357,37 @@ export function dependencyKeysOf(
  * Builds the Prerequisite_Graph for one produced order (2.6).
  *
  * Its edges are every declared `@microservices`-scoped specifier that resolves to
- * a **non-Spa** package, plus the `Overseer → Selected_Microservice` edges the
- * generated Microservice_Registry creates by statically importing each selected
+ * a **non-Spa** package, plus the `Selected_Microservice → Entry_Package` edges
+ * the Generated_Registry creates by statically importing each selected
  * microservice. The Spa_Package exclusion is unconditional: no Tsc_Project ever
  * compiles against a Spa_Package (it is reached through a run-time
  * module-resolution call), so a declared `microservice → spa` or `overseer → spa`
  * dependency is a staging fact, never an ordering one (2.6).
  *
- * The `Overseer → Selected_Microservice` edges are synthesised here rather than
- * declared, for two independent reasons that make no manifest able to carry them
- * (1.8, 1.9): `required-dependencies.ts`'s `peerDependencyError` rejects any
- * manifest naming a Microservice_Package with `[deps:peer]` and grants the
- * Overseer no exemption, and the set of microservices is Selector-dependent
- * anyway. No manifest gains such a dependency as part of this fix, and the
- * resolver keeps rejecting one (3.12) — so the edge exists only in this graph.
+ * The `Selected_Microservice → Entry_Package` edges are synthesised here rather
+ * than declared, for two independent reasons that make no manifest able to carry
+ * them (1.8, 1.9, registry-inversion R8.4): `required-dependencies.ts`'s
+ * `peerDependencyError` rejects any manifest naming a Microservice_Package with
+ * `[deps:peer]` and grants the Entry_Package no exemption (R1.11), and the set of
+ * microservices is Selector-dependent anyway. No manifest gains such a dependency,
+ * and the resolver keeps rejecting one (3.12) — so the edge exists only in this
+ * graph.
+ *
+ * No `microservice → overseer` edge is synthesised in their place (R8.4): the fact
+ * that edge recorded has stopped being true, the Overseer no longer importing a
+ * generated file, so nothing in its compilation reads a microservice's compiled
+ * output (R3.4). The `Overseer → Entry_Package` edge is *declared*, not
+ * synthesised (R8.5): the Entry_Package names the scoped `overseer` package in its
+ * own `dependencies` (R1.10), so it arrives through the declared-edge loop below
+ * like any other, as does the `contracts → Entry_Package` edge.
  *
  * @param context the per-run context; supplies the microservice Discovery_Root
- *   and the Overseer's package directory for the synthesised edges (R10.8).
- * @param nodes every workspace package, as `workspaceNodesFrom` collects them.
+ *   and the Entry_Root for the synthesised edges (R10.8, R8.4).
+ * @param nodes every workspace package, as `workspaceNodesFrom` collects them —
+ *   the Entry_Package (tier `"entry"`) among them, which is what makes its
+ *   declared edges ordinary declared edges.
  * @param selectedMicroservices the identifiers the Selector resolved to; each
- *   becomes the prerequisite of an `Overseer →` edge.
+ *   becomes the prerequisite of a `→ Entry_Package` edge.
  * @throws `[shared:unresolved]` with the existing wording for a scoped specifier
  *   matching no declared package name (3.14).
  */
@@ -376,13 +421,14 @@ export function prerequisiteEdges(
     }
   }
 
-  // Synthesised edges: the Overseer's registry imports each Selected_Microservice
-  // (1.8, 1.9). De-duplicated so a repeated identifier in the Selector adds one
-  // edge, matching the solution builder treating a repeated root as a no-op.
+  // Synthesised edges: the Generated_Registry the Entry_Package compiles statically
+  // imports each Selected_Microservice (1.8, 1.9, registry-inversion R8.4).
+  // De-duplicated so a repeated identifier in the Selector adds one edge, matching
+  // the solution builder treating a repeated root as a no-op.
   for (const identifier of new Set(selectedMicroservices)) {
     edges.push({
       prerequisite: `${context.roots.microservice}/${identifier}`,
-      dependent: context.framework.overseer.packageDir,
+      dependent: context.entryRoot,
     });
   }
 
@@ -390,8 +436,11 @@ export function prerequisiteEdges(
 }
 
 /** The statements whose within-statement order is not guaranteed (D3, 2.13):
- *  statement 3 is an Ordered_Statement and is deliberately absent. */
-const UNORDERED_STATEMENTS: ReadonlySet<number> = new Set([4, 6, 7]);
+ *  statement 3 is an Ordered_Statement and is deliberately absent, and so is
+ *  statement 6, which has exactly one member — so no edge can have both endpoints
+ *  in it and the Entry_Package's violations are always positional (R8.6). The same
+ *  three sets of members as before, under their new numbers. */
+const UNORDERED_STATEMENTS: ReadonlySet<number> = new Set([4, 7, 8]);
 
 /**
  * Builds a `[build-order:prerequisite]` positional finding: a package placed

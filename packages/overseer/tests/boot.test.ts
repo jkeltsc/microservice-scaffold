@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import type { MicroserviceRegistry, RegistryEntry } from '@microservices/contracts';
-import { buildExpressRouter } from '@microservices/contracts/testing';
+import { buildExpressRouter } from '@microservices/build-tools/dist/testing/index.js';
 
 import { boot } from '../src/boot.js';
 import { toggleVarName } from '../src/toggles.js';

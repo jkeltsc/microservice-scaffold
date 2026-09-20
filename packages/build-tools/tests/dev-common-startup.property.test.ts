@@ -21,30 +21,29 @@
 // success path both entry points exercise, not the unmatched-identifier error
 // path, which sibling tests already cover.
 //
-// The generated registry at packages/overseer/src/generated/microservice-registry.ts
-// is mutated by every invocation, so its original content is captured before
-// the suite runs and restored afterwards, leaving the working tree as found.
+// The Generated_Registry under the Entry_Root is mutated by every invocation, so
+// its original bytes are captured before the suite runs and written back
+// afterwards with a filesystem write — never through git — leaving the working
+// tree as found. If no registry was present before the run, the file is removed
+// instead. It is one of the three paths a test may write in place
+// (registry-inversion R12.2, R12.3).
 //
 // Validates: Requirements 11.3
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as fc from "fast-check";
 
 import { discoverPackages } from "../src/discovery.js";
-import { generateRegistry } from "../src/generate-registry.js";
+import {
+  generateRegistry,
+  generatedRegistryPath,
+} from "../src/generate-registry.js";
 import { defaultEffectiveConfig } from "../src/project-config.js";
 import { projectContext } from "../src/project-context.js";
 import { resolveSelected } from "../src/selector.js";
-
-/** The well-known output path the generator writes and the Overseer imports. */
-const REGISTRY_PATH = fileURLToPath(
-  new URL(
-    "../../overseer/src/generated/microservice-registry.ts",
-    import.meta.url,
-  ),
-);
 
 /**
  * The real discovered microservice directory listing, resolved once. Comes from
@@ -56,6 +55,19 @@ const CONTEXT = projectContext(defaultEffectiveConfig());
 
 const directories = discoverPackages(CONTEXT).byCategory.microservice.map(
   (pkg) => pkg.dirName,
+);
+
+/**
+ * The output path the generator writes and the Entry_Module imports, taken from
+ * `generatedRegistryPath` — the single derivation every writer, guard, and test
+ * reads from (registry-inversion R5.8) — rather than spelled as a literal here.
+ * It is Project_Directory-relative, so it is resolved against the repository root
+ * for a read that does not depend on the worker's cwd.
+ */
+const REGISTRY_PATH = resolve(
+  // tests/ -> build-tools -> packages -> repo root
+  fileURLToPath(new URL("../../..", import.meta.url)),
+  generatedRegistryPath(CONTEXT),
 );
 
 /**
@@ -97,18 +109,28 @@ function identifiersInRegistry(source: string): Set<string> {
   return new Set(ids);
 }
 
-let originalRegistry: string;
+/** The registry's bytes before the run, or `undefined` when it was absent. */
+let originalRegistry: string | undefined;
 
 describe("Property 10: Common_Startup yields one registry for both entry points (determinism)", () => {
   beforeAll(() => {
-    // Capture the pre-existing generated registry so the suite can restore it.
-    originalRegistry = readFileSync(REGISTRY_PATH, "utf8");
+    // Capture the pre-existing Generated_Registry so the suite can restore it —
+    // and record its absence, so an absent file is removed rather than left
+    // behind (registry-inversion R12.3).
+    originalRegistry = existsSync(REGISTRY_PATH)
+      ? readFileSync(REGISTRY_PATH, "utf8")
+      : undefined;
   });
 
   afterAll(() => {
-    // Restore the working tree to the exact bytes we found, regardless of the
-    // last selector the property left on disk.
-    writeFileSync(REGISTRY_PATH, originalRegistry, "utf8");
+    // Restore the working tree to exactly what we found, regardless of the last
+    // selector the property left on disk and regardless of whether the
+    // assertions passed. A filesystem write, never a git command.
+    if (originalRegistry === undefined) {
+      rmSync(REGISTRY_PATH, { force: true });
+    } else {
+      writeFileSync(REGISTRY_PATH, originalRegistry, "utf8");
+    }
   });
 
   it("produces byte-identical registry content on repeated generation for the same selector", () => {

@@ -17,10 +17,16 @@
 //     `[config:shape]` for that key: a non-string `scope` (and NO
 //     `[config:scope]`), a non-object `roots` (array and null each counting as
 //     not-an-object, with NO member checks), and a non-string `roots` member.
-//   - R2.6 — an unknown top-level key, and an unknown `roots` member, each yield
-//     one `[config:unknown-key]` naming the key and listing the recognised keys
-//     at that position in ascending code-point order, while every recognised key
-//     of the same input is still validated.
+//   - registry-inversion R1.5 — a non-string `entry` is the same closed
+//     enumeration: exactly one `[config:shape]` at the key path `entry` naming
+//     the JSON type found, NO `[config:entry-path]`, and no Entry_Root_Default
+//     substituted, so a wrong-typed `entry` can raise no
+//     `[config:entry-overlap]` either.
+//   - R2.6, registry-inversion R1.7 — an unknown top-level key, and an unknown
+//     `roots` member, each yield one `[config:unknown-key]` naming the key and
+//     listing the recognised keys at that position in ascending code-point order
+//     — at the top level now `'entry', 'roots', 'scope'` — while every recognised
+//     key of the same input is still validated.
 //   - R4.10 — a `roots` member rejected for being wrong-typed is excluded from
 //     the overlap and framework comparisons with NO Root_Default substituted, so
 //     no `[config:root-overlap]` or `[config:root-framework]` diagnostic names a
@@ -31,6 +37,7 @@
 // parser against the spec rather than against itself.
 //
 // Validates: Requirements 2.4, 2.5, 2.6, 3.4, 4.10
+// Validates: registry-inversion Requirements 1.2, 1.5, 1.7
 
 import { describe, expect, it } from "vitest";
 
@@ -201,8 +208,65 @@ describe("R2.5: a `roots` member of the wrong JSON type yields exactly one [conf
   }
 });
 
+describe("registry-inversion R1.5: a non-string `entry` yields exactly one [config:shape] for entry and no [config:entry-path]", () => {
+  // One case per JSON type `entry` can wrongly be, the same closed enumeration
+  // the `scope` and `roots`-member cases above walk. A wrong-typed `entry` is a
+  // shape error and never a Valid_Root_Path error, and because no
+  // Entry_Root_Default is substituted for it, it can raise no overlap diagnostic
+  // either — which the counts below pin.
+  const cases: ReadonlyArray<{ readonly label: string; readonly value: unknown }> =
+    [
+      { label: "number", value: 42 },
+      { label: "boolean", value: true },
+      { label: "null", value: null },
+      { label: "array", value: ["app"] },
+      { label: "object", value: { path: "app" } },
+    ];
+
+  for (const { label, value } of cases) {
+    it(`reports [config:shape] at 'entry' for a ${label}, alone, with no [config:entry-path]`, () => {
+      const text = JSON.stringify({ entry: value });
+      const diagnostics = rejectedDiagnostics(text);
+
+      const shape = diagnostics.filter((d) => d.tag === "config:shape");
+      const entryPath = diagnostics.filter(
+        (d) => d.tag === "config:entry-path",
+      );
+      const entryOverlap = diagnostics.filter(
+        (d) => d.tag === "config:entry-overlap",
+      );
+
+      // Exactly one diagnostic, the shape one; no path and no overlap
+      // diagnostic, the latter because no default was substituted.
+      expect(diagnostics).toHaveLength(1);
+      expect(shape).toHaveLength(1);
+      expect(entryPath).toHaveLength(0);
+      expect(entryOverlap).toHaveLength(0);
+
+      const diag = shape[0]!;
+      expect(diag.at).toBe("entry");
+      expect(diag.found).toBe(jsonType(value));
+      expect(diag.found).toBe(label);
+      expectAllPartsNonEmpty(diag);
+    });
+  }
+
+  it("still validates the recognised keys of the same input", () => {
+    // A wrong-typed `entry` alongside a wrong-typed `scope`: each recognised key
+    // is validated on its own, so exactly two shape diagnostics appear, ordered
+    // by ascending code point of the key path ('entry' before 'scope').
+    const text = JSON.stringify({ scope: 42, entry: [] });
+    const diagnostics = rejectedDiagnostics(text);
+
+    expect(diagnostics.map((d) => `${d.tag} ${d.at}`)).toEqual([
+      "config:shape entry",
+      "config:shape scope",
+    ]);
+  });
+});
+
 describe("R2.6: an unknown top-level key yields [config:unknown-key] listing recognised keys, recognised keys still validated", () => {
-  it("names the unknown key and lists 'roots', 'scope' in ascending code-point order", () => {
+  it("names the unknown key and lists 'entry', 'roots', 'scope' in ascending code-point order", () => {
     const text = JSON.stringify({ nonsense: 1 });
     const diagnostics = rejectedDiagnostics(text);
 
@@ -211,8 +275,8 @@ describe("R2.6: an unknown top-level key yields [config:unknown-key] listing rec
     const diag = unknown[0]!;
     expect(diag.at).toBe("nonsense");
     expect(diag.found).toBe("nonsense");
-    // Recognised keys, ascending code point: 'r' < 's', so roots before scope.
-    expect(diag.reason).toContain("'roots', 'scope'");
+    // Recognised keys, ascending code point: 'e' < 'r' < 's' (R1.7).
+    expect(diag.reason).toContain("'entry', 'roots', 'scope'");
     expectAllPartsNonEmpty(diag);
   });
 

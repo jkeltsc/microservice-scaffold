@@ -69,7 +69,6 @@ const discoveryContext = projectContext(defaultEffectiveConfig());
 const WORKSPACE_SCOPE = discoveryContext.config.scope;
 const NAMESPACE_CONTAINER = discoveryContext.roots;
 const FRAMEWORK_SINGLETONS = discoveryContext.framework.all;
-const { overseer: OVERSEER } = discoveryContext.framework;
 
 // ---------------------------------------------------------------------------
 // In-memory layout model
@@ -723,12 +722,17 @@ describe("Property 5: the Package_Name_Lookup records exactly and resolves only 
     // directory does not — nothing is synthesized from `beta`'s directory.
     expect(discovery.byName.has(mirrorNameOf("alpha"))).toBe(true);
     expect(discovery.byName.has(mirrorNameOf("beta"))).toBe(false);
+    // The dangling specifier is hung on the Entry_Package, which — with the
+    // Selected_Microservices — is a walk root of the resolve (registry-inversion
+    // R9.1); the Overseer is no longer a root of its own, so a specifier declared
+    // only there would never be resolved at all.
+    const entryRoot = discoveryContext.entryRoot;
     expect(() =>
       requiredDependencies(discoveryContext, [], discovery, (packageDir) =>
-        packageDir === OVERSEER.packageDir ? [mirrorNameOf("beta")] : [],
+        packageDir === entryRoot ? [mirrorNameOf("beta")] : [],
       ),
     ).toThrow(
-      `[shared:unresolved] "${OVERSEER.packageDir}" depends on unknown ${WORKSPACE_SCOPE} package(s): "${mirrorNameOf("beta")}"`,
+      `[shared:unresolved] "${entryRoot}" depends on unknown ${WORKSPACE_SCOPE} package(s): "${mirrorNameOf("beta")}"`,
     );
   });
 });
