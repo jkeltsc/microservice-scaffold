@@ -1,0 +1,16 @@
+{
+  "name": "@fixtures/projects-root",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Fixture_Projects_Root: a single npm workspace root whose members are the hostile Project_Fixtures under it. One install (fixtures:install) serves every member. The workspaces globs match member packages inside each scenario (<scenario>/packages/<category>/<member>) and the Entry_Package at <scenario>/app, and never a scenario's own directory, so npm never reads a scenario's own workspaces array and the two workspace roots do not nest. A scenario whose fault requires its own Framework_Singleton packages to resolve by name (image-tree--no-dist) lists those specific member paths, the sanctioned exception for a scenario whose members do not fit the general globs.",
+  "workspaces": [
+    "*/packages/*/*",
+    "*/app",
+    "image-tree--no-dist/packages/contracts",
+    "image-tree--no-dist/packages/overseer"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2"
+  }
+}

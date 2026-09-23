@@ -1,0 +1,9 @@
+{
+  "name": "@fx-cycle/svc1",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@fx-cycle/a": "*"
+  }
+}

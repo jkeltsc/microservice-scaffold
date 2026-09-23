@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[discovery:name]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A discovered package's package.json declares no name.",
+  "partition": {
+    "kind": "tree",
+    "justification": "An npm clean install over this tree would fail: a workspace member manifest declares no name, so it is read as a Project_Directory and never installed."
+  }
+}

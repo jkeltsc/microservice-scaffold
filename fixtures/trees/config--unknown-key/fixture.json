@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[config:unknown-key]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "An unrecognised top-level key is declared in scaffold.config.json.",
+  "partition": {
+    "kind": "tree",
+    "justification": "An npm clean install over this tree would fail: it is read as a Project_Directory whose config with an unknown key is the subject, never installed."
+  }
+}

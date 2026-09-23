@@ -87,6 +87,64 @@ export function invalidScope(): fc.Arbitrary<string> {
   return fc.oneof(seeded, generated);
 }
 
+/**
+ * This project's own Configured_Scope — the Scope_Default. Spelled here rather
+ * than imported from `src/project-config.ts` for the same reason
+ * {@link ROOT_DEFAULT_PATHS} and {@link FRAMEWORK_DIRECTORIES} are: the
+ * scope-disjointness property (Property 8) is mirror-based, so its statement of
+ * "distinct from this project's own scope" must be a literal written in the test
+ * tier, not a value read from the module the fixtures are checked against.
+ *
+ * A Project_Fixture must declare a Configured_Scope distinct from this one
+ * (R3.5), so the distinct-scope-pair generator excludes it.
+ */
+export const PROJECT_OWN_SCOPE = "@microservices" as const;
+
+/**
+ * A pair of distinct Valid_Scopes, each distinct from this project's own scope
+ * ({@link PROJECT_OWN_SCOPE}) — the exact scope pair Property 8 (R3.5, R16.9)
+ * ranges over: two Project_Fixtures' Configured_Scopes.
+ *
+ * Built CONSTRUCTIVELY rather than by filtering two independent {@link validScope}
+ * draws: two independent Valid_Scopes coincide often enough (short scopes are
+ * common) that a filter would reject a noticeable fraction of draws. Here the
+ * first scope is drawn freely, the second is drawn and then forced distinct from
+ * the first by prepending a differing character when they collide, and both are
+ * forced distinct from {@link PROJECT_OWN_SCOPE} the same way. A trailing filter
+ * guards the construction's promise — both are Valid_Scopes, they differ from
+ * each other, and neither equals the project's own scope — rather than doing the
+ * construction.
+ */
+export function distinctScopePair(): fc.Arbitrary<readonly [string, string]> {
+  const forbidden = PROJECT_OWN_SCOPE;
+  const ensureDistinct = (scope: string, from: readonly string[]): string => {
+    // A Valid_Scope always starts `@` followed by at least one `[a-z0-9-]`
+    // character. Splicing a differing character right after the `@` keeps it a
+    // Valid_Scope while guaranteeing it differs from every value in `from`.
+    let candidate = scope;
+    while (from.includes(candidate)) {
+      candidate = `@x${candidate.slice(1)}`;
+    }
+    return candidate;
+  };
+
+  return fc
+    .tuple(validScope(), validScope())
+    .map(([first, second]): readonly [string, string] => {
+      const a = ensureDistinct(first, [forbidden]);
+      const b = ensureDistinct(second, [forbidden, a]);
+      return [a, b];
+    })
+    .filter(
+      ([a, b]) =>
+        /^@[a-z0-9-]+$/.test(a) &&
+        /^@[a-z0-9-]+$/.test(b) &&
+        a !== b &&
+        a !== forbidden &&
+        b !== forbidden,
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Root paths
 // ---------------------------------------------------------------------------
@@ -267,6 +325,33 @@ function nonOverlapping(m: string, c: string, s: string): boolean {
     }
   }
   return true;
+}
+
+/**
+ * A Discovery_Root reassignment the Config_Parser ACCEPTS, in the per-category
+ * OBJECT shape the behaviour-preserving perturbation generator consumes — the
+ * third perturbation kind of Property 2 (Fixture_Tier spec, task 4.1; R16.3).
+ *
+ * This is the same accepted assignment {@link nonOverlappingRootTriple} produces
+ * — three Valid_Root_Paths satisfying R4.5, R4.6, and R4.7 (pairwise unequal,
+ * none nested in another, none colliding with a Framework_Singleton directory) —
+ * re-shaped from the `[microservice, common, spa]` tuple into the
+ * `{ microservice, common, spa }` object the perturbation applier reads. The
+ * perturbation generator takes THIS as its `arbRoots` argument, so the shared
+ * generator in `src/testing/` spells no root literal and no property does either
+ * (R16.11); the accepted-assignment logic stays in the one place `config.ts`
+ * already owns it.
+ */
+export function discoveryRootReassignment(): fc.Arbitrary<{
+  readonly microservice: string;
+  readonly common: string;
+  readonly spa: string;
+}> {
+  return nonOverlappingRootTriple().map(([microservice, common, spa]) => ({
+    microservice,
+    common,
+    spa,
+  }));
 }
 
 /**

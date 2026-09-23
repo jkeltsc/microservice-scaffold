@@ -1,0 +1,89 @@
+{
+  "[barrel:invalid]": { "covered": true, "scenarios": ["barrel--invalid"] },
+  "[build-order:cycle]": { "covered": true, "scenarios": ["build-order--cycle"] },
+  "[build-order:prerequisite]": { "covered": true, "scenarios": ["build-order--prerequisite"] },
+  "[build-order:failed]": { "covered": true, "scenarios": ["build-order--failed"] },
+  "[build-order:internal]": {
+    "covered": false,
+    "inexpressible": "not-fixture-provokable",
+    "reason": "An unreachable internal invariant guard: the Build_Sequence only ever produces nodes derived from the discovered set, so no committed tree can make it emit a node absent from that set; it exists to turn a future refactor's broken invariant into a named error instead of a silent crash."
+  },
+  "[build-order:divergence]": {
+    "covered": false,
+    "inexpressible": "not-fixture-provokable",
+    "reason": "A self-consistency assertion: the Workspace_Build_Order and the Tsc_Root_Order both derive from the single buildSequence primitive with identical statement assignment and identical within-statement sort, so any shared pair is ordered identically and divergence can arise only from a future Build_System bug, not from any input."
+  },
+  "[config:unparsable]": { "covered": true, "scenarios": ["config--unparsable"] },
+  "[config:shape]": {
+    "covered": true,
+    "scenarios": ["config--shape.not-object", "config--shape.scope", "config--shape.roots", "config--shape.entry"]
+  },
+  "[config:unknown-key]": { "covered": true, "scenarios": ["config--unknown-key"] },
+  "[config:scope]": { "covered": true, "scenarios": ["config--scope"] },
+  "[config:root-path]": { "covered": true, "scenarios": ["config--root-path"] },
+  "[config:root-overlap]": { "covered": true, "scenarios": ["config--root-overlap"] },
+  "[config:root-framework]": { "covered": true, "scenarios": ["config--root-framework"] },
+  "[config:root-missing]": { "covered": true, "scenarios": ["config--root-missing"] },
+  "[config:root-not-directory]": { "covered": true, "scenarios": ["config--root-not-directory"] },
+  "[config:root-is-package]": { "covered": true, "scenarios": ["config--root-is-package"] },
+  "[config:entry-path]": { "covered": true, "scenarios": ["config--entry-path"] },
+  "[config:entry-overlap]": { "covered": true, "scenarios": ["config--entry-overlap"] },
+  "[config:unreadable]": {
+    "covered": false,
+    "inexpressible": "permission-state",
+    "reason": "A config file that exists but cannot be read; git records no mode beyond the execute bit and a CI umask is not ours to choose, so committed bytes cannot express the unreadable state."
+  },
+  "[config:root-unreadable]": {
+    "covered": false,
+    "inexpressible": "permission-state",
+    "reason": "A Discovery_Root that exists but cannot be read; same permission-state reason as [config:unreadable]."
+  },
+  "[discovery:manifest]": { "covered": true, "scenarios": ["discovery--manifest"] },
+  "[discovery:name]": { "covered": true, "scenarios": ["discovery--name"] },
+  "[discovery:duplicate]": { "covered": true, "scenarios": ["discovery--duplicate"] },
+  "[discovery:mirror]": { "covered": true, "scenarios": ["discovery--mirror"] },
+  "[deps:common-to-spa]": { "covered": true, "scenarios": ["deps--common-to-spa"] },
+  "[deps:cycle]": { "covered": true, "scenarios": ["deps--cycle"] },
+  "[deps:direction]": { "covered": true, "scenarios": ["deps--direction"] },
+  "[deps:peer]": { "covered": true, "scenarios": ["deps--peer"] },
+  "[deps:spa-to-spa]": { "covered": true, "scenarios": ["deps--spa-to-spa"] },
+  "[dev:compile]": {
+    "covered": false,
+    "inexpressible": "not-fixture-provokable",
+    "reason": "A runtime status line, not a fault: the Dev_Supervisor prints it every watch cycle (\"cycle complete: N error(s)\"); it matches the Diagnostic_Tag shape but is normal progress output no Project_Directory input provokes as an error."
+  },
+  "[entry-registry:absent]": { "covered": true, "scenarios": ["entry-registry--absent"] },
+  "[framework:missing]": { "covered": true, "scenarios": ["framework--missing"] },
+  "[image-tree:no-dist]": { "covered": true, "scenarios": ["image-tree--no-dist"] },
+  "[image-tree:framework-output]": {
+    "covered": false,
+    "inexpressible": "not-fixture-provokable",
+    "reason": "A self-consistency assertion over the assembler's own output: a Framework_Singleton is always a tsc root, so a successful tsc pass always emits its dist; the only way its dist is absent is a stale gitignored .tsbuildinfo, a runtime state committed bytes cannot express."
+  },
+  "[image-tree:missing]": {
+    "covered": false,
+    "inexpressible": "not-fixture-provokable",
+    "reason": "A self-consistency assertion: the assembler copies exactly plan.stage into a freshly emptied outDir and then re-reads it, so a justified entry can be missing only through an assembler bug, never through a committed input."
+  },
+  "[image-tree:unjustified]": {
+    "covered": false,
+    "inexpressible": "not-fixture-provokable",
+    "reason": "A self-consistency assertion: the assembler copies only plan.stage entries into a freshly emptied outDir outside the checked-out tree, so a committed fixture cannot inject an extra scoped entry; only an assembler bug could."
+  },
+  "[imports:escape]": { "covered": true, "scenarios": ["imports--escape"] },
+  "[imports:peer]": { "covered": true, "scenarios": ["imports--peer"] },
+  "[imports:spa]": { "covered": true, "scenarios": ["imports--spa"] },
+  "[scope:literal]": {
+    "covered": false,
+    "inexpressible": "not-fixture-provokable",
+    "reason": "A self-consistency assertion over the Build_System's own source: the check scans the fixed literal packages/build-tools/src, never the Project_Directory, so a scope literal it flags is a Build_System authoring mistake, never a committed fixture input."
+  },
+  "[selector:empty]": { "covered": true, "scenarios": ["selector--empty"] },
+  "[selector:unmatched]": { "covered": true, "scenarios": ["selector--unmatched"] },
+  "[shared:unresolved]": { "covered": true, "scenarios": ["shared--unresolved"] },
+  "[tsconfig:absent]": { "covered": true, "scenarios": ["tsconfig--absent"] },
+  "[tsconfig:setting]": { "covered": true, "scenarios": ["tsconfig--setting"] },
+  "[tsconfig:unresolvable]": { "covered": true, "scenarios": ["tsconfig--unresolvable"] },
+  "[workspaces:coverage]": { "covered": true, "scenarios": ["workspaces--coverage"] },
+  "[workspaces:order-source]": { "covered": true, "scenarios": ["workspaces--order-source"] }
+}

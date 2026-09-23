@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[tsconfig:absent]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A discovered Tsc_Project declares no tsconfig.json, so it cannot be a root of the single tsc --build.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — a missing tsconfig.json is no install error — while the Repo_Invariant_Checker's Load_Bearing_Setting check still reports the absent tsconfig over the installed tree."
+  }
+}

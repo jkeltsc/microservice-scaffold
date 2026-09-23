@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[imports:peer]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A microservice imports a peer Microservice_Package by its package name.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — a peer import resolves through the workspace symlinks — while the Repo_Invariant_Checker's import-discipline check still reports the peer import over the installed tree."
+  }
+}

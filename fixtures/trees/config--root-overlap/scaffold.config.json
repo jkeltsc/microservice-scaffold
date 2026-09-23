@@ -1,0 +1,6 @@
+{
+  "roots": {
+    "microservice": "packages/shared",
+    "common": "packages/shared"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[build-order:prerequisite]",
+  "entryPoint": "runOrderedBuildCli",
+  "fault": "A microservice declares a dependency on a peer microservice, so both land in the same Unordered_Statement of the Build_Sequence and the Verification_Pass reports that their relative build order is not guaranteed.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — npm installs one workspace package depending on another without objection — while the ordered repository build's Build_Sequence Verification_Pass still reports the prerequisite violation over the installed tree. The repository-wide build path (runOrderedBuildCli) derives no dependency sets, so the peer-dependency resolver is never reached and [deps:peer] does not fire; only the ordering Verification_Pass, which builds a Prerequisite_Edge between the two statement-4 microservices, reports."
+  }
+}

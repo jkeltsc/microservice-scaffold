@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[selector:unmatched]",
+  "entryPoint": "runGenerateRegistryCli",
+  "fault": "A Selector (MICROSERVICES) names an identifier that matches no discovered microservice.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — MICROSERVICES is a build-time environment value npm never reads — while the registry generator, run with MICROSERVICES naming an unknown identifier, still reports the unmatched identifier."
+  }
+}

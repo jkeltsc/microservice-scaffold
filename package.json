@@ -27,6 +27,7 @@
     "lint": "npm run lint --workspaces",
     "typecheck": "npm run typecheck --workspaces",
     "check:invariants": "node packages/build-tools/dist/bin/check-repo-invariants.js",
+    "fixtures:install": "npm ci --prefix fixtures/projects",
     "ci": "npm run build && npm run check:invariants && npm run typecheck --workspaces && npm run lint --workspaces && npm test && npm run test:types",
     "start": "dotenvx run -- node scripts/start.js",
     "dev": "dotenvx run -- node scripts/dev.js",

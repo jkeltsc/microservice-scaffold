@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[config:shape]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "The config file parses to a JSON array, not an object.",
+  "partition": {
+    "kind": "tree",
+    "justification": "An npm clean install over this tree would fail: it is read as a Project_Directory whose non-object scaffold.config.json is the subject, never installed."
+  }
+}

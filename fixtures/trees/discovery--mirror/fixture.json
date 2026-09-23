@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[discovery:mirror]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A discovered package's declared name does not mirror its directory.",
+  "partition": {
+    "kind": "tree",
+    "justification": "An npm clean install over this tree would fail: a workspace member's declared name does not mirror its directory, so it is read as a Project_Directory and never installed."
+  }
+}

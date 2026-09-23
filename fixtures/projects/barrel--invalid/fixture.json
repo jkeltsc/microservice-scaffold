@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[barrel:invalid]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A discovered Common_Package declares neither \"main\" nor \"types\", so it fails its category's barrel contract.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — a missing \"main\"/\"types\" is no install error — while the Repo_Invariant_Checker still reports the missing barrel over the installed tree."
+  }
+}

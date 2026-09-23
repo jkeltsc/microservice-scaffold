@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[deps:peer]",
+  "entryPoint": "runImageTreeCli",
+  "fault": "A manifest declares a dependency on a Microservice_Package, which is never a dependency target.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — a microservice is an ordinary installable workspace package — while the image build's dependency resolution still reports the Microservice_Package dependency over the installed tree."
+  }
+}

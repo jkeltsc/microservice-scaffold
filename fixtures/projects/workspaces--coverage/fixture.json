@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[workspaces:coverage]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A discovered workspace package is matched by no entry of the Root_Manifest's workspaces array.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — the omitted member is simply not installed as a workspace by npm — while the Repo_Invariant_Checker's Workspace_Coverage check, which reads the same array, still reports the uncovered member."
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[deps:common-to-spa]",
+  "entryPoint": "runImageTreeCli",
+  "fault": "A Common_Package declares a dependency on a Spa_Package, though a Spa_Package exposes no importable API.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — a Common_Package naming a Spa_Package is a valid workspace dependency to npm — while the image build's dependency resolution still reports the common-to-spa dependency over the installed tree."
+  }
+}

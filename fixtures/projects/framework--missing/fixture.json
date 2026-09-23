@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[framework:missing]",
+  "entryPoint": "runImageTreeCli",
+  "fault": "One of the four Framework_Singleton directories (integration-tests) is absent from the repository, which the image build's framework-presence check rejects.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — npm neither knows nor requires the four Framework_Singleton directories — while the image build's framework-presence check (pipeline step 1) still reports the absent directory over the installed tree, before any discovery or registry generation runs."
+  }
+}

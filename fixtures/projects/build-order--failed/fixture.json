@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[build-order:failed]",
+  "entryPoint": "runOrderedBuildCli",
+  "fault": "A package's own build script exits non-zero (contracts, statement 1, runs a build that exits 1), so the ordered repository build stops and reports the failed package.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — a build script that exits non-zero is no install error — while the ordered repository build still spawns each package's own build script in Build_Sequence order and reports the first non-zero exit over the installed tree. The Verification_Pass over the derived order passes cleanly, so the failure surfaces only when a build script is actually run."
+  }
+}

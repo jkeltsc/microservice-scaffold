@@ -18,6 +18,24 @@ import * as fc from "fast-check";
 
 import { SCOPE_DEFAULT } from "../../src/project-config.js";
 
+// The mutating-call fragment generator Property 9 (platform-fixtures spec,
+// task 9.2) ranges over — a mutating fs call whose destination joins a generated
+// fixture (or checked-out) anchor with a generated tail, tagged with the verdict
+// the generator knows. Its DEFINITION lives in `src/testing/worktree-arbitraries.ts`
+// because Property 9's suite is in `packages/integration-tests`, which cannot
+// reach this `tests/arbitraries/` module by relative path and imports it through
+// `@microservices/build-tools/dist/testing` instead — the design's cross-package
+// rule for a shared generator. It is re-exported HERE so the source-fragment
+// generators for the scope-literal and worktree scans stay reachable from one
+// place, as the design's generator table records. The token-fragmentation
+// discipline that keeps a mutating-call literal out of the generator's own source
+// lives with the definition in `worktree-arbitraries.ts`.
+export {
+  mutatingCallFragment,
+  type MutatingCallFragment,
+  type WriteVerdict,
+} from "../../src/testing/worktree-arbitraries.js";
+
 /** Whether a fragment's placement of the Scope_Default should be reported. */
 export type FragmentVerdict = "reported" | "clean";
 

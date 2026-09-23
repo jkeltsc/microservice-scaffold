@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[deps:cycle]",
+  "entryPoint": "runImageTreeCli",
+  "fault": "Two Common_Packages declare a dependency on each other, forming a cycle in the scoped dependency graph.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — npm installs mutually dependent workspace packages without objection — while the image build's dependency resolution still reports the cycle over the installed tree."
+  }
+}

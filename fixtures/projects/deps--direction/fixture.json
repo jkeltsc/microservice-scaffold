@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[deps:direction]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A Common_Package declares a dependency on a Microservice_Package, so it does not point downward only.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — an upward dependency specifier is a valid manifest key — while the Repo_Invariant_Checker's dependency-direction check still reports it over the installed tree."
+  }
+}

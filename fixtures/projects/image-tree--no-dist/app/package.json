@@ -1,0 +1,10 @@
+{
+  "name": "@fx-imgnodist/app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@fx-imgnodist/overseer": "*",
+    "@fx-imgnodist/contracts": "*"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[tsconfig:unresolvable]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A discovered Tsc_Project's tsconfig.json extends a path that is not present, so its configuration cannot be resolved.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — npm never resolves a tsconfig extends chain — while the Repo_Invariant_Checker's Load_Bearing_Setting check still reports the unresolvable configuration over the installed tree."
+  }
+}

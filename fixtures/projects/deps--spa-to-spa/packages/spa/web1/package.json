@@ -1,0 +1,12 @@
+{
+  "name": "@fx-s2s/web1",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "true"
+  },
+  "dependencies": {
+    "@fx-s2s/web2": "*"
+  }
+}

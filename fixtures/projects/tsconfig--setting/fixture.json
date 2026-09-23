@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[tsconfig:setting]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A discovered Tsc_Project's resolved configuration sets composite to false, violating one of the four Load_Bearing_Settings.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — npm never reads a TypeScript compiler setting — while the Repo_Invariant_Checker's Load_Bearing_Setting check still reports the violated setting over the installed tree."
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[shared:unresolved]",
+  "entryPoint": "runImageTreeCli",
+  "fault": "A manifest declares a scoped dependency specifier that resolves to no declared package.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — the specifier resolves to a local stub outside every Discovery_Root, which npm installs without a matching workspace — while the image build's dependency resolution still reports the scoped specifier as resolving to no discovered package over the installed tree."
+  }
+}

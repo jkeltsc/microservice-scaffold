@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[discovery:duplicate]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "Two packages in different Consumer_Categories declare the same mirrored name.",
+  "partition": {
+    "kind": "tree",
+    "justification": "An npm clean install over this tree would fail: two workspace members declare the same name, so it is read as a Project_Directory and never installed."
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[imports:spa]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A package compiled by tsc imports a Spa_Package by its package name, though a Spa_Package exposes no importable API.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — the Spa_Package resolves through the workspace symlinks — while the Repo_Invariant_Checker's import-discipline check still reports the Spa_Package import over the installed tree."
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[config:root-path]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A roots member is not a Valid_Root_Path.",
+  "partition": {
+    "kind": "tree",
+    "justification": "An npm clean install over this tree would fail: it is read as a Project_Directory whose invalid Discovery_Root path is the subject, never installed."
+  }
+}

@@ -861,3 +861,40 @@ describe("Baseline configuration is diagnostic-free (R15.13)", () => {
     ).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// R15.2 — the file set under baseline/ is exactly the thirteen recordings.
+//
+// Added by platform-fixtures task 1.4. The per-recording comparisons above pin
+// each recording against its observable; this pins the SET, so an added or
+// removed recording is a named failure rather than a silently wider or narrower
+// comparison. The property suite `baseline-byte-stability.property.test.ts`
+// makes the same claim under permutation; this example keeps it stated in the
+// suite that owns the per-recording comparisons.
+// ---------------------------------------------------------------------------
+
+describe("Baseline recording set is exactly the thirteen (R15.2)", () => {
+  const EXPECTED_BASELINE_FILES = [
+    "build-order.all.json",
+    "build-order.blank.json",
+    "build-order.microservice1-microservice2.json",
+    "check-invariants.txt",
+    "discovery.json",
+    "dockerfile.all",
+    "dockerfile.blank",
+    "dockerfile.microservice1-microservice2",
+    "image-tree.all.json",
+    "image-tree.microservice1-microservice2.json",
+    "registry.all.ts",
+    "registry.blank.ts",
+    "registry.microservice1-microservice2.ts",
+  ];
+
+  it("holds exactly those thirteen file names and no others", () => {
+    const actual = readdirSync(BASELINE_DIR).sort();
+    expect(
+      actual,
+      "baseline/ file set: an added or removed recording is a named failure",
+    ).toEqual(EXPECTED_BASELINE_FILES);
+  });
+});

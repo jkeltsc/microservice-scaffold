@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[entry-registry:absent]",
+  "entryPoint": "runAssertRegistryPresentCli",
+  "fault": "The Entry_Package is present but no generated microservice registry exists at <Entry_Root>/src/generated/microservice-registry.ts, so the entry package cannot be compiled.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — an absent generated registry is no install error, and the registry is gitignored generated output no clone carries — while the registry-presence guard still reports the absent registry over the installed tree."
+  }
+}

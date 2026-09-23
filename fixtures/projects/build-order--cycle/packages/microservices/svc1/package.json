@@ -1,0 +1,6 @@
+{
+  "name": "@fx-buildordercycle/svc1",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module"
+}

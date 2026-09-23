@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[config:root-overlap]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "Two Discovery_Roots are declared to the same path.",
+  "partition": {
+    "kind": "tree",
+    "justification": "An npm clean install over this tree would fail: it is read as a Project_Directory whose overlapping Discovery_Roots are the subject, never installed."
+  }
+}

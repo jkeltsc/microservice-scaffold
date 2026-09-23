@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[config:root-is-package]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A declared Discovery_Root is itself a package, holding a package.json directly.",
+  "partition": {
+    "kind": "tree",
+    "justification": "An npm clean install over this tree would fail: it is read as a Project_Directory whose Discovery_Root that is itself a package is the subject, never installed."
+  }
+}

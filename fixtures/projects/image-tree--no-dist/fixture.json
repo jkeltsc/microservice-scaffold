@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[image-tree:no-dist]",
+  "entryPoint": "runImageTreeCli",
+  "fault": "A selected microservice depends on a Spa_Package whose own build script emits no dist/, so the package is staged into the Image_Tree with no compiled output.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — a Spa_Package whose build emits nothing is no install error — while the image build stages the Spa_Package as a Required_Dependency and its build-output assertion reports the absent dist over the installed tree. The Spa_Package is built by its own npm run build (never a tsc --build root), so the tsc pass over the other roots succeeds and only the build-output assertion fires."
+  }
+}

@@ -1,0 +1,625 @@
+[
+  {
+    "path": "packages/build-tools/tests/build-order-preservation.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/build-order-source.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/build-order-violation.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/build-plan.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/build-sequence-entry.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/build-sequence-spa-phase.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/build-sequence-verification.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/build-sequence.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/build-sequence.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/build-workspaces-bin.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/check-repo-invariants.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/config-loader.filesystem.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/config-loader.root-missing.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/config-loader.unreadable.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/dev-common-startup.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/dev-image-parity.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/dev-project-list.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/dev-restart-decision.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/discovery-fixture-tree.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/discovery-real-tree.test.ts",
+    "class": "Drift_Detector",
+    "retainedReason": "Retained to detect the pure Package_Discovery core disagreeing with the committed repository; its fate is decided by the next feature when the Payload_Tree relocates."
+  },
+  {
+    "path": "packages/build-tools/tests/discovery.categories.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/discovery.containers.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/discovery.entries.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/discovery.names.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/discovery.relocation.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/discovery.scope-invariance.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/discovery.validation.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/entry-registry.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/entry-root-relocation.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/fixture-clone.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/fixture-scope-disjointness.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/fixture-synthesized-agreement.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/framework.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/framework.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/image-tree-fixture.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/image-tree-minimality.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/image-tree.entry-staging.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/image-tree.integrity.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/image-tree.staging.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/ordered-build.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/output-clearing.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/output-clearing.rejection.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/output-clearing.stale-output.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/platform-test-set.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/project-config.defaults.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/project-config.determinism.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/project-config.entry.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/project-config.purity.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/project-config.roots.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/project-config.roundtrip.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/project-config.scope.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/project-config.shape.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/project-config.totality.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/project-context.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/registry-generator-fixture.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/registry-generator.output-path.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/registry-generator.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/registry-generator.scope.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/registry-generator.unmatched.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/registry-generator.write.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/repo-invariants.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/repo-invariants.relocation.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/required-dependencies.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/scenario-naming.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/scope-literal.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/selector-semantics.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/spa-build-sequencing.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/tsconfig-verifier-fixture-tree.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/tsconfig-verifier-real-tree.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/tsconfig-verifier.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/workspace-build-order-fixture-tree.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/workspace-build-order-real-tree.test.ts",
+    "class": "Drift_Detector",
+    "retainedReason": "Retained to detect the pure Workspace_Build_Order core disagreeing with the committed repository; its fate is decided by the next feature when the Payload_Tree relocates."
+  },
+  {
+    "path": "packages/build-tools/tests/workspace-build-order.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/workspace-coverage.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/build-tools/tests/workspace-order.permutation.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/contracts/tests/types.test-d.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/baseline-byte-stability.property.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/build-tools/tests/registry-generator-fixture.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/baseline-equivalence.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/build-tools/tests/image-tree-fixture.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/check-repo-invariants-fixture.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/ci-wiring.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/build-tools/tests/workspace-build-order-fixture-tree.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/classification-guard.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/collision-abort.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/common-package-conventions.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/build-tools/tests/discovery-fixture-tree.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/container-extended-config.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/mount-dispatch-constructed.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/dependency-resolver-determinism.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/dev-additive-only.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/dev-cold-start.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/registry-boot-constructed.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/dev-environment-passthrough.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/registry-boot-constructed.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/dev-error-recovery.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/mount-dispatch-constructed.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/dev-selector-relay.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/dev-session-scope.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/mount-dispatch-constructed.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/dev-start-parity.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/registry-boot-constructed.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/dev-warm-tree.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/registry-boot-constructed.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/diagnostic-coverage.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/diagnostic-tags.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/dockerfile.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/effective-dockerfile.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/emit-dockerfile-fixture.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/emit-dockerfile-config.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/emit-dockerfile-failures.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/emit-dockerfile-fixture.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/emit-dockerfile.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/entry-fresh-clone.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/entry-package-conventions.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/fixture-additive-invariance.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/fixture-install.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/fixture-scenario-diagnostics.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/fixture-scenario-diagnostics.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/fixture-steering-guard.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/fixture-tier-layout.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/fixture-worktree-cleanliness.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/fixtures-property-run-floor.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/helpers.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/registry-boot-constructed.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/integration-scope-guard.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/migration-facts.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/build-tools/tests/discovery-fixture-tree.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/mount-dispatch-constructed.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/mount-dispatch.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/mount-dispatch-constructed.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/non-default-configuration.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/overseer-startup-absent-spa.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/mount-dispatch-constructed.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/package-categories-layout.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/build-tools/tests/discovery-fixture-tree.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/peer-shadowing.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/mount-dispatch-constructed.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/platform-test-classification.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/pre-demo-samples-build-order.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/build-tools/tests/workspace-build-order-fixture-tree.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/property-run-floor.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/registry-boot-constructed.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/registry-boot-equivalence.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/registry-mounted-paths.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/release-workflow.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/emit-dockerfile-fixture.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/repository-build.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/build-tools/tests/workspace-build-order-fixture-tree.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/retired-testing-specifier.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/scope-rename-retired.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/shared-package-staging.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/build-tools/tests/image-tree-fixture.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/shipped-import-reachability.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/spa-bundle-output.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/build-tools/tests/image-tree-fixture.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/spa-common-consumption.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/build-tools/tests/image-tree-fixture.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/spa-only-container.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/build-tools/tests/image-tree-fixture.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/spa-package-conventions.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/build-tools/tests/discovery-fixture-tree.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/specific-container-404.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/mount-dispatch-constructed.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/stale-documentation-guard.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/start-parity.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/registry-boot-constructed.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/toggle-abort.test.ts",
+    "class": "Payload_Coupled_Test",
+    "fixtureEquivalent": "packages/integration-tests/tests/toggle-behaviour-constructed.test.ts"
+  },
+  {
+    "path": "packages/integration-tests/tests/toggle-behaviour-constructed.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/integration-tests/tests/worktree-safety-guard.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/overseer/tests/boot.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/overseer/tests/config.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/overseer/tests/router.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/overseer/tests/toggle-token.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/overseer/tests/toggle-validation.property.test.ts",
+    "class": "Payload_Independent_Test"
+  },
+  {
+    "path": "packages/overseer/tests/toggles.test.ts",
+    "class": "Payload_Independent_Test"
+  }
+]

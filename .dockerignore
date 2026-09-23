@@ -24,6 +24,10 @@ dist
 # Generated registry (build-tools regenerates it in the build stage)
 app/src/generated/microservice-registry.ts
 
+# Fixture tier: platform-owned test subjects, including deliberately-broken
+# manifests. Never part of an image build's context.
+fixtures/
+
 # Dockerfile template source (only the generated Dockerfile is needed in-context)
 Dockerfile.template
 

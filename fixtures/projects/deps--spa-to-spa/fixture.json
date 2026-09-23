@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[deps:spa-to-spa]",
+  "entryPoint": "runImageTreeCli",
+  "fault": "A Spa_Package declares a dependency on another Spa_Package, though a Spa_Package exposes no importable API.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — one Spa_Package naming another is a valid workspace dependency to npm — while the image build's dependency resolution still reports the spa-to-spa dependency over the installed tree."
+  }
+}

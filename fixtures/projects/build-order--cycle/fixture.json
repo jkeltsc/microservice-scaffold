@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[build-order:cycle]",
+  "entryPoint": "runOrderedBuildCli",
+  "fault": "Two Common_Packages declare a dependency on each other, forming a cycle the repository-wide build's Verification_Pass detects while ordering statement 3 over every Common_Package.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — npm installs mutually dependent workspace packages without objection — while the ordered repository build's Build_Sequence Verification_Pass still reports the Common_Package cycle over the installed tree. No microservice and no Entry_Package depends on either package, so the dependency resolver never reaches the cycle and [deps:cycle] does not fire; the cycle surfaces only when statement 3 orders every Common_Package."
+  }
+}

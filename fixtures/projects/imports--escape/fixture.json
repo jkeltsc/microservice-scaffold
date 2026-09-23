@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[imports:escape]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A package's source declares a relative import that escapes its own package directory.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — npm never reads a relative import specifier — while the Repo_Invariant_Checker's import-discipline check still reports the escaping import over the installed tree."
+  }
+}

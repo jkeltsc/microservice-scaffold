@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[config:root-missing]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "The microservice Discovery_Root does not exist.",
+  "partition": {
+    "kind": "tree",
+    "justification": "An npm clean install over this tree would fail: it is read as a Project_Directory whose absent microservice Discovery_Root is the subject, never installed."
+  }
+}

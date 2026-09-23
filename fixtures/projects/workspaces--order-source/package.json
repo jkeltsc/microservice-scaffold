@@ -1,0 +1,15 @@
+{
+  "name": "workspaces--order-source-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npm run build --workspaces"
+  },
+  "workspaces": [
+    "packages/contracts",
+    "packages/overseer",
+    "packages/build-tools",
+    "packages/integration-tests"
+  ]
+}

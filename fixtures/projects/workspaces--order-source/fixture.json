@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[workspaces:order-source]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A repository script derives a build order from the workspaces array by invoking a build with --workspaces.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — the offending text is an ordinary script value npm never runs at install time — while the Repo_Invariant_Checker's build-order-source check still reports the array-derived build over the installed tree."
+  }
+}

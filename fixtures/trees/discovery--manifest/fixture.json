@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[discovery:manifest]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A discovered package's package.json is not valid JSON.",
+  "partition": {
+    "kind": "tree",
+    "justification": "An npm clean install over this tree would fail: the package manifest is not parseable JSON, so it is read as a Project_Directory and never installed."
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[selector:empty]",
+  "entryPoint": "runGenerateRegistryCli",
+  "fault": "An all-selection (MICROSERVICES=*) finds no candidate microservice in the Microservice_Namespace.",
+  "partition": {
+    "kind": "project",
+    "justification": "An npm clean install over this workspace succeeds — an empty microservice Discovery_Root is a valid installed tree — while the registry generator, run with MICROSERVICES=*, still reports that the all-selection matched no microservice."
+  }
+}

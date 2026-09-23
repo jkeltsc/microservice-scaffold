@@ -1,0 +1,9 @@
+{
+  "name": "@fx-unresolved/svc1",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@fx-unresolved/ghost": "file:../../../stubs/ghost"
+  }
+}

@@ -67,6 +67,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { load } from "js-yaml";
 
 import {
   discoverPackages,
@@ -675,5 +676,90 @@ describe("no root script derives a build order from the workspaces array (R7.9)"
       }));
 
     expect(checkBuildOrderSource(scriptSources, [])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// platform-fixtures task 2.5 — the Fixture_Install step in ci.yml (R6.5)
+// ---------------------------------------------------------------------------
+//
+// Task 2.3 added a `Install fixture projects` step to `.github/workflows/ci.yml`
+// that runs `npm run fixtures:install`, sitting between the root install step
+// (`npm ci`) and the quality-gate step (`npm run ci`). This block pins that
+// wiring against the committed workflow — a static clause a green run cannot
+// verify: the step's presence, its position relative to the install and
+// quality-gate steps, and that it fails the workflow on a non-zero exit.
+//
+// The last clause keys off GitHub Actions' own semantics: a step fails the
+// workflow on a non-zero exit UNLESS it sets `continue-on-error: true`. So
+// "fails the workflow when the step exits non-zero" is asserted by pinning that
+// the step declares no `continue-on-error: true` (the release-workflow suite
+// guards its legs the same way). A `continue-on-error: true` on the Fixture
+// _Install step would let a failed install report the run green, hiding a
+// broken Fixture_Projects_Root — invisible from a passing run's result.
+//
+// Validates: Requirements 6.5
+
+/** The slice of the ci.yml workflow these assertions read. */
+interface CiWorkflowStep {
+  readonly name?: string;
+  readonly run?: string;
+  readonly "continue-on-error"?: unknown;
+}
+
+interface CiWorkflow {
+  readonly jobs?: Readonly<
+    Record<string, { readonly steps?: readonly CiWorkflowStep[] }>
+  >;
+}
+
+describe("ci.yml wires the Fixture_Install step between install and the quality gate (R6.5)", () => {
+  const ciWorkflow = load(
+    readFileSync(resolve(repoRoot, ".github", "workflows", "ci.yml"), "utf8"),
+  ) as CiWorkflow;
+
+  // The quality-gate job's ordered step list. The job is named `verify`; range
+  // over every job's steps so a job rename does not silently drop the check.
+  const steps: readonly CiWorkflowStep[] = Object.values(
+    ciWorkflow.jobs ?? {},
+  ).flatMap((job) => job.steps ?? []);
+
+  /** Index of the first step whose `run` contains `command`, or -1. */
+  function runStepIndex(command: string): number {
+    return steps.findIndex((s) => (s.run ?? "").includes(command));
+  }
+
+  it("declares a step named `Install fixture projects` running `npm run fixtures:install`", () => {
+    const fixtureStep = steps.find((s) => s.name === "Install fixture projects");
+    expect(
+      fixtureStep,
+      "ci.yml has no step named `Install fixture projects`",
+    ).toBeDefined();
+    expect(fixtureStep?.run).toBe("npm run fixtures:install");
+  });
+
+  it("positions the Fixture_Install step after the root install (`npm ci`) and before the quality gate (`npm run ci`)", () => {
+    const rootInstallPos = runStepIndex("npm ci");
+    const fixtureInstallPos = steps.findIndex(
+      (s) => s.name === "Install fixture projects",
+    );
+    const qualityGatePos = runStepIndex("npm run ci");
+
+    expect(rootInstallPos).toBeGreaterThanOrEqual(0);
+    expect(fixtureInstallPos).toBeGreaterThanOrEqual(0);
+    expect(qualityGatePos).toBeGreaterThanOrEqual(0);
+
+    // The Fixture_Install runs after `npm ci` provisions the root workspace and
+    // before `npm run ci` runs the gate that depends on it.
+    expect(rootInstallPos).toBeLessThan(fixtureInstallPos);
+    expect(fixtureInstallPos).toBeLessThan(qualityGatePos);
+  });
+
+  it("fails the workflow when the Fixture_Install exits non-zero (declares no `continue-on-error: true`)", () => {
+    const fixtureStep = steps.find((s) => s.name === "Install fixture projects");
+    expect(fixtureStep).toBeDefined();
+    // A GitHub Actions step fails the workflow on a non-zero exit unless it
+    // opts out with `continue-on-error: true`. The step must not opt out.
+    expect(fixtureStep?.["continue-on-error"]).not.toBe(true);
   });
 });

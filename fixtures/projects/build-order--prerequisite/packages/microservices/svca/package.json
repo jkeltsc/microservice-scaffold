@@ -1,0 +1,9 @@
+{
+  "name": "@fx-buildorderprereq/svca",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@fx-buildorderprereq/svcb": "*"
+  }
+}

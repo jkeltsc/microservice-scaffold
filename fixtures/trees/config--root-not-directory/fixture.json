@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[config:root-not-directory]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "A declared Discovery_Root path is a regular file, not a directory.",
+  "partition": {
+    "kind": "tree",
+    "justification": "An npm clean install over this tree would fail: it is read as a Project_Directory whose Discovery_Root that is a regular file is the subject, never installed."
+  }
+}

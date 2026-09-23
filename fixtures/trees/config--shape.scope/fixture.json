@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[config:shape]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "The 'scope' key is declared as a number.",
+  "partition": {
+    "kind": "tree",
+    "justification": "An npm clean install over this tree would fail: it is read as a Project_Directory whose wrong-typed scope is the subject, never installed."
+  }
+}

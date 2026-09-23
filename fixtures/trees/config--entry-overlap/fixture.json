@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[config:entry-overlap]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "The Entry_Root is declared equal to a Discovery_Root, a reserved path.",
+  "partition": {
+    "kind": "tree",
+    "justification": "An npm clean install over this tree would fail: it is read as a Project_Directory whose Entry_Root overlapping a reserved path is the subject, never installed."
+  }
+}

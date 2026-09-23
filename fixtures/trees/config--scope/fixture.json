@@ -1,0 +1,9 @@
+{
+  "expectedDiagnostic": "[config:scope]",
+  "entryPoint": "runRepoInvariantsCli",
+  "fault": "The declared scope is not a Valid_Scope.",
+  "partition": {
+    "kind": "tree",
+    "justification": "An npm clean install over this tree would fail: it is read as a Project_Directory whose invalid scope is the subject, never installed."
+  }
+}

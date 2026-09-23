@@ -1,0 +1,783 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Create the Fixture_Tier skeleton and its exclusion entries": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928261846
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928273999
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928543873
+      }
+    ],
+    "1.2 Add the tier layout suite": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928261890
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928547890
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789930939360
+      }
+    ],
+    "1.3 Write the additive-invariance property test": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928261965
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928548813
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789930940616
+      }
+    ],
+    "1.4 Write the baseline byte-stability property test and pin the thirteen": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262011
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928549764
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789930941442
+      }
+    ],
+    "1.5 Checkpoint — verify additivity after Step 1": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262048
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789930945219
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789931283984
+      }
+    ],
+    "2.1 Add the Fixture_Projects_Root manifest and lockfile": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262095
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789931289411
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789931623451
+      }
+    ],
+    "2.2 Add the `fixtures:install` script": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262134
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789931290750
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789931624841
+      }
+    ],
+    "2.3 Add the CI install step": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262173
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789931291368
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789931625475
+      }
+    ],
+    "2.4 Add the install-wiring suite and the availability-probe assertion": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262204
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789931629909
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789932316557
+      }
+    ],
+    "2.5 Extend the CI wiring suite": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262247
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789931630834
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789932317394
+      }
+    ],
+    "2.6 Checkpoint — verify additivity after Step 2": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262283
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789932320742
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789932595884
+      }
+    ],
+    "3.1 Declare the fixture path constants and the generic filesystem-tree generator": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262319
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789932600968
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789933005045
+      }
+    ],
+    "3.2 Implement the availability probe": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262358
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789933010566
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789933678153
+      }
+    ],
+    "3.3 Implement the Fixture_Clone": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262399
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789933682638
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789934060555
+      }
+    ],
+    "3.4 Implement Output_Clearing": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262445
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789934063958
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789934400762
+      }
+    ],
+    "3.5 Implement the Scenario_Directory_Name derivation pair": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262495
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789934404639
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789934780012
+      }
+    ],
+    "3.6 Write the Fixture_Clone property test": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262533
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789934785594
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789938312249
+      }
+    ],
+    "3.7 Write the Output_Clearing property test": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262616
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789934786960
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789938313258
+      }
+    ],
+    "3.8 Write the Output_Clearing rejection and stale-output suites": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262653
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789934787855
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789938314086
+      }
+    ],
+    "3.9 Checkpoint — verify additivity after Step 3": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262696
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789938317662
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789938599477
+      }
+    ],
+    "4.1 Add the scenario generators": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262733
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789938605232
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789939294974
+      }
+    ],
+    "4.2 Add a Tree_Fixture for each enumerated fault": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262781
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789939299284
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789971335545
+      }
+    ],
+    "4.3 Add the deterministic per-scenario diagnostics suite": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262829
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789971341557
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789972788742
+      }
+    ],
+    "4.4 Write the scenario minimality property test": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262868
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789971342905
+      },
+      {
+        "executionId": "a8a016bf-b1e9-4eb4-946a-aa8b175e8863",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790022667108
+      }
+    ],
+    "4.5 Write the scenario naming property test": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262905
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789971343878
+      },
+      {
+        "executionId": "a8a016bf-b1e9-4eb4-946a-aa8b175e8863",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790022668170
+      }
+    ],
+    "4.6 Write the fixture/synthesized agreement property test": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262945
+      },
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789971346840
+      },
+      {
+        "executionId": "a8a016bf-b1e9-4eb4-946a-aa8b175e8863",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790023143315
+      }
+    ],
+    "4.7 Activate the per-scenario layout enumeration": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928262974
+      },
+      {
+        "executionId": "a8a016bf-b1e9-4eb4-946a-aa8b175e8863",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790023144212
+      }
+    ],
+    "4.8 Checkpoint — verify additivity after Step 4": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263016
+      },
+      {
+        "executionId": "a8a016bf-b1e9-4eb4-946a-aa8b175e8863",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790023157311
+      },
+      {
+        "executionId": "a8a016bf-b1e9-4eb4-946a-aa8b175e8863",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790023432789
+      }
+    ],
+    "5.1 Add a Project_Fixture for each enumerated fault": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263051
+      },
+      {
+        "executionId": "a8a016bf-b1e9-4eb4-946a-aa8b175e8863",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790058441308
+      }
+    ],
+    "5.2 Wire the members into the Fixture_Projects_Root and re-resolve its lockfile": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263097
+      },
+      {
+        "executionId": "a8a016bf-b1e9-4eb4-946a-aa8b175e8863",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790088564689
+      }
+    ],
+    "5.3 Write the scope-disjointness property test": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263146
+      },
+      {
+        "executionId": "a8a016bf-b1e9-4eb4-946a-aa8b175e8863",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790088569746
+      },
+      {
+        "executionId": "a8a016bf-b1e9-4eb4-946a-aa8b175e8863",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790089493231
+      }
+    ],
+    "5.4 Add the fixture worktree cleanliness suite": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263183
+      },
+      {
+        "executionId": "a8a016bf-b1e9-4eb4-946a-aa8b175e8863",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790088570817
+      },
+      {
+        "executionId": "a8a016bf-b1e9-4eb4-946a-aa8b175e8863",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790089494137
+      }
+    ],
+    "5.5 Checkpoint — verify additivity after Step 5": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263230
+      },
+      {
+        "executionId": "a8a016bf-b1e9-4eb4-946a-aa8b175e8863",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790089498797
+      },
+      {
+        "executionId": "8af41413-2ec4-47cc-bfd3-de547314d61b",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790102385893
+      }
+    ],
+    "6.1 Implement the two-recogniser tag derivation": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263279
+      },
+      {
+        "executionId": "8af41413-2ec4-47cc-bfd3-de547314d61b",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790102439734
+      },
+      {
+        "executionId": "8af41413-2ec4-47cc-bfd3-de547314d61b",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790103758872
+      }
+    ],
+    "6.2 Commit the Diagnostic_Coverage_Record": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263309
+      },
+      {
+        "executionId": "8af41413-2ec4-47cc-bfd3-de547314d61b",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790103823369
+      }
+    ],
+    "6.3 Add the coverage guard": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263349
+      }
+    ],
+    "6.4 Checkpoint — verify additivity after Step 6": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263397
+      }
+    ],
+    "7.1 Add the discovery and registry-generator equivalents": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263448
+      }
+    ],
+    "7.2 Add the build-order and image-tree equivalents": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263500
+      }
+    ],
+    "7.3 Add the Tsconfig_Verifier and Repo_Invariant_Checker equivalents": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263547
+      }
+    ],
+    "7.4 Add the Emit_Script equivalent": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263576
+      }
+    ],
+    "7.5 Add the three constructed-module equivalents": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263609
+      }
+    ],
+    "7.6 Checkpoint — verify additivity after Step 7": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263649
+      }
+    ],
+    "8.1 Extract the shared Platform_Test_Set derivation": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263684
+      }
+    ],
+    "8.2 Commit the Classification_Record": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263715
+      }
+    ],
+    "8.3 Add the Classification_Guard": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263793
+      }
+    ],
+    "8.4 Write the Classification_Guard property test": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263835
+      }
+    ],
+    "8.5 Checkpoint — verify additivity after Step 8": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263879
+      }
+    ],
+    "9.1 Extend the Worktree_Guard": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263919
+      }
+    ],
+    "9.2 Write the fixture-anchor property test": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263955
+      }
+    ],
+    "9.3 Checkpoint — verify additivity after Step 9": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928263993
+      }
+    ],
+    "10.1 Add this feature's run-floor suite": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928264051
+      }
+    ],
+    "10.2 Checkpoint — verify additivity after Step 10": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928264098
+      }
+    ],
+    "11.1 Update `.kiro/steering/structure.md`": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928264137
+      }
+    ],
+    "11.2 Update `.kiro/steering/tech.md`": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928264174
+      }
+    ],
+    "11.3 Add the steering guard": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928264209
+      }
+    ],
+    "11.4 Checkpoint — verify additivity after Step 11": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928264244
+      }
+    ],
+    "12.1 Exercise the tier and confirm the working tree stays clean": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928264286
+      }
+    ],
+    "12.2 Confirm the thirteen recordings and the untouched recorder": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789928264324
+      }
+    ],
+    "1. Step 1 — the tier skeleton and its exclusions": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789931284057
+      }
+    ],
+    "2. Step 2 — the Fixture_Projects_Root, the install script, and the CI step": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789932595977
+      }
+    ],
+    "3. Step 3 — the shared helpers (depends on Steps 1 and 2: the tier exists and the install script names the directory the probe looks for)": [
+      {
+        "executionId": "5208d0ae-04b5-450b-a16e-37955cb72eb3",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1789938599584
+      }
+    ],
+    "4. Step 4 — the Tree_Fixtures (depends on Step 3: the naming derivation pair, the fixture path constants, and the Fixture_Clone the perturbation property mutates)": [
+      {
+        "executionId": "a8a016bf-b1e9-4eb4-946a-aa8b175e8863",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790023432877
+      }
+    ],
+    "5. Step 5 — the Project_Fixtures (depends on Step 2 for the Fixture_Projects_Root and its install script, and on Step 3 for the availability probe these suites gate on)": [
+      {
+        "executionId": "8af41413-2ec4-47cc-bfd3-de547314d61b",
+        "chatSessionId": "sess_7b35bb48-cf93-4e4d-95a0-6181aa4dd7bf",
+        "timestamp": 1790102385948
+      }
+    ]
+  }
+}

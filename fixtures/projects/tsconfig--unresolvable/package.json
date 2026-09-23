@@ -1,0 +1,13 @@
+{
+  "name": "tsconfig--unresolvable-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/contracts",
+    "packages/overseer",
+    "packages/build-tools",
+    "packages/integration-tests",
+    "packages/microservices/*"
+  ]
+}

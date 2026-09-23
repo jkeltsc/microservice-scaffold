@@ -1,0 +1,4 @@
+{
+  "roots": { "microservice": "services" },
+  "entry": "services"
+}

@@ -45,6 +45,15 @@ The layout below is the **result of those three category defaults and the Entry_
 │  ├─ start.js               # npm start: build, generate the microservice registry, run the Entry_Package's compiled entrypoint
 │  └─ emit-effective-dockerfile.sh   # reads Dockerfile.template, writes the generated Dockerfile with manifest COPY lines + toggle-default ENV lines + the CMD naming the entrypoint
 ├─ .kiro/                    # specs, steering, hooks
+├─ fixtures/                 # the Fixture_Tier: test subjects the platform owns; not a workspace, not a package, not a Discovery_Root
+│  ├─ README.md              # what the tier is + the partition criterion + where a new scenario of each kind goes
+│  ├─ diagnostic-coverage.json   # the Diagnostic_Coverage_Record: every Build_System Diagnostic_Tag → its covering scenario or its not-expressible reason
+│  ├─ trees/                 # Tree_Fixtures: inert manifest trees an npm clean install would reject — read, never installed, never built
+│  │  └─ <scenario>/         # e.g. config--unparsable, discovery--duplicate; each holds fixture.json + the tree its diagnostic concerns
+│  └─ projects/              # the Fixture_Projects_Root: a SEPARATE npm workspace root of installable-but-hostile projects
+│     ├─ package.json        # its own workspaces array + devDependencies (private: true); matched by NO root workspaces entry
+│     ├─ package-lock.json   # committed; one `fixtures:install` serves every member of every scenario
+│     └─ <scenario>/         # Project_Fixture, e.g. barrel--invalid, imports--peer; its own workspaces + scaffold.config.json + fixture.json
 ├─ app/                      # Entry_Package at the Entry_Root_Default: in no Consumer_Category, discovered by no Discovery_Root
 │  ├─ src/index.ts           # the committed Entry_Module — imports @microservices/overseer by name; the only static importer of the generated registry
 │  ├─ src/generated/microservice-registry.ts   # the generated registry (gitignored)
@@ -72,6 +81,45 @@ The Entry_Root is a direct child of the Project_Directory, a sibling of `package
 A project may point a category's Discovery_Root elsewhere — say `microservice` at `packages/services` — by declaring it under `roots` in `scaffold.config.json`. **Relocating a root requires updating the root `package.json` `workspaces` array in the same change** so its globs cover the new location, because npm reads `workspaces` statically — before any repository code, and therefore before the Build_System reads the config — to discover the workspaces and create the scoped symlinks. If the `workspaces` array is not updated to match the configured roots, `check:invariants` reports the Workspace_Coverage mismatch. The `workspaces` array declares *membership* only; its order is load-bearing for nothing (see `tech.md`).
 
 **Relocating the Entry_Root carries the same obligation.** Moving the Entry_Package — say from `app` to `entrypoint` — is a directory move plus the `entry` edit in `scaffold.config.json` plus, **in the same change**, the matching root `workspaces` entry, for exactly the reason a relocated Discovery_Root needs one: npm reads `workspaces` before any repository code runs. Everything else follows the config: the generated registry moves to `<Entry_Root>/src/generated/microservice-registry.ts`, and the path a local run, the Build_Sequence, the image tree, and the generated `Dockerfile`'s `CMD` each name moves with it. Nothing else in the repository spells the Entry_Root.
+
+## The Fixture_Tier
+
+The **Fixture_Tier** is the directory `fixtures/`, a direct child of the Project_Directory and a sibling of `packages/`. It holds **test subjects the platform owns**: a platform test points the Build_System at a fixture and asserts against a tree the platform controls, rather than against whatever payload happens to be checked in under `packages/`.
+
+The tier is **neither a workspace nor a package nor a member of any Consumer_Category nor a Framework_Singleton nor a Discovery_Root of this project.** No `workspaces` entry in the root `package.json` matches any path under `fixtures/`, and no Build_System source spells `fixtures` as a path literal. A fixture becomes a subject only because a *test* passes the fixture's directory as the Project_Directory of a platform entry point (or spawns a platform bin with that directory as its working directory); the Build_System itself never learns the tier exists. It is genuinely additive — nothing under `packages/` moved to make room for it, and the Payload_Tree still sits exactly where it did (see below).
+
+The tier carries Fixture_Scenarios in exactly two subdirectories — `fixtures/trees/` and `fixtures/projects/` — and nowhere else. A **Fixture_Scenario** is one directory holding one named fault and one declared diagnostic: its own manifest tree plus a `fixture.json` **Scenario_Manifest** recording the single Diagnostic_Tag the scenario is built to provoke, the platform entry point that produces it, a one-sentence statement of the fault, and the partition justification. `fixtures/README.md` is the tier's own guide.
+
+### The partition criterion — can npm install this?
+
+A single question decides which subdirectory a scenario lives in: **can an npm clean install install this tree?**
+
+- **`fixtures/trees/` — a Tree_Fixture holds hostility an npm clean install rejects.** Malformed JSON, a manifest declaring no `name`, two packages declaring the same name — faults npm itself refuses. Such a tree can only live somewhere **nobody installs it**, so a Tree_Fixture is an **inert manifest tree**: a test *reads* it and does nothing else — never installs it, never builds it, never executes a module of it, never writes inside it. It is self-contained: every file its diagnostic depends on lies inside its own directory, it resolves no dependency from outside itself, and it holds no symlink.
+- **`fixtures/projects/` — a Project_Fixture holds hostility npm does not care about.** A missing `main`, a peer import, a missing `scripts.build`, a name not mirroring its directory, a Selector naming nothing — faults npm installs happily while a platform entry point still reports a diagnostic over the installed tree. `fixtures/projects/` is the **Fixture_Projects_Root**: a **single npm workspace root** with its own `package.json` (`private: true`, its own `workspaces` array, its own `devDependencies`) and its own committed `package-lock.json`, so **one install serves every member of every scenario**.
+
+That the Fixture_Projects_Root is a **separate workspace root** is not tidiness: it is what keeps the deliberately-broken fixture packages **out of the platform's own `--workspaces` lint and typecheck fan-out.** Those fan-outs enumerate the *root* `package.json`'s `workspaces` array; because that array matches nothing under `fixtures/`, the platform's `lint`, `typecheck`, and `test` are never asked to accept a package that is broken on purpose. The fixture projects are installed only through their own root, through the `fixtures:install` script (see `tech.md`), never by the repository's own `npm install` or `npm ci`.
+
+`fixtures/projects/` is deliberately **hostile-only**: every Project_Fixture provokes at least one diagnostic, and there is **no happy-path project fixture**. The happy-path live subject is the `example/` project a later feature introduces; a happy-path fixture here would be a second thing to keep in step with it for no gain.
+
+### What is committed and what is gitignored
+
+Everything that *describes* a scenario is committed: every Tree_Fixture file, every Project_Fixture source and manifest, every `fixture.json` Scenario_Manifest, the Fixture_Projects_Root's `package.json` and `package-lock.json`, the Diagnostic_Coverage_Record at `fixtures/diagnostic-coverage.json`, and `fixtures/README.md`.
+
+Build output and installed dependencies stay **gitignored**: any `node_modules/`, any `dist/`, and any `*.tsbuildinfo` under `fixtures/`. These need no new `.gitignore` pattern — the repository's existing unanchored patterns already cover every such path under the tier — and the whole tier is kept out of the container build context by a single `fixtures/` entry in `.dockerignore`.
+
+### Mutating a fixture
+
+A test that needs a *mutated* fixture **clones it** (a Fixture_Clone: a copy in an OS temp directory outside the Project_Directory) and mutates the clone; it never writes into a committed Fixture_Scenario. The only in-place writes permitted under `fixtures/` are the gitignored generated output — a fixture's `dist/`, a fixture's `*.tsbuildinfo` — and the Fixture_Projects_Root's `node_modules/`, which only `fixtures:install` writes. The detailed permitted-write list lives in `tech.md`.
+
+## The Classification_Record
+
+Every platform test is assigned exactly one **Test_Class** in the **Classification_Record**, the committed machine-readable file `packages/integration-tests/platform-test-classification.json`. It lives with the platform's own test package rather than under `fixtures/`, because its subject is the platform's *tests*, not a fixture. There are three classes:
+
+- **Payload_Coupled_Test** — at least one assertion's subject is a fact about this repository's committed Payload_Tree (a checked-in package, its declared name, its exported path, its declared dependencies, or its position in a derived order or a staged tree). Each such entry names its Fixture_Equivalent — the test that asserts the same claim over a fixture or a synthesized tree.
+- **Drift_Detector** — a Payload_Coupled_Test deliberately *retained* to catch a pure Build_System core disagreeing with the committed repository. `discovery-real-tree.test.ts` and `workspace-build-order-real-tree.test.ts` are the two named real-tree tests retained as Drift_Detectors; each entry records the reason it is kept.
+- **Payload_Independent_Test** — every assertion's subject is a component's behaviour for any conforming layout, where payload-shaped names appear only as values of a Synthesized_Tree or a Fixture_Scenario.
+
+The record's entries are ordered by **ascending code-point of the Project_Directory-relative POSIX path**, and a guard checks the record against the discovered platform test set.
 
 ## Package conventions
 
@@ -234,6 +282,7 @@ As a consequence, a microservice mounted at `/` owns the whole origin, so the Ov
 - **Spec documents:** `.kiro/specs/<feature-name>/`.
 - **Project-wide conventions like these:** `.kiro/steering/`.
 - **New test-only package** (a package under `packages/` with no production code shipped in the Container image, e.g. a sibling of `integration-tests`): `scripts/emit-effective-dockerfile.sh` discovers workspace manifests by glob-style listing — the top-level `packages/*/package.json` plus one glob per configured Discovery_Root (`<microservice-root>/*/package.json`, `<common-root>/*/package.json`, `<spa-root>/*/package.json`) — and emits a manifest `COPY` line for every workspace it finds. To keep a test-only top-level package out of the generated `Dockerfile`, add its directory name to the by-name portion of the Exclusion_List in the emit script (the same portion that carries `integration-tests`).
+- **New hostile fixture scenario** (a test subject the platform points itself at, provoking exactly one diagnostic): decide its partition by the single question **can an npm clean install install this tree?** (see "The Fixture_Tier"). A tree npm rejects goes in `fixtures/trees/<scenario>/`; a tree npm installs while a platform entry point still reports goes in `fixtures/projects/<scenario>/` — and its member packages must be matched by a `*/packages/*`-shaped glob in `fixtures/projects/package.json`'s `workspaces` array (which never matches the scenario's own directory). Name the directory by its **Scenario_Directory_Name** — the Expected_Diagnostic's text with the brackets dropped and the single `:` replaced by `--`, optionally followed by `.` and a lowercase-alphanumeric-and-hyphen qualifier (the doubled hyphen keeps the derivation reversible when the tag's category itself contains a hyphen, so `[build-order:cycle]` becomes `build-order--cycle`). Declare a **Scenario_Manifest** (`fixture.json`: the Expected_Diagnostic, the entry point that produces it, one sentence stating the fault, and the partition justification) at the scenario root, and add a **Diagnostic_Coverage_Record** entry in `fixtures/diagnostic-coverage.json` naming this scenario for the tag it covers.
 
 ## The Exclusion_List
 

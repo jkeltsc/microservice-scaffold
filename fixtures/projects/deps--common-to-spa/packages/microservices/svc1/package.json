@@ -1,0 +1,9 @@
+{
+  "name": "@fx-c2s/svc1",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@fx-c2s/lib": "*"
+  }
+}
